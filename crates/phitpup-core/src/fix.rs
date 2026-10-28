@@ -11,6 +11,7 @@
 //!
 //! In suggest mode the front end asks for a [`Suggestion`] after every key
 //! and shows it beside the caret; Tab hands it back to [`Fixer::accept`].
+//! Shift+Backspace right after that puts the word back as it was typed.
 
 use crate::model::Lang;
 use crate::{Detector, Direction};
@@ -47,10 +48,19 @@ struct Session {
     start: usize,
 }
 
+/// What an accepted suggestion replaced, while it can still be undone.
+#[derive(Debug)]
+struct Undo {
+    original: Vec<char>,
+    start: usize,
+    back_to: Lang,
+}
+
 #[derive(Debug, Default)]
 pub struct Fixer {
     buf: Vec<char>,
     session: Option<Session>,
+    undo: Option<Undo>,
 }
 
 impl Fixer {
@@ -60,6 +70,7 @@ impl Fixer {
 
     pub fn typed(&mut self, text: &str) {
         self.session = None;
+        self.undo = None;
         self.buf.extend(text.chars());
         if self.buf.len() > MAX_CHARS {
             self.buf.drain(..self.buf.len() - MAX_CHARS);
@@ -68,6 +79,7 @@ impl Fixer {
 
     pub fn backspace(&mut self) {
         self.session = None;
+        self.undo = None;
         self.buf.pop();
     }
 
@@ -75,6 +87,7 @@ impl Fixer {
     pub fn reset(&mut self) {
         self.buf.clear();
         self.session = None;
+        self.undo = None;
     }
 
     pub fn is_empty(&self) -> bool {
@@ -116,6 +129,14 @@ impl Fixer {
             return None;
         }
         self.session = None;
+        self.undo = Some(Undo {
+            original: self.buf.clone(),
+            start,
+            back_to: match s.edit.switch_to {
+                Lang::Thai => Lang::English,
+                Lang::English => Lang::Thai,
+            },
+        });
         self.buf.truncate(start);
         self.buf.extend(s.edit.insert.chars());
         Some(s.edit.clone())
@@ -123,6 +144,15 @@ impl Fixer {
 
     /// The edit for one hotkey press, or `None` if there is no word to fix.
     pub fn hotkey(&mut self, detector: &Detector) -> Option<Edit> {
+        if let Some(u) = self.undo.take() {
+            let edit = Edit {
+                delete: self.buf.len() - u.start,
+                insert: u.original[u.start..].iter().collect(),
+                switch_to: u.back_to,
+            };
+            self.buf = u.original;
+            return Some(edit);
+        }
         let Some(s) = self.session.take() else {
             let start = word_start(&self.buf, 1)?;
             let tail: String = self.buf[start..].iter().collect();
@@ -365,6 +395,28 @@ mod tests {
         f.reset();
         f.typed("al;ylfu");
         assert_eq!(f.accept(&s), None, "word must start at a boundary");
+    }
+
+    #[test]
+    fn hotkey_right_after_accept_undoes_it() {
+        let d = det();
+        let mut f = Fixer::new();
+        let mut screen = String::from("hello l;ylfu");
+        f.typed(&screen);
+        let s = f.suggestion(&d).unwrap();
+        apply(&mut screen, &f.accept(&s).unwrap());
+        assert_eq!(screen, "hello สวัสดี");
+
+        let e = f.hotkey(&d).unwrap();
+        apply(&mut screen, &e);
+        assert_eq!(screen, "hello l;ylfu");
+        assert_eq!(e.switch_to, Lang::English);
+        assert_eq!(f.text(), screen);
+
+        // Typing after Tab keeps the fix: the hotkey works as usual again.
+        f.typed(" ");
+        let e = f.hotkey(&d).unwrap();
+        assert_eq!(e.insert, "สวัสดี ");
     }
 
     #[test]
