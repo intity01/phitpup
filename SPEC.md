@@ -8,7 +8,7 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
 |---|---|
 | Platform | Windows 10/11 x64 first. Core crate has no OS calls so macOS can follow. |
 | Language | Rust, `windows` crate. Core also builds to WASM for the website. |
-| Modes | `manual` (default), `suggest` (bubble near caret, Tab to accept), `auto` (fix on space, opt-in). |
+| Modes | `suggest` (default, changed 2026-10-28: bubble near caret, Tab to accept), `manual`, `auto` (fix on space, opt-in). |
 | Hotkey | `Shift+Backspace`. No selection → fix last word; repeat → extend one word back. Selection → convert selection. Press right after a fix → undo. |
 | Layouts | Kedmanee + Pattachote, read from installed layouts via `ToUnicodeEx`/`MapVirtualKeyEx`. Any layout pair by design. |
 | After fix | Always switch the Windows input language (`WM_INPUTLANGCHANGEREQUEST`). |

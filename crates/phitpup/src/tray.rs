@@ -110,8 +110,8 @@ pub fn start(main_thread: u32, welcome: bool, problems: Vec<String>) {
         update_icon(NIM_ADD);
         if welcome {
             balloon(
-                "ผิดปุ๊บพร้อมใช้งานแล้ว",
-                "พิมพ์ผิดภาษา กด Shift+Backspace เพื่อแก้คำล่าสุด\nคลิกขวาที่ไอคอนนี้เพื่อตั้งค่า",
+                "PhitPup is running",
+                "Typed in the wrong layout? Press Tab on the suggestion, or Shift+Backspace.\nRight-click this icon for options.",
             );
         }
         if !problems.is_empty() {
@@ -161,9 +161,9 @@ fn update_icon(action: u32) {
     copy(
         &mut nid.szTip,
         if paused {
-            "ผิดปุ๊บ PhitPup: หยุดชั่วคราว (คลิกเพื่อเปิด)"
+            "PhitPup: paused (click to resume)"
         } else {
-            "ผิดปุ๊บ PhitPup: Shift+Backspace แก้คำที่พิมพ์ผิดภาษา"
+            "PhitPup: fixes text typed in the wrong layout"
         },
     );
     // SAFETY: nid is fully initialised; the shell copies the icon.
@@ -185,7 +185,7 @@ fn balloon(title: &str, text: &str) {
 
 fn warn_settings(problems: &[String]) {
     let text = format!(
-        "บางบรรทัดในไฟล์ตั้งค่าอ่านไม่ได้ จึงใช้ค่าเริ่มต้นแทน:\n{}\n\n{}",
+        "Some lines in the settings file could not be read, so their defaults are used:\n{}\n\n{}",
         settings::path().display(),
         problems.join("\n")
     );
@@ -194,7 +194,7 @@ fn warn_settings(problems: &[String]) {
         MessageBoxW(
             std::ptr::null_mut(),
             wide(&text).as_ptr(),
-            wide("ผิดปุ๊บ PhitPup").as_ptr(),
+            wide("PhitPup").as_ptr(),
             MB_OK | MB_ICONWARNING,
         )
     };
@@ -315,13 +315,13 @@ fn show_menu(hwnd: HWND) {
         add(
             MF_STRING | MF_GRAYED,
             0,
-            &format!("ผิดปุ๊บ PhitPup {}", env!("CARGO_PKG_VERSION")),
+            &format!("PhitPup {}", env!("CARGO_PKG_VERSION")),
         );
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
-        add(MF_STRING | checked(paused()), CMD_PAUSE, "หยุดชั่วคราว");
+        add(MF_STRING | checked(paused()), CMD_PAUSE, "Pause");
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
-        add(MF_STRING, CMD_MANUAL, "แก้เมื่อกด Shift+Backspace เท่านั้น");
-        add(MF_STRING, CMD_SUGGEST, "แนะนำคำแก้ระหว่างพิมพ์ (กด Tab)");
+        add(MF_STRING, CMD_SUGGEST, "Suggest while typing\tTab");
+        add(MF_STRING, CMD_MANUAL, "Fix on hotkey only\tShift+Backspace");
         let current = if mode == Mode::Suggest {
             CMD_SUGGEST
         } else {
@@ -335,10 +335,14 @@ fn show_menu(hwnd: HWND) {
             MF_BYCOMMAND,
         );
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
-        add(MF_STRING | checked(startup), CMD_STARTUP, "เปิดพร้อม Windows");
-        add(MF_STRING, CMD_SETTINGS, "เปิดไฟล์ตั้งค่า…");
+        add(
+            MF_STRING | checked(startup),
+            CMD_STARTUP,
+            "Start with Windows",
+        );
+        add(MF_STRING, CMD_SETTINGS, "Edit settings file…");
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
-        add(MF_STRING, CMD_QUIT, "ออก");
+        add(MF_STRING, CMD_QUIT, "Quit PhitPup");
 
         // The menu only closes on an outside click if our window is in front.
         let mut pt = std::mem::zeroed();

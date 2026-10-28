@@ -36,7 +36,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            mode: Mode::Manual,
+            mode: Mode::Suggest,
             off_in_fullscreen: true,
             off_apps: Vec::new(),
             quiet_apps: Vec::new(),
@@ -48,9 +48,10 @@ impl Default for Config {
 pub const TEMPLATE: &str = r#"# ผิดปุ๊บ PhitPup settings. The tray menu saves its changes here too.
 # Saved changes apply within a few seconds; no restart needed.
 
+# "suggest" : show a bubble while you type; Tab accepts, Esc hides
+#             (Shift+Backspace works too)
 # "manual"  : fix only when you press Shift+Backspace
-# "suggest" : also show a bubble while you type; Tab accepts, Esc hides
-mode = "manual"
+mode = "suggest"
 
 # Turn PhitPup off in windows that cover the whole screen (games, videos).
 off_in_fullscreen = true
@@ -213,8 +214,8 @@ mod tests {
 
     #[test]
     fn set_replaces_only_the_value() {
-        let text = set(TEMPLATE, "mode", "\"suggest\"");
-        assert_eq!(Config::parse(&text).0.mode, Mode::Suggest);
+        let text = set(TEMPLATE, "mode", "\"manual\"");
+        assert_eq!(Config::parse(&text).0.mode, Mode::Manual);
         assert_eq!(text.lines().count(), TEMPLATE.lines().count());
         assert!(text.contains("# \"manual\"  : fix only"), "comments kept");
 

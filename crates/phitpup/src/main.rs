@@ -141,7 +141,7 @@ mod app {
             MessageBoxW(
                 std::ptr::null_mut(),
                 wide(text).as_ptr(),
-                wide("ผิดปุ๊บ PhitPup").as_ptr(),
+                wide("PhitPup").as_ptr(),
                 MB_OK | icon,
             )
         };
@@ -164,7 +164,7 @@ mod app {
             );
             if GetLastError() == ERROR_ALREADY_EXISTS {
                 message(
-                    "ผิดปุ๊บกำลังทำงานอยู่แล้ว ดูที่ไอคอน ผ ในถาดระบบ (มุมขวาล่าง)",
+                    "PhitPup is already running. Look for its icon in the notification area (bottom right).",
                     MB_ICONINFORMATION,
                 );
                 return Ok(());
