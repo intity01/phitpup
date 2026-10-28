@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: rustup update stable && rustup default stable && rustup target add wasm32-unknown-unknown
+      - run: rustup toolchain install  # the version in rust-toolchain.toml
       - run: cargo build --release -p phitpup-web --target wasm32-unknown-unknown
       - name: Assemble
         env:

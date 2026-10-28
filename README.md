@@ -30,7 +30,7 @@ program is not code-signed yet: **More info → Run anyway**.
 
 ## Build
 
-Rust 1.87+ with the MSVC toolchain.
+Rust (the version in `rust-toolchain.toml`) with the MSVC toolchain.
 
 ```
 cargo run --release -p phitpup          # the app (PHITPUP_DEBUG=1 for a log of decisions)

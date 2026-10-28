@@ -19,7 +19,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - run: rustup update stable && rustup default stable
+      - run: rustup toolchain install  # the version in rust-toolchain.toml
       - run: cargo test --release --workspace
       - run: cargo build --release -p phitpup
       - name: Package

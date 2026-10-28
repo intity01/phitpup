@@ -14,7 +14,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - run: rustup update stable && rustup default stable && rustup component add clippy rustfmt
+      - run: rustup toolchain install  # the version in rust-toolchain.toml
       - run: cargo fmt --all --check
       - run: cargo clippy --release --workspace --all-targets -- -D warnings
       - run: cargo test --release --workspace
