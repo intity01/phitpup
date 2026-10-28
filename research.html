@@ -1,0 +1,278 @@
+<title>แก้พิมพ์ผิดภาษา: สำรวจตลาด</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anuphan:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; wide tables scroll inside their own box; keycap strip as the subject's signature */
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --fg:#1b2130; --muted:#5b6478; --line:#dde1e8;
+  --accent:#2f5bd3; --accent-soft:#e6ecfb; --cap:#eceff4; --cap-edge:#c5cbd6;
+  --ok:#1f8a4c; --ok-soft:#e3f4ea; --warn:#a86a00; --warn-soft:#fbf0dc; --bad:#b4332b; --bad-soft:#f9e3e1;
+  --f-display:"Anuphan","IBM Plex Sans Thai",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans Thai","Leelawadee UI","Tahoma",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12151c; --surface:#1a1f29; --fg:#e4e8f0; --muted:#98a2b6; --line:#2b3240;
+  --accent:#7d9bff; --accent-soft:#1f2a47; --cap:#232a36; --cap-edge:#3a4354;
+  --ok:#5fd18f; --ok-soft:#163324; --warn:#f0b54a; --warn-soft:#3a2c10; --bad:#ff8a80; --bad-soft:#3d1c1a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12151c; --surface:#1a1f29; --fg:#e4e8f0; --muted:#98a2b6; --line:#2b3240;
+  --accent:#7d9bff; --accent-soft:#1f2a47; --cap:#232a36; --cap-edge:#3a4354;
+  --ok:#5fd18f; --ok-soft:#163324; --warn:#f0b54a; --warn-soft:#3a2c10; --bad:#ff8a80; --bad-soft:#3d1c1a; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.7}
+.wrap{max-width:980px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 80px;display:flex;flex-direction:column;gap:48px}
+h1,h2,h3{font-family:var(--f-display);line-height:1.3;text-wrap:balance;margin:0}
+h1{font-size:2.2rem;font-weight:700}
+h2{font-size:1.45rem;font-weight:700}
+h3{font-size:1.08rem;font-weight:600}
+p{margin:0;max-width:68ch}
+section{display:flex;flex-direction:column;gap:16px}
+.eyebrow{font-family:var(--f-mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.lede{color:var(--muted);font-size:1.05rem}
+a{color:var(--accent)}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+code,.mono{font-family:var(--f-mono);font-size:.88em}
+/* keycap strip */
+.demo{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:20px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.caps{display:flex;gap:6px;flex-wrap:wrap}
+.cap{min-width:38px;height:42px;padding:0 8px;display:grid;place-items:center;background:var(--cap);border:1px solid var(--cap-edge);border-bottom-width:3px;border-radius:7px;font-family:var(--f-mono);font-weight:600}
+.cap.th{font-family:var(--f-body);font-size:1.15rem}
+.arrow{color:var(--muted);font-family:var(--f-mono)}
+.demo small{color:var(--muted);flex-basis:100%}
+/* tables */
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:.92rem}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--f-display);font-weight:600;font-size:.85rem;color:var(--muted);background:var(--bg)}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600;white-space:nowrap}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:.78rem;font-weight:600;white-space:nowrap}
+.p-ok{background:var(--ok-soft);color:var(--ok)}
+.p-warn{background:var(--warn-soft);color:var(--warn)}
+.p-bad{background:var(--bad-soft);color:var(--bad)}
+.p-acc{background:var(--accent-soft);color:var(--accent)}
+/* technique grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.box{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.box ul{margin:0;padding-left:1.1em;display:flex;flex-direction:column;gap:4px}
+.box li{font-size:.94rem}
+.box .tag{font-family:var(--f-mono);font-size:.72rem;color:var(--accent);letter-spacing:.06em;text-transform:uppercase}
+/* recommendation */
+.rec{border-left:4px solid var(--accent);background:var(--surface);padding:18px 20px;border-radius:0 10px 10px 0;display:flex;flex-direction:column;gap:10px}
+.rec ul{margin:0;padding-left:1.1em;display:flex;flex-direction:column;gap:6px}
+/* questions */
+.qs{display:flex;flex-direction:column;gap:18px}
+.qgroup h3{margin-bottom:6px}
+.qgroup ol{margin:0;padding-left:1.4em;display:flex;flex-direction:column;gap:4px}
+.note{font-size:.88rem;color:var(--muted)}
+.src{font-size:.85rem;columns:2 300px;column-gap:28px}
+.src a{display:block;break-inside:avoid;margin-bottom:4px;word-break:break-word}
+@media (max-width:520px){h1{font-size:1.7rem}}
+</style>
+
+<div class="wrap">
+
+<header style="display:flex;flex-direction:column;gap:14px">
+  <span class="eyebrow">สำรวจก่อนสร้าง · 28 ต.ค. 2026</span>
+  <h1>โปรแกรมแก้พิมพ์ผิดภาษา ไทย ⇄ อังกฤษ: มีใครทำอะไรไปแล้วบ้าง</h1>
+  <p class="lede">ตั้งต้นจาก RightType แล้วไล่ดูโปรเจกต์ไทยและต่างชาติบน GitHub, Microsoft Store, Thaiware, Hacker News และเว็บรวมแอป เพื่อหาช่องว่างสำหรับตัวที่ minimal, native และทำงาน local ล้วน</p>
+  <div class="demo">
+    <div class="caps"><span class="cap">l</span><span class="cap">;</span><span class="cap">y</span><span class="cap">l</span><span class="cap">f</span><span class="cap">u</span></div>
+    <span class="arrow">→ ปุ่มลัด →</span>
+    <div class="caps"><span class="cap th">ส</span><span class="cap th">ว</span><span class="cap th">ั</span><span class="cap th">ส</span><span class="cap th">ด</span><span class="cap th">ี</span></div>
+    <small>ปุ่มเดียวกันบนแป้น QWERTY กับเกษมณี แปลงกลับด้วยตำแหน่งปุ่ม ไม่ใช่การแปลภาษา</small>
+  </div>
+</header>
+
+<section>
+  <span class="eyebrow">สรุปสั้น</span>
+  <h2>ตลาดมีเยอะ แต่ไม่มีตัวที่ “เล็ก + ครบเฉพาะที่จำเป็น”</h2>
+  <p>ฝั่งไทยมีสองขั้ว ขั้วแรกคือ <b>RightType</b> และ <b>typeThai</b> ที่ฉลาดมาก (มีพจนานุกรม 60k คำ หรือโมเดลจำแนก) แต่ฟีเจอร์ล้น ทั้ง snippet, คณิตศาสตร์, ฝึกพิมพ์, AI rewrite ขั้วที่สองคือ <b>PimPid</b>, <b>GaeKai</b>, <b>keyboard-lang-fixer</b> ที่เล็กจริง (150–180 KB) แต่พึ่ง clipboard, รองรับแค่เกษมณี และไม่ตรวจว่าทิศทางถูกหรือไม่</p>
+  <p>ของเก่าอย่าง RightLang, LangOver, แปลพิมพ์เพลิน หยุดพัฒนาไปตั้งแต่ปี 2557–2561 ส่วนต่างชาติส่วนใหญ่ทำคู่ รัสเซีย/ฮีบรู/อาหรับ ⇄ อังกฤษ และ Microsoft ปิดคำขอฟีเจอร์นี้ใน PowerToys ไปแล้ว</p>
+  <p class="note">Reddit และ Facebook: ค้นแล้วไม่เจอเธรดที่ตรงประเด็นผ่านเครื่องมือค้นหา (Facebook กลุ่มส่วนใหญ่ค้นจากภายนอกไม่ได้) ข้อมูลส่วนใหญ่จึงมาจาก GitHub, Store และ Thaiware</p>
+</section>
+
+<section>
+  <span class="eyebrow">ฝั่งไทย</span>
+  <h2>เครื่องมือที่รองรับไทย ⇄ อังกฤษ</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>ชื่อ</th><th>แพลตฟอร์ม / ภาษา</th><th>วิธีทำงาน</th><th>ตรวจทิศทาง</th><th>ขนาด / ใบอนุญาต</th><th>สถานะ</th></tr></thead>
+    <tbody>
+      <tr><td><a href="https://github.com/k-affan-th/RightType">RightType</a></td><td>Windows · Rust</td><td>3 โหมด manual / suggest / auto ต่อแอป, <code>Shift+Backspace</code> แก้คำล่าสุดได้ถึง 8 คำ, ใส่ตัวอักษรใหม่แทนการเล่นคีย์ซ้ำ</td><td>พจนานุกรม 60,964 คำ + segment</td><td>ไม่ระบุ · MIT/Apache-2.0</td><td><span class="pill p-ok">active</span> <span class="pill p-warn">ฟีเจอร์เยอะ</span></td></tr>
+      <tr><td><a href="https://github.com/phasu21/typethai">typeThai</a></td><td>macOS + Windows (beta) · Rust</td><td>bubble แนะนำที่เคอร์เซอร์ กด Tab ยืนยัน, มี AI rewrite เสริม</td><td>โมเดลจำแนก ~99.8% (Wikipedia test)</td><td>ไม่ระบุ · MIT + โมเดล CC BY-SA</td><td><span class="pill p-acc">beta</span></td></tr>
+      <tr><td><a href="https://github.com/anasedf/PimPid">PimPid</a></td><td>Windows · C# (.NET Fx 4.x)</td><td><code>Ctrl+Shift+Space</code> แก้ที่เลือก หรือคำล่าสุดจาก buffer 300 ตัว</td><td>ไม่มี (ตารางแมปอย่างเดียว)</td><td>exe เดี่ยว · MIT</td><td><span class="pill p-warn">3 commits</span></td></tr>
+      <tr><td><a href="https://github.com/piyawaterrors/GaeKai">GaeKai</a></td><td>Windows (C#) + macOS (Swift)</td><td>copy ที่เลือก → แปลง → paste → คืน clipboard หลัง ~400ms</td><td>กฎสระ/วรรณยุกต์ไทย แยก run ไทย/อังกฤษ</td><td>~150 KB · MIT</td><td><span class="pill p-ok">ใช้ได้</span></td></tr>
+      <tr><td><a href="https://github.com/chaoszeroxii-cloud/keyboard-lang-fixer">keyboard-lang-fixer</a></td><td>Windows · C# 5</td><td><code>Ctrl+Alt+Space</code>, clipboard, smart undo</td><td>Windows spell checker หาขอบคำ</td><td>~179 KB · ไม่ระบุ</td><td><span class="pill p-ok">ใช้ได้</span></td></tr>
+      <tr><td><a href="https://github.com/teenapat/Keyboard-Translator">Global</a></td><td>Windows · .NET 8 WPF</td><td>หลายภาษา, ปลั๊กอินภาษา</td><td>วางแผนไว้</td><td>MIT</td><td><span class="pill p-bad">มีแค่สเปก</span></td></tr>
+      <tr><td><a href="https://github.com/Mhapong/LuemPreanParSar">LuemPreanParSar</a></td><td>Linux Mint · Python</td><td>auto ลบแล้วพิมพ์ใหม่ผ่าน uinput</td><td>CNN จำแนก</td><td>ไม่ระบุ</td><td><span class="pill p-acc">ทดลอง</span></td></tr>
+      <tr><td><a href="https://software.thaiware.com/11021.html">RightLang</a></td><td>Windows · ปิดซอร์ส</td><td>auto + <code>Shift+Backspace</code></td><td>มี (ไม่เปิดเผย)</td><td>ฟรีแวร์</td><td><span class="pill p-bad">หยุด 2559</span></td></tr>
+      <tr><td><a href="https://software.thaiware.com/9985.html">LangOver</a></td><td>Windows</td><td><code>F10</code> ปุ่มเดียว</td><td>ไม่ระบุ</td><td>ฟรีแวร์</td><td><span class="pill p-bad">หยุด 2561</span></td></tr>
+      <tr><td><a href="https://www.thaiware.com/software/11950/">แปลพิมพ์เพลิน</a></td><td>Windows</td><td>ปุ่มลัด</td><td>ไม่ระบุ</td><td>ฟรีแวร์</td><td><span class="pill p-bad">หยุด 2557</span></td></tr>
+      <tr><td>เว็บแปลง</td><td>เบราว์เซอร์</td><td>วางข้อความแล้วกดแปลง: <a href="https://poonkasemk.github.io/keyboardTranslation/">poonkasemk</a>, <a href="https://margitech.co/tools/pasa/">Margitech PASA</a>, <a href="http://onetoolall.com/en/tools/text/keyboard-layout-converter">onetoolall</a></td><td>บางตัว auto-detect</td><td>ฟรี</td><td><span class="pill p-acc">ไม่ใช่ native</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <span class="eyebrow">ฝั่งต่างชาติ</span>
+  <h2>ตัวที่น่าศึกษาวิธีทำ</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>ชื่อ</th><th>แพลตฟอร์ม</th><th>จุดเด่น</th><th>ราคา / ซอร์ส</th></tr></thead>
+    <tbody>
+      <tr><td>Punto Switcher</td><td>Windows, macOS</td><td>ต้นแบบของแนว auto สลับภาษา รัสเซีย ⇄ อังกฤษ ด้วยคู่ตัวอักษรที่เป็นไปไม่ได้</td><td>ฟรี · ปิดซอร์ส (Yandex)</td></tr>
+      <tr><td><a href="https://sourceforge.net/projects/mahou/">Mahou</a></td><td>Windows · C#</td><td>CapsLock สลับ, เขียนข้อความที่เลือกใหม่, แสดงภาษาที่เมาส์, snippet</td><td>GPL-2.0</td></tr>
+      <tr><td>Caramba Switcher</td><td>Windows, macOS</td><td>auto แก้ระหว่างพิมพ์ ไม่มีหน้าตั้งค่ามาก</td><td>ฟรี/เสียเงิน · ปิดซอร์ส</td></tr>
+      <tr><td><a href="https://github.com/MurtadhaQahtan/layout-fixer-app">Layout Fixer</a></td><td>Windows · MS Store</td><td><code>Ctrl+Shift+L</code>, หลายคู่ภาษา, ขายบน Store</td><td>US$1.99</td></tr>
+      <tr><td><a href="https://apps.microsoft.com/detail/9mxfxl7gg3c5">Switcher3Way</a></td><td>Windows · MS Store</td><td>auto ดูคำที่พิมพ์แล้วพิมพ์ใหม่, offline</td><td>ฟรี · โอเพนซอร์ส</td></tr>
+      <tr><td><a href="https://apps.microsoft.com/detail/9nwrqvnhvkqn">WLang</a></td><td>Windows · MS Store</td><td><code>Ctrl+Alt+Shift</code> แปลงที่เลือก + สลับภาษา</td><td>ฟรี</td></tr>
+      <tr><td><a href="https://github.com/rashn/RuSwitcher">RuSwitcher</a></td><td>macOS</td><td>แตะ Option แก้คำล่าสุด, ไม่ใช้ clipboard, ใช้ผ่าน Screen Sharing ได้</td><td>ฟรี · โอเพนซอร์ส</td></tr>
+      <tr><td><a href="https://vladforfutdinov.github.io/reLayout/">reLayout</a></td><td>macOS + Windows preview</td><td>ไม่เลือกอะไร = เอาจากเคอร์เซอร์ถึงต้นบรรทัด</td><td>ฟรี</td></tr>
+      <tr><td><a href="https://boomkey.pro/">Boomkey</a></td><td>macOS</td><td>auto-fix ตอนกด space (เฉพาะเวอร์ชันดาวน์โหลดตรง)</td><td>เสียเงิน</td></tr>
+      <tr><td>Kright, Swapkey, FlicKey, LangSwitcher</td><td>macOS (Kright มี Windows)</td><td>double-Shift แปลง, badge ภาษา, สลับเป็นอังกฤษอัตโนมัติในช่อง email/URL</td><td>ส่วนใหญ่ฟรี</td></tr>
+      <tr><td>PowerToys</td><td>Windows</td><td>มีคำขอ <a href="https://github.com/microsoft/PowerToys/issues/14850">#14850</a>, <a href="https://github.com/microsoft/PowerToys/issues/44460">#44460</a>, <a href="https://github.com/microsoft/PowerToys/issues/47427">#47427</a> แต่ไม่ได้ทำ</td><td>—</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <span class="eyebrow">เขาทำกันยังไง</span>
+  <h2>4 ส่วนที่ทุกตัวต้องตัดสินใจ</h2>
+  <div class="grid">
+    <div class="box"><span class="tag">1 · เอาข้อความมา</span><h3>Capture</h3><ul>
+      <li><b>Clipboard:</b> ส่ง Ctrl+C / Ctrl+Insert แล้วอ่าน (GaeKai, PimPid) ง่ายแต่ทับ clipboard ผู้ใช้</li>
+      <li><b>Keyboard hook buffer:</b> <code>WH_KEYBOARD_LL</code> เก็บคำล่าสุดในหน่วยความจำ (RightType, PimPid) ไม่ต้องเลือก</li>
+      <li><b>UI Automation / Accessibility:</b> อ่านข้อความรอบเคอร์เซอร์ตรง ๆ (RuSwitcher บน mac)</li>
+    </ul></div>
+    <div class="box"><span class="tag">2 · แปลง</span><h3>Map</h3><ul>
+      <li><b>ตารางตายตัว</b> เกษมณี ⇄ QWERTY (ส่วนใหญ่)</li>
+      <li><b><code>ToUnicodeEx</code> + <code>MapVirtualKeyEx</code></b> อ่านจาก layout ที่ติดตั้งจริง ได้ปัตตะโชติ/มนูญชัยฟรี (keyboard-lang-fixer)</li>
+      <li>ต้องจัดการ Shift, CapsLock, ตัวที่กด Shift แล้วได้เลขไทย</li>
+    </ul></div>
+    <div class="box"><span class="tag">3 · ตัดสินใจ</span><h3>Detect</h3><ul>
+      <li><b>ไม่ตรวจ:</b> ผู้ใช้กดเอง กลับทิศเมื่อกดซ้ำ</li>
+      <li><b>กฎอักขรวิธีไทย:</b> สระบน/ล่าง/วรรณยุกต์ต้องตามพยัญชนะ (GaeKai)</li>
+      <li><b>พจนานุกรม / n-gram:</b> RightType, Punto</li>
+      <li><b>โมเดลจำแนก:</b> typeThai, LuemPreanParSar</li>
+    </ul></div>
+    <div class="box"><span class="tag">4 · ใส่กลับ</span><h3>Inject</h3><ul>
+      <li><b>Paste</b> แล้วคืน clipboard (ช้า ~400ms, บางแอปเห็นเป็น paste)</li>
+      <li><b><code>SendInput</code> + <code>KEYEVENTF_UNICODE</code></b>: Backspace n ครั้งแล้วพิมพ์ใหม่ (Word อาจกิน/เพิ้ยน)</li>
+      <li>สลับภาษาต่อด้วย <code>WM_INPUTLANGCHANGEREQUEST</code></li>
+      <li>ปิดตัวเองในช่องรหัสผ่าน, เกม, RDP</li>
+    </ul></div>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">ข้อเสนอเบื้องต้น</span>
+  <h2>ตัวที่ minimal + native + local ควรหน้าตาแบบนี้</h2>
+  <div class="rec">
+    <ul>
+      <li><b>exe เดี่ยว ไม่ต้องติดตั้ง</b> เป้าหมาย &lt; 300 KB, ไม่มี runtime เพิ่ม, ไม่ต้องสิทธิ์ admin, ไม่มีโค้ด network เลย</li>
+      <li><b>ปุ่มเดียวทำสองอย่าง:</b> มีข้อความเลือกอยู่ = แปลงที่เลือก, ไม่มี = แปลงคำล่าสุดจาก hook buffer, กดซ้ำ = ย้อนกลับ</li>
+      <li><b>แมปจาก layout ที่ติดตั้งจริง</b> ผ่าน <code>ToUnicodeEx</code> ได้เกษมณี/ปัตตะโชติ/มนูญชัยโดยไม่ต้องเขียนตาราง</li>
+      <li><b>ตรวจทิศทางด้วยกฎอักขรวิธีไทย</b> + bigram อังกฤษเล็ก ๆ ไม่ต้องมีพจนานุกรมใน v1</li>
+      <li><b>tray icon + ไฟล์ config ข้อความ</b> แทนหน้าต่างตั้งค่า</li>
+      <li><b>เว็บโปรเจกต์บน GitHub Pages</b> พร้อมตัวลองแปลงบนเว็บ (ใช้แกนเดียวกันคอมไพล์เป็น WASM ได้ถ้าเลือก Rust)</li>
+    </ul>
+    <p class="note">ภาษาที่เข้ากับเป้าหมาย: <b>Rust</b> (windows-rs, ได้ WASM ฟรี, ไฟล์ ~200–400 KB) หรือ <b>C/C++ Win32 ล้วน</b> (เล็กสุด ~50–150 KB) หรือ <b>C# + csc ในเครื่อง</b> (~150 KB แต่พึ่ง .NET Framework ที่ติดมากับ Windows)</p>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">สเปกที่ตกลงแล้ว · 5 รอบคำถาม</span>
+  <h2>ผิดปุ๊บ (PhitPup) v1</h2>
+  <div class="tbl"><table style="min-width:560px">
+    <tbody>
+      <tr><td>แพลตฟอร์ม</td><td>Windows 10/11 x64 ก่อน แกนแยกจาก OS เผื่อ macOS ภายหลัง</td></tr>
+      <tr><td>ภาษา</td><td>Rust (windows-rs) · แกนเดียวกันคอมไพล์เป็น WASM ให้เว็บ</td></tr>
+      <tr><td>โหมด</td><td><span class="pill p-acc">manual</span> ค่าเริ่มต้น · <span class="pill p-acc">suggest</span> bubble ใกล้เคอร์เซอร์ กด Tab · <span class="pill p-acc">auto</span> แก้ตอนกด space (เปิดเอง)</td></tr>
+      <tr><td>ปุ่มลัด</td><td><code>Shift+Backspace</code> ไม่มีที่เลือก = แก้คำล่าสุด กดซ้ำย้อนไปทีละคำ · มีที่เลือก = แปลงที่เลือก · กดทันทีหลังแปลง = undo</td></tr>
+      <tr><td>แป้น</td><td>เกษมณี + ปัตตะโชติ อ่านจาก layout ที่ติดตั้งด้วย <code>ToUnicodeEx</code> ออกแบบรับคู่ layout ใดก็ได้</td></tr>
+      <tr><td>หลังแปลง</td><td>สลับภาษาแป้นพิมพ์ของ Windows ให้เสมอ</td></tr>
+      <tr><td>ตัวตรวจทิศทาง</td><td>กฎอักขรวิธีไทย + trigram ไทย/อังกฤษฝังในไฟล์ · เป้า exe ~1–2 MB</td></tr>
+      <tr><td>ใส่กลับ</td><td><code>SendInput</code> + <code>KEYEVENTF_UNICODE</code> · clipboard ใช้เฉพาะอ่านข้อความที่เลือก แล้วคืนค่าเดิม</td></tr>
+      <tr><td>ตั้งค่า</td><td>เมนู tray + <code>config.toml</code></td></tr>
+      <tr><td>ปิดตัวเอง</td><td>ช่องรหัสผ่าน / password manager, เกมเต็มจอ, Remote Desktop · Terminal/IDE ปิดแค่ auto/suggest</td></tr>
+      <tr><td>เกณฑ์ทดสอบ</td><td>Chrome/Edge, Word/Notepad, LINE/Discord/Messenger, VS Code</td></tr>
+      <tr><td>ปล่อย</td><td>GitHub สาธารณะ · MIT · ยังไม่เซ็นโค้ด ให้ SHA256 + build จาก GitHub Actions</td></tr>
+      <tr><td>เว็บ</td><td>GitHub Pages ไทย/อังกฤษ: ดาวน์โหลด + SHA256, ตัวลองแปลง WASM, คู่มือ + FAQ</td></tr>
+      <tr><td>ลำดับงาน</td><td>1 แกนแปลง + เทสต์ → 2 ตัวตรวจทิศทาง → 3 hook + manual → 4 tray/config → 5 suggest → 6 auto → 7 เว็บ + CI release</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <span class="eyebrow">บันทึก</span>
+  <h2>คำถามที่ใช้ตั้งสเปก</h2>
+  <p class="note">ถามครบ 5 รอบแล้ว คำตอบสรุปอยู่ในตารางด้านบน</p>
+  <div class="qs">
+    <div class="qgroup"><h3>ขอบเขตและแพลตฟอร์ม</h3><ol>
+      <li>Windows อย่างเดียวก่อน หรือต้อง macOS / Linux ด้วย</li>
+      <li>Windows 10 และ 11 ทั้งคู่ หรือ 11 อย่างเดียว, x64 อย่างเดียวหรือ ARM64 ด้วย</li>
+      <li>ใช้เองคนเดียว แจกเพื่อน หรือปล่อยสาธารณะ / ขึ้น Microsoft Store</li>
+    </ol></div>
+    <div class="qgroup"><h3>พฤติกรรมหลัก</h3><ol start="4">
+      <li>Manual อย่างเดียว, มี suggest, หรือต้องมี auto ด้วย</li>
+      <li>ปุ่มลัดที่อยากได้ (Shift+Backspace แบบ RightLang, Ctrl+Shift+Space, double-Shift, CapsLock)</li>
+      <li>แก้แค่คำล่าสุด, ทั้งประโยค/บรรทัด, หรือเฉพาะที่เลือก</li>
+      <li>หลังแปลงให้สลับภาษาแป้นพิมพ์ให้ด้วยไหม</li>
+      <li>ต้องมี undo ไหม (กดซ้ำย้อนกลับ)</li>
+    </ol></div>
+    <div class="qgroup"><h3>ภาษาและแป้น</h3><ol start="9">
+      <li>เกษมณีอย่างเดียว หรือปัตตะโชติ / มนูญชัยด้วย</li>
+      <li>เฉพาะไทย ⇄ อังกฤษ หรือเผื่อคู่ภาษาอื่น</li>
+      <li>เลขไทย, สัญลักษณ์ (฿ ๆ ฯ) และ Shift layer จัดการยังไง</li>
+    </ol></div>
+    <div class="qgroup"><h3>เทคนิค</h3><ol start="12">
+      <li>ภาษาที่ใช้เขียน: Rust, C/C++, C#, Zig, หรือให้เลือกให้</li>
+      <li>ยอมใช้ clipboard ไหม หรือต้องไม่แตะ clipboard เลย</li>
+      <li>ใส่ข้อความกลับแบบ paste หรือ SendInput</li>
+      <li>ขนาดไฟล์เป้าหมาย และยอมรับ dependency ได้แค่ไหน</li>
+      <li>มีหน้าต่างตั้งค่า GUI หรือแค่ tray + ไฟล์ config</li>
+    </ol></div>
+    <div class="qgroup"><h3>ความปลอดภัยและความเป็นส่วนตัว</h3><ol start="17">
+      <li>รายชื่อแอปที่ต้องปิดตัวเอง (password manager, เกม, terminal, RDP)</li>
+      <li>เซ็นโค้ดไหม (SmartScreen จะเตือนถ้าไม่เซ็น)</li>
+      <li>ต้องมี auto-update ไหม (ขัดกับ “ไม่มี network”)</li>
+    </ol></div>
+    <div class="qgroup"><h3>เว็บ, ชื่อ, และการปล่อย</h3><ol start="20">
+      <li>ชื่อโปรแกรมและโทนแบรนด์</li>
+      <li>เว็บ GitHub Pages ต้องมีอะไร: หน้าดาวน์โหลด, ตัวลองแปลงบนเว็บ, คู่มือ, ภาษาไทย/อังกฤษ</li>
+      <li>ใบอนุญาต (MIT, Apache, GPL)</li>
+      <li>ชื่อ repo GitHub และใช้บัญชีไหน, ต้องมี GitHub Actions build release ไหม</li>
+      <li>เกณฑ์ “เสร็จ” ของ v1 และการทดสอบ (แอปไหนต้องผ่าน: Word, Chrome, LINE, Discord, VS Code)</li>
+    </ol></div>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">แหล่งข้อมูล</span>
+  <div class="src">
+    <a href="https://github.com/k-affan-th/RightType">github.com/k-affan-th/RightType</a>
+    <a href="https://github.com/phasu21/typethai">github.com/phasu21/typethai</a>
+    <a href="https://github.com/anasedf/PimPid">github.com/anasedf/PimPid</a>
+    <a href="https://github.com/piyawaterrors/GaeKai">github.com/piyawaterrors/GaeKai</a>
+    <a href="https://github.com/chaoszeroxii-cloud/keyboard-lang-fixer">github.com/chaoszeroxii-cloud/keyboard-lang-fixer</a>
+    <a href="https://github.com/teenapat/Keyboard-Translator">github.com/teenapat/Keyboard-Translator</a>
+    <a href="https://github.com/Mhapong/LuemPreanParSar">github.com/Mhapong/LuemPreanParSar</a>
+    <a href="https://software.thaiware.com/11021.html">Thaiware: RightLang</a>
+    <a href="https://software.thaiware.com/9985.html">Thaiware: LangOver</a>
+    <a href="https://www.thaiware.com/software/11950/">Thaiware: แปลพิมพ์เพลิน</a>
+    <a href="https://www.blognone.com/node/38541">Blognone: RightLang</a>
+    <a href="https://alternativeto.net/software/punto-switcher">AlternativeTo: Punto Switcher</a>
+    <a href="https://sourceforge.net/projects/mahou/">SourceForge: Mahou</a>
+    <a href="https://github.com/MurtadhaQahtan/layout-fixer-app">Layout Fixer</a>
+    <a href="https://apps.microsoft.com/detail/9mxfxl7gg3c5">MS Store: Switcher3Way</a>
+    <a href="https://apps.microsoft.com/detail/9nwrqvnhvkqn">MS Store: WLang</a>
+    <a href="https://github.com/rashn/RuSwitcher">github.com/rashn/RuSwitcher</a>
+    <a href="https://vladforfutdinov.github.io/reLayout/">reLayout</a>
+    <a href="https://boomkey.pro/">Boomkey</a>
+    <a href="https://news.ycombinator.com/item?id=48575878">Hacker News: macOS layout fixer</a>
+    <a href="https://github.com/microsoft/PowerToys/issues/47427">PowerToys #47427</a>
+    <a href="https://poonkasemk.github.io/keyboardTranslation/">poonkasemk keyboardTranslation</a>
+  </div>
+</section>
+
+</div>
