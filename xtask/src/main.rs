@@ -4,6 +4,9 @@
 //! from the keyboard layout DLLs that ship with Windows. It reads each DLL's
 //! `KbdLayerDescriptor` tables directly, so no layout is loaded into or
 //! activated in the user's session.
+//!
+//! `cargo xtask icons` exports the icon (drawn by `phitpup_core::icon`) to
+//! `assets/icon/` for the website and README: an `.ico`, PNGs and a preview.
 
 mod corpus;
 mod train;
@@ -46,6 +49,7 @@ fn main() {
         Some("gen-layouts") => gen_layouts(),
         Some("fetch-corpus") => fetch_corpus(),
         Some("train-model") => train::train(&root()),
+        Some("icons") => icons(),
         Some("eval-detector") => {
             let lexicon = match args.get(1).map(String::as_str) {
                 Some("--lexicon") => args
@@ -58,12 +62,50 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: cargo xtask <gen-layouts | fetch-corpus | train-model | eval-detector>"
+                "usage: cargo xtask <gen-layouts | fetch-corpus | train-model | eval-detector | icons>"
             );
             std::process::exit(2);
         }
     }
 }
+
+fn icons() {
+    use phitpup_core::icon::{Tone, ico, images, png, render};
+    let dir = root().join("assets").join("icon");
+    std::fs::create_dir_all(&dir).expect("create assets/icon/");
+    let write = |name: &str, data: &[u8]| {
+        std::fs::write(dir.join(name), data).expect("write icon file");
+        println!("assets/icon/{name}  ({} bytes)", data.len());
+    };
+    write("phitpup.ico", &ico(&images(Tone::Active)));
+    for size in [16, 24, 32, 48, 64, 128, 256, 512] {
+        write(
+            &format!("phitpup-{size}.png"),
+            &png(&render(size, Tone::Active), size),
+        );
+    }
+    write("phitpup-paused-32.png", &png(&render(32, Tone::Paused), 32));
+    write("phitpup.svg", SVG.as_bytes());
+}
+
+/// The icon for the web, on the same 120-unit grid as `phitpup_core::icon`
+/// (the squircle is approximated with curves).
+const SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="PhitPup">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF8F5E"/>
+      <stop offset="1" stop-color="#FF3B1F"/>
+    </linearGradient>
+    <clipPath id="tile"><path d="M60 0C108 0 120 12 120 60S108 120 60 120 0 108 0 60 12 0 60 0Z"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect width="120" height="120" fill="url(#bg)"/>
+    <path d="M40 140V54A22 22 0 0 1 62 32H64A22 22 0 0 1 86 54V62" fill="none" stroke="#fff" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="76" cy="68" r="9.5" fill="none" stroke="#fff" stroke-width="11"/>
+    <rect x="92" y="84" width="9" height="22" rx="4.5" fill="#2A0A05"/>
+  </g>
+</svg>
+"##;
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")

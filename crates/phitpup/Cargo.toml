@@ -8,6 +8,9 @@ license.workspace = true
 [dependencies]
 phitpup-core = { path = "../phitpup-core" }
 
+[build-dependencies]
+phitpup-core = { path = "../phitpup-core" }
+
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.59.0"
 features = [

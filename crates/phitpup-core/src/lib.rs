@@ -11,6 +11,7 @@ pub mod config;
 pub mod convert;
 pub mod detect;
 pub mod fix;
+pub mod icon;
 pub mod layouts;
 pub mod model;
 pub mod thai;

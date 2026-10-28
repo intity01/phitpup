@@ -97,6 +97,21 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
    - Caret from `GetGUIThreadInfo`; apps that draw their own caret (Chrome, Electron) fall
      back to the mouse pointer until UI Automation lands in milestone 4.
    - Confirmed working by the user (2026-10-28).
+   - Polish (2026-10-28): bubble drawn per pixel (anti-aliased squircle-ish card, soft shadow,
+     hairline border, grayscale text) and shown with `UpdateLayeredWindow`; fades/slides in,
+     glides, stays put along a word, waits 120 ms of quiet before first showing; light/dark
+     theme; TH/EN badge. Shift+Backspace right after Tab undoes the accepted fix.
+   - Previews without a live desktop: `cargo test -p phitpup preview -- --ignored`.
+
+### Logo (2026-10-28)
+- Chosen after four rounds: a big white **p** on a coral squircle; turned upside down the same
+  shape reads as Thai **ป** (typing on the "wrong side"); the dark bar is the text cursor.
+  Rejected: letter-on-square (too plain), puppy mascot (says nothing about the app).
+- Drawn from geometry in `phitpup_core::icon` (no image files in the build): the tray renders
+  it at the exact system size (grey when paused); `build.rs` writes a `.res` with sizes
+  16–256 that the MSVC linker embeds; `cargo xtask icons` exports `assets/icon/` (ICO, PNGs,
+  SVG). PNG/ICO/RES writers are dependency-free.
+
 6. Auto mode
 7. Website (GitHub Pages + WASM) and GitHub Actions release
 

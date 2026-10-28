@@ -8,12 +8,11 @@ use std::sync::atomic::Ordering;
 use std::time::SystemTime;
 
 use phitpup_core::config::Mode;
-use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
+use phitpup_core::icon::{self, Tone};
+use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
-    BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CLEARTYPE_QUALITY, CreateBitmap, CreateCompatibleDC,
-    CreateDIBSection, CreateFontW, CreateSolidBrush, DEFAULT_CHARSET, DIB_RGB_COLORS, DT_CENTER,
-    DT_SINGLELINE, DT_VCENTER, DeleteDC, DeleteObject, DrawTextW, FW_BOLD, GetStockObject,
-    NULL_PEN, RoundRect, SelectObject, SetBkMode, SetTextColor, TRANSPARENT,
+    BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateBitmap, CreateDIBSection, DIB_RGB_COLORS,
+    DeleteObject,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::HiDpi::{GetDpiForSystem, GetSystemMetricsForDpi};
@@ -42,13 +41,6 @@ const CMD_SUGGEST: usize = 3;
 const CMD_STARTUP: usize = 4;
 const CMD_SETTINGS: usize = 5;
 const CMD_QUIT: usize = 6;
-
-const ACTIVE: u32 = rgb(0x25, 0x63, 0xEB);
-const PAUSED: u32 = rgb(0x6B, 0x72, 0x80);
-
-const fn rgb(r: u8, g: u8, b: u8) -> u32 {
-    r as u32 | (g as u32) << 8 | (b as u32) << 16
-}
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain([0]).collect()
@@ -157,7 +149,7 @@ fn update_icon(action: u32) {
     let mut nid = notify_data();
     nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     nid.uCallbackMessage = WM_TRAY;
-    nid.hIcon = draw_icon(if paused { PAUSED } else { ACTIVE });
+    nid.hIcon = draw_icon(if paused { Tone::Paused } else { Tone::Active });
     copy(
         &mut nid.szTip,
         if paused {
@@ -200,13 +192,13 @@ fn warn_settings(problems: &[String]) {
     };
 }
 
-/// A small rounded square in `color` with a white ผ.
-fn draw_icon(color: u32) -> HICON {
-    // SAFETY: GDI objects are created, selected, restored and deleted here;
-    // the DIB's pixel memory is `size * size` u32s, owned by the bitmap.
+/// The PhitPup icon at the tray's size for this screen, grey when paused.
+fn draw_icon(tone: Tone) -> HICON {
+    // SAFETY: plain queries; the DIB holds size*size pixels and both bitmaps
+    // are deleted once the icon has copied them.
     unsafe {
-        let dpi = GetDpiForSystem();
-        let size = GetSystemMetricsForDpi(SM_CXSMICON, dpi).max(16);
+        let size = GetSystemMetricsForDpi(SM_CXSMICON, GetDpiForSystem()).max(16);
+        let rgba = icon::render(size as u32, tone);
         let mut bmi: BITMAPINFO = std::mem::zeroed();
         bmi.bmiHeader = BITMAPINFOHEADER {
             biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
@@ -218,7 +210,7 @@ fn draw_icon(color: u32) -> HICON {
             ..std::mem::zeroed()
         };
         let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
-        let color_bmp = CreateDIBSection(
+        let color = CreateDIBSection(
             std::ptr::null_mut(),
             &bmi,
             DIB_RGB_COLORS,
@@ -226,64 +218,9 @@ fn draw_icon(color: u32) -> HICON {
             std::ptr::null_mut(),
             0,
         );
-        let dc = CreateCompatibleDC(std::ptr::null_mut());
-        let old_bmp = SelectObject(dc, color_bmp);
-
-        let brush = CreateSolidBrush(color);
-        let old_brush = SelectObject(dc, brush);
-        let old_pen = SelectObject(dc, GetStockObject(NULL_PEN));
-        let r = size / 4;
-        RoundRect(dc, 0, 0, size + 1, size + 1, r, r);
-
-        let face = wide("Leelawadee UI");
-        let font = CreateFontW(
-            -(size * 9 / 10),
-            0,
-            0,
-            0,
-            FW_BOLD as i32,
-            0,
-            0,
-            0,
-            DEFAULT_CHARSET.into(),
-            0,
-            0,
-            CLEARTYPE_QUALITY.into(),
-            0,
-            face.as_ptr(),
-        );
-        let old_font = SelectObject(dc, font);
-        SetBkMode(dc, TRANSPARENT as i32);
-        SetTextColor(dc, rgb(0xFF, 0xFF, 0xFF));
-        let mut rect = RECT {
-            left: 0,
-            top: -size / 12,
-            right: size,
-            bottom: size,
-        };
-        let text: Vec<u16> = "ผ".encode_utf16().collect();
-        DrawTextW(
-            dc,
-            text.as_ptr(),
-            text.len() as i32,
-            &mut rect,
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE,
-        );
-
-        SelectObject(dc, old_font);
-        SelectObject(dc, old_pen);
-        SelectObject(dc, old_brush);
-        SelectObject(dc, old_bmp);
-        DeleteObject(font);
-        DeleteObject(brush);
-        DeleteDC(dc);
-
-        // GDI leaves alpha at 0: make everything it drew opaque.
-        let px = std::slice::from_raw_parts_mut(bits as *mut u32, (size * size) as usize);
-        for p in px {
-            if *p & 0x00FF_FFFF != 0 {
-                *p |= 0xFF00_0000;
-            }
+        let px = std::slice::from_raw_parts_mut(bits as *mut u8, rgba.len());
+        for (dst, src) in px.chunks_exact_mut(4).zip(rgba.chunks_exact(4)) {
+            dst.copy_from_slice(&[src[2], src[1], src[0], src[3]]); // RGBA → BGRA
         }
         let mask = CreateBitmap(size, size, 1, 1, std::ptr::null());
         let info = ICONINFO {
@@ -291,11 +228,11 @@ fn draw_icon(color: u32) -> HICON {
             xHotspot: 0,
             yHotspot: 0,
             hbmMask: mask,
-            hbmColor: color_bmp,
+            hbmColor: color,
         };
         let icon = CreateIconIndirect(&info);
         DeleteObject(mask);
-        DeleteObject(color_bmp);
+        DeleteObject(color);
         icon
     }
 }
