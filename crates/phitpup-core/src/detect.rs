@@ -136,8 +136,49 @@ impl Detector {
         Some((d, self.convert(text, d)))
     }
 
+    /// What the hotkey does to a selection. A selection often mixes words
+    /// that were typed right with ones that were not ("hello l;ylfu"), so
+    /// only the words the detector is sure about change, at the strict
+    /// [`Thresholds::AUTO`] setting: a short word like "ok" (= นา) stays as
+    /// it is. If no word qualifies, the user still asked, so the whole
+    /// selection flips like
+    /// [`manual`](Self::manual). The direction returned is the last changed
+    /// word's: the layout to keep typing in.
+    pub fn selection(&self, text: &str) -> Option<(Direction, String)> {
+        let mut out = String::with_capacity(text.len());
+        let mut last = None;
+        let mut word = String::new();
+        let mut flush = |word: &mut String, out: &mut String| {
+            match self.judge_with(word, Thresholds::AUTO).filter(|v| v.flip) {
+                Some(v) => {
+                    last = Some(v.direction);
+                    out.push_str(&v.converted);
+                }
+                None => out.push_str(word),
+            }
+            word.clear();
+        };
+        for c in text.chars() {
+            if c.is_whitespace() {
+                flush(&mut word, &mut out);
+                out.push(c);
+            } else {
+                word.push(c);
+            }
+        }
+        flush(&mut word, &mut out);
+        match last {
+            Some(d) => Some((d, out)),
+            None => self.manual(text),
+        }
+    }
+
     /// Judges one word (no spaces) for suggest and auto mode.
     pub fn judge(&self, word: &str) -> Option<Verdict> {
+        self.judge_with(word, self.thresholds)
+    }
+
+    fn judge_with(&self, word: &str, thresholds: Thresholds) -> Option<Verdict> {
         let direction = self.direction(word)?;
         let converted = self.convert(word, direction);
         let th = self.model.lang(Lang::Thai);
@@ -145,7 +186,7 @@ impl Detector {
         let (margin, allowed) = match direction {
             Direction::ToThai => {
                 let margin =
-                    english_cost(self.model, word) - th.cost(&converted) - self.thresholds.to_thai;
+                    english_cost(self.model, word) - th.cost(&converted) - thresholds.to_thai;
                 (
                     margin,
                     !looks_numeric(word) && thai::check(&converted).is_ok(),
@@ -159,11 +200,11 @@ impl Detector {
                 };
                 let margin = th.cost(word) + penalty
                     - english_cost(self.model, &converted)
-                    - self.thresholds.to_english;
+                    - thresholds.to_english;
                 (margin, converted.chars().any(|c| c.is_ascii_alphabetic()))
             }
         };
-        let long_enough = word.chars().count() >= self.thresholds.min_chars;
+        let long_enough = word.chars().count() >= thresholds.min_chars;
         Some(Verdict {
             direction,
             converted,

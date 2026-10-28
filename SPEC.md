@@ -44,7 +44,28 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
    - Known gaps: English false positives are mostly lowercase acronyms (mvp, gdp, lcd), and
      English recall/false-positive numbers are unweighted because the English list has no
      frequencies. An English frequency tier list (SCOWL sizes) would fix both.
-3. Keyboard hook + manual hotkey + SendInput injection + layout switch
+3. ✅ Keyboard hook + manual hotkey + SendInput injection + layout switch (2026-10-28)
+   - `phitpup_core::Fixer`: mirrors text before the caret; Shift+Backspace fixes the last word,
+     each repeat reaches one word further (max 8), then one more press restores the original.
+   - `crates/phitpup` (windows-sys): LL keyboard+mouse hooks on the main thread, fixes on a
+     worker thread; layouts read from installed HKLs via `ToUnicodeEx`; edits sent in one
+     `SendInput`; injected events tagged `dwExtraInfo = "PPUP"`; layout switched with
+     `WM_INPUTLANGCHANGEREQUEST`. Empty buffer → selection via Ctrl+Insert + full clipboard
+     snapshot/restore; nothing selected → plain Backspace.
+   - Live test in Notepad (2026-10-28), verified by saving and reading the file: last-word fix
+     (l;ylfu → สวัสดี) + switch to Thai, 2/3 presses, undo + switch back to English,
+     Thai → English (้ำสสน → hello), mixed selection (hello l;ylfu → hello สวัสดี) with the
+     clipboard left as it was. Not yet tested: Chrome/Edge, Word, LINE/Discord, VS Code.
+   - Bitdefender removed `target\debug\phitpup.exe` and `cargo.exe` during testing (keyboard
+     hook + SendInput + clipboard reads like a keylogger) and likely killed the process tree.
+     Dev needs an antivirus exclusion for the project folder; releases need code signing and
+     false-positive submissions to AV vendors (track in milestone 7). Never work around AV.
+   - Selection converts only the words the detector is sure about at `AUTO` thresholds
+     (`Detector::selection`); if none qualify the whole selection flips.
+   - The old `target/` folder kept files the antivirus had locked; builds now use
+     `CARGO_TARGET_DIR=target-fresh` until `target/` can be deleted.
+   - Risks to check live: apps that delete a whole Thai cluster per Backspace (Chrome?),
+     Ctrl+Insert not copying in some apps (LINE?), Shift released by selection path.
 4. Tray icon + `config.toml` + self-disable rules
 5. Suggest bubble (layered window at caret)
 6. Auto mode

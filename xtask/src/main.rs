@@ -11,13 +11,7 @@ mod train;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
-/// The 47 character keys of a US ANSI board, by scancode, in row order.
-const KEYS: &[u16] = &[
-    0x29, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, //
-    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x2B, //
-    0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, //
-    0x2C, 0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35,
-];
+use phitpup_core::layouts::{SCANCODES, typeable};
 
 /// (Rust const name, DLL, human name)
 const LAYOUTS: &[(&str, &str, &str)] = &[
@@ -115,7 +109,7 @@ fn gen_layouts() {
             "\n/// {human} ({dll})\npub(super) static {name}: &[Key] = &["
         )
         .unwrap();
-        for &sc in KEYS {
+        for &sc in SCANCODES {
             let [base, shift] = table.get(&sc).copied().unwrap_or([None, None]);
             let line = format!("    k(0x{sc:02X}, {}, {}),", lit(base), lit(shift));
             writeln!(out, "{line:<52}// {} {}", glyph(base), glyph(shift)).unwrap();
@@ -253,10 +247,7 @@ mod kbd {
                             let w = row.add(2 + 2 * col as usize).cast::<u16>().read_unaligned();
                             match w {
                                 WCH_NONE | WCH_DEAD | WCH_LGTR => None,
-                                // Controls, and private-use legacy glyphs
-                                // (KBDTH1 puts U+F8C7 on the `\` key).
-                                w if w < 0x20 || (0xE000..=0xF8FF).contains(&w) => None,
-                                w => char::from_u32(w.into()),
+                                w => char::from_u32(w.into()).and_then(super::typeable),
                             }
                         };
                         by_vk.insert(vk, [at(columns[0]), at(columns[1])]);

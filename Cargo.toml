@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
-members = ["crates/phitpup-core", "xtask"]
+members = ["crates/phitpup-core", "crates/phitpup", "xtask"]
+default-members = ["crates/phitpup-core", "crates/phitpup"]
 
 [workspace.package]
 version = "0.1.0"

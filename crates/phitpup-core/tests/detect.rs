@@ -118,6 +118,31 @@ fn nothing_to_judge() {
 }
 
 #[test]
+fn selection_fixes_only_the_wrong_words() {
+    let d = kedmanee(Thresholds::AUTO); // selection uses SUGGEST regardless
+    assert_eq!(
+        d.selection("hello l;ylfu"),
+        Some((Direction::ToThai, "hello สวัสดี".into()))
+    );
+    assert_eq!(
+        d.selection("ครับ ้ำสสน\nok"),
+        Some((Direction::ToEnglish, "ครับ hello\nok".into()))
+    );
+    // Whole wrong sentence.
+    assert_eq!(
+        d.selection("l;ylfu 8iy["),
+        Some((Direction::ToThai, "สวัสดี ครับ".into()))
+    );
+}
+
+#[test]
+fn selection_with_nothing_wrong_flips_everything() {
+    let d = kedmanee(Thresholds::SUGGEST);
+    assert_eq!(d.selection("hello world"), d.manual("hello world"));
+    assert_eq!(d.selection(" \n "), None);
+}
+
+#[test]
 fn manual_flips_by_script() {
     let d = kedmanee(Thresholds::SUGGEST);
     assert_eq!(d.manual("hello"), Some((Direction::ToThai, "้ำสสน".into())));
