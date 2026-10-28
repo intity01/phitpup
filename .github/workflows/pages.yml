@@ -1,0 +1,59 @@
+# Builds the website (site/ plus the core compiled to WebAssembly for the
+# try-it box) and publishes it to GitHub Pages. release.json carries the
+# latest release's version, size and SHA-256 for the download section.
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "crates/phitpup-core/**", "crates/phitpup-web/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  CARGO_TARGET_DIR: target
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable && rustup default stable && rustup target add wasm32-unknown-unknown
+      - run: cargo build --release -p phitpup-web --target wasm32-unknown-unknown
+      - name: Assemble
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir _site
+          cp -r site/. _site/
+          cp target/wasm32-unknown-unknown/release/phitpup_web.wasm _site/phitpup.wasm
+          rm -f _site/release.json
+          if tag=$(gh release view --json tagName -q .tagName 2>/dev/null); then
+            gh release download "$tag" -p phitpup.exe.sha256 -O sha.txt
+            size=$(gh release view "$tag" --json assets -q '.assets[] | select(.name == "phitpup.exe") | .size')
+            printf '{"version":"%s","sha256":"%s","size":%s}\n' "${tag#v}" "$(cut -d' ' -f1 sha.txt)" "$size" > _site/release.json
+            cat _site/release.json
+          fi
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

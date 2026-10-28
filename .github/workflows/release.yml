@@ -1,0 +1,52 @@
+# Push a tag like v0.1.0 to build phitpup.exe and publish it as a GitHub
+# release with its SHA-256, then rebuild the website so it shows the new hash.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  actions: write
+
+env:
+  CARGO_TARGET_DIR: target
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable && rustup default stable
+      - run: cargo test --release --workspace
+      - run: cargo build --release -p phitpup
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item target/release/phitpup.exe dist/phitpup.exe
+          $hash = (Get-FileHash dist/phitpup.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  phitpup.exe" | Out-File dist/phitpup.exe.sha256 -Encoding ascii -NoNewline
+          "SHA256 $hash"
+      - name: Publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $hash = (Get-Content dist/phitpup.exe.sha256).Split(" ")[0]
+          $notes = @"
+          Download **phitpup.exe** below and run it; there is nothing to install.
+
+          SHA-256: ``$hash``
+
+          Windows may say "Windows protected your PC": click **More info**, then **Run anyway**.
+          This build was made by GitHub Actions from the source at this tag.
+          "@
+          gh release create $tag dist/phitpup.exe dist/phitpup.exe.sha256 --title "PhitPup $($tag.TrimStart('v'))" --notes $notes
+      - name: Update the website
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main

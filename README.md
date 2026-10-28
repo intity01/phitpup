@@ -1,0 +1,52 @@
+<p align="center"><img src="assets/icon/phitpup-128.png" width="96" alt=""></p>
+
+<h1 align="center">ผิดปุ๊บ PhitPup</h1>
+
+<p align="center">Fixes text typed in the wrong keyboard layout, Thai ⇄ English, on Windows.<br>
+แก้ข้อความที่พิมพ์ผิดภาษา ไทย ⇄ อังกฤษ บน Windows</p>
+
+---
+
+Forgot to switch layouts and typed `l;ylfu`? PhitPup sees you meant **สวัสดี** and fixes it:
+
+- **Suggest** (default): a small bubble under the caret; <kbd>Tab</kbd> accepts, <kbd>Esc</kbd> hides,
+  <kbd>Shift</kbd>+<kbd>Esc</kbd> never suggests that word again.
+- **Auto**: <kbd>Space</kbd> fixes a word PhitPup is very sure about.
+- **Hotkey**: <kbd>Shift</kbd>+<kbd>Backspace</kbd> fixes the last word (again: one word further back,
+  then undo), or the selected text. Works in every mode, and right after a fix it puts the word back.
+
+It switches the keyboard layout for you, supports Kedmanee and Pattachote, and turns itself off in
+password fields, password managers, Remote Desktop and full-screen windows. Click the tray icon for
+the settings window.
+
+**Private by design:** no networking code at all; what you type is kept in memory only for the word
+in progress.
+
+## Download
+
+Get `phitpup.exe` from [Releases](../../releases/latest) (Windows 10/11, x64). It is a single file;
+nothing to install. Check it against the published SHA-256. Windows SmartScreen may warn because the
+program is not code-signed yet: **More info → Run anyway**.
+
+## Build
+
+Rust 1.87+ with the MSVC toolchain.
+
+```
+cargo run --release -p phitpup          # the app (PHITPUP_DEBUG=1 for a log of decisions)
+cargo test --workspace
+cargo build --release -p phitpup-web --target wasm32-unknown-unknown   # the website's try-it box
+```
+
+| Path | What |
+|---|---|
+| `crates/phitpup-core` | Layouts, conversion, detector, fixer, settings, icon. No OS calls; builds for WASM. |
+| `crates/phitpup` | The Windows app: keyboard hook, injection, bubble, tray, settings window. |
+| `crates/phitpup-web` | The core for the website (wasm32, no bindings crate). |
+| `site/` | The website (GitHub Pages). |
+| `xtask` | Layout table generation, model training, icon export. |
+| `SPEC.md` | Decisions and milestones. |
+
+## Credits
+
+Made by **Intity01** · sukudone.team-dev. MIT license; data sources in [THIRD_PARTY.md](THIRD_PARTY.md).

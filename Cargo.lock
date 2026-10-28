@@ -15,6 +15,13 @@ name = "phitpup-core"
 version = "0.1.0"
 
 [[package]]
+name = "phitpup-web"
+version = "0.1.0"
+dependencies = [
+ "phitpup-core",
+]
+
+[[package]]
 name = "windows-sys"
 version = "0.59.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

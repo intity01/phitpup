@@ -1,3 +1,7 @@
 /target
 /target-*
 /corpus
+
+# Built by the Pages workflow
+/site/phitpup.wasm
+/site/release.json

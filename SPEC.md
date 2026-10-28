@@ -141,7 +141,19 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
    - Tray menu and settings window offer it as a third mode.
    - About page in the settings window: made by Intity01, team sukudone.team-dev, version, MIT,
      privacy note.
-7. Website (GitHub Pages + WASM) and GitHub Actions release
+7. Website (GitHub Pages + WASM) and GitHub Actions release (2026-10-29, built; not published yet)
+   - `site/`: one static page, Thai by default (English from the browser language or the switch),
+     no external requests. Hero demo, try-it box, modes, privacy, install steps (SmartScreen),
+     FAQ (antivirus, SmartScreen, wrong fixes, games, macOS, removal), credits.
+   - Try-it box runs the real core: `crates/phitpup-web` (cdylib, plain `extern "C"` exports,
+     no bindings crate, 434 KB) with suggest / auto / hotkey modes, Tab, Esc, Shift+Backspace
+     with undo, selection, Kedmanee or Pattachote. Checked in the browser pane (desktop + 375 px).
+   - Workflows: `ci.yml` (fmt, clippy -D warnings, tests on Windows); `release.yml` (tag `v*` →
+     tests, build, `phitpup.exe` + `.sha256` as a GitHub release, then runs the Pages workflow);
+     `pages.yml` (wasm build, `release.json` with version/size/SHA-256 of the latest release,
+     deploy to Pages).
+   - The repository slug lives in `site/index.html` (`data-repo`); currently `intity01/phitpup`.
+   - Still open: code signing, AV false-positive submissions, version-info resource.
 
 ## Environment (checked 2026-10-28)
 rustc/cargo 1.96, rustup 1.29, Visual Studio Community 2026 (MSVC), git 2.54, gh 2.102, node 26.3.

@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="th" data-repo="intity01/phitpup">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ผิดปุ๊บ PhitPup: แก้ข้อความที่พิมพ์ผิดภาษา ไทย ⇄ อังกฤษ</title>
+<meta name="description" content="พิมพ์ลืมเปลี่ยนภาษาจนได้ l;ylfu? ผิดปุ๊บแก้ให้เป็น สวัสดี ทันที โปรแกรมเล็ก ๆ สำหรับ Windows ทำงานในเครื่อง ไม่ต่ออินเทอร์เน็ต ฟรีและโอเพนซอร์ส">
+<meta name="theme-color" content="#FF4A26">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="top">
+  <a class="brand" href="#">
+    <img src="logo.svg" alt="" width="32" height="32">
+    <span>PhitPup <small>ผิดปุ๊บ</small></span>
+  </a>
+  <nav>
+    <a href="#try" data-i18n="nav.try">ลองเลย</a>
+    <a href="#modes" data-i18n="nav.how">ใช้งานยังไง</a>
+    <a href="#install" data-i18n="nav.install">ติดตั้ง</a>
+    <a href="#faq" data-i18n="nav.faq">คำถาม</a>
+  </nav>
+  <button class="lang" id="lang" type="button" aria-label="Switch language">EN</button>
+</header>
+
+<main>
+
+<section class="hero">
+  <div class="hero-text">
+    <p class="eyebrow" data-i18n="hero.eyebrow">สำหรับ Windows 10 และ 11</p>
+    <h1 data-i18n="hero.title">พิมพ์ผิดภาษา?<br>แก้ได้ใน<em>ปุ๊บ</em>เดียว</h1>
+    <p class="lead" data-i18n="hero.lead">ลืมกดเปลี่ยนภาษาจนได้ <code>l;ylfu</code> ใช่ไหม ผิดปุ๊บดูออกว่าคุณตั้งใจพิมพ์ <b>สวัสดี</b> แล้วแก้ให้ทันที ไม่ต้องลบพิมพ์ใหม่</p>
+    <div class="cta">
+      <a class="button primary" id="download" href="#install">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 20h16"/></svg>
+        <span data-i18n="hero.download">ดาวน์โหลดฟรี</span>
+      </a>
+      <a class="button" href="#try" data-i18n="hero.try">ลองในเว็บก่อน</a>
+    </div>
+    <p class="meta" id="meta" data-i18n="hero.meta">ไฟล์เดียวไม่ต้องติดตั้ง · ไม่ถึง 1 MB · โอเพนซอร์ส MIT</p>
+  </div>
+
+  <div class="demo" aria-hidden="true">
+    <div class="window">
+      <div class="window-bar"><i></i><i></i><i></i></div>
+      <div class="window-body">
+        <p class="chat other">พรุ่งนี้ว่างไหม</p>
+        <p class="chat me"><span id="demo-text"></span><span class="caret"></span></p>
+        <div class="bubble" id="demo-bubble">
+          <span class="badge">TH</span><span id="demo-fix">สวัสดี</span><span class="key">Tab</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="try" id="try">
+  <h2 data-i18n="try.title">ลองพิมพ์ดู</h2>
+  <p class="section-lead" data-i18n="try.lead">พิมพ์ภาษาไทยโดยที่คีย์บอร์ดยังเป็นภาษาอังกฤษ (หรือกลับกัน) ในช่องนี้ ทุกอย่างทำงานในเบราว์เซอร์ของคุณเอง ไม่มีอะไรถูกส่งออกไป</p>
+  <div class="try-box">
+    <div class="try-tools">
+      <div class="seg" role="radiogroup" aria-label="Mode">
+        <button type="button" data-mode="suggest" class="on" data-i18n="mode.suggest">แนะนำ</button>
+        <button type="button" data-mode="auto" data-i18n="mode.auto">อัตโนมัติ</button>
+        <button type="button" data-mode="manual" data-i18n="mode.manual">ปุ่มลัด</button>
+      </div>
+      <label class="select">
+        <span data-i18n="try.layout">แป้นไทย</span>
+        <select id="layout">
+          <option value="0" data-i18n="layout.ked">เกษมณี</option>
+          <option value="1" data-i18n="layout.pat">ปัตตะโชติ</option>
+        </select>
+      </label>
+    </div>
+    <div class="field">
+      <textarea id="input" rows="4" spellcheck="false" autocomplete="off" data-i18n-placeholder="try.placeholder" placeholder="ลองพิมพ์ l;ylfu 8iy[ หรือ ้ำสสน"></textarea>
+      <div class="mirror" id="mirror" aria-hidden="true"></div>
+      <div class="bubble live" id="bubble" hidden>
+        <span class="badge" id="bubble-lang">TH</span><span id="bubble-word"></span><span class="key" id="bubble-key">Tab</span>
+      </div>
+    </div>
+    <p class="hint" id="hint" data-i18n="hint.suggest">bubble จะขึ้นระหว่างพิมพ์ กด <kbd>Tab</kbd> เพื่อรับ <kbd>Esc</kbd> เพื่อซ่อน · <kbd>Shift</kbd>+<kbd>Backspace</kbd> แก้คำล่าสุดหรือข้อความที่เลือก</p>
+    <div class="samples">
+      <span data-i18n="try.samples">ตัวอย่าง:</span>
+      <button type="button" data-sample="l;ylfu 8iy[">l;ylfu 8iy[</button>
+      <button type="button" data-sample="้ำสสน ไนพสก">้ำสสน ไนพสก</button>
+      <button type="button" data-sample="hello l;ylfu">hello l;ylfu</button>
+    </div>
+    <p class="status" id="status" role="status"></p>
+  </div>
+</section>
+
+<section class="modes" id="modes">
+  <h2 data-i18n="modes.title">เลือกได้ว่าจะให้ช่วยแค่ไหน</h2>
+  <div class="cards">
+    <article class="card">
+      <div class="card-keys"><kbd>Tab</kbd></div>
+      <h3 data-i18n="modes.suggest.t">แนะนำขณะพิมพ์</h3>
+      <p data-i18n="modes.suggest.p">bubble เล็ก ๆ ขึ้นใต้เคอร์เซอร์เมื่อคำที่พิมพ์ดูผิดภาษา กด Tab ถ้าใช่ ไม่ใช่ก็พิมพ์ต่อไปเลย เป็นค่าเริ่มต้น</p>
+    </article>
+    <article class="card">
+      <div class="card-keys"><kbd>Space</kbd></div>
+      <h3 data-i18n="modes.auto.t">แก้อัตโนมัติ</h3>
+      <p data-i18n="modes.auto.p">กด Space แล้วคำที่ผิดจะถูกแก้ให้เอง แต่เฉพาะคำที่มั่นใจมาก ถ้าแก้ผิด กด Shift+Backspace ทันทีเพื่อคืนคำเดิม</p>
+    </article>
+    <article class="card">
+      <div class="card-keys"><kbd>Shift</kbd><kbd>Backspace</kbd></div>
+      <h3 data-i18n="modes.manual.t">เมื่อกดปุ่มลัด</h3>
+      <p data-i18n="modes.manual.p">แก้คำล่าสุด กดซ้ำเพื่อย้อนไปทีละคำ หรือเลือกข้อความแล้วกดเพื่อแก้ทั้งก้อน ใช้ได้ทุกโหมด</p>
+    </article>
+  </div>
+  <ul class="facts">
+    <li data-i18n="facts.switch">แก้แล้วสลับภาษาของคีย์บอร์ดให้ด้วย พิมพ์ต่อได้เลย</li>
+    <li data-i18n="facts.layouts">รองรับแป้นเกษมณีและปัตตะโชติ</li>
+    <li data-i18n="facts.apps">ใช้ได้ในเกือบทุกโปรแกรม: เบราว์เซอร์, LINE, Discord, Word, Notepad</li>
+    <li data-i18n="facts.off">ปิดตัวเองในช่องรหัสผ่าน, โปรแกรมจัดการรหัสผ่าน, Remote Desktop และเกมเต็มจอ</li>
+  </ul>
+</section>
+
+<section class="privacy">
+  <div class="privacy-icon" aria-hidden="true">
+    <svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+  </div>
+  <div>
+    <h2 data-i18n="privacy.title">สิ่งที่คุณพิมพ์ ไม่ออกจากเครื่อง</h2>
+    <p data-i18n="privacy.p">ผิดปุ๊บไม่มีโค้ดที่ต่ออินเทอร์เน็ตเลยแม้แต่บรรทัดเดียว การตัดสินว่าคำไหนผิดภาษาทำด้วยตารางสถิติขนาดเล็กที่อยู่ในตัวโปรแกรม จำข้อความไว้แค่คำที่กำลังพิมพ์ ลืมทันทีเมื่อคลิกหรือสลับหน้าต่าง และโค้ดทั้งหมดเปิดให้ตรวจได้</p>
+  </div>
+</section>
+
+<section class="install" id="install">
+  <h2 data-i18n="install.title">ติดตั้งใน 1 นาที</h2>
+  <ol class="steps">
+    <li>
+      <h3 data-i18n="install.1.t">ดาวน์โหลด phitpup.exe</h3>
+      <p data-i18n="install.1.p">ไฟล์เดียว ไม่ต้องติดตั้ง วางไว้ที่ไหนก็ได้ เช่น โฟลเดอร์ Documents</p>
+      <a class="button primary small" id="download-2" href="#" data-i18n="install.1.b">ดาวน์โหลดรุ่นล่าสุด</a>
+      <p class="hash"><span data-i18n="install.hash">SHA-256:</span> <code id="sha">—</code></p>
+    </li>
+    <li>
+      <h3 data-i18n="install.2.t">เปิดโปรแกรม</h3>
+      <p data-i18n="install.2.p">ถ้าขึ้นหน้าต่างสีน้ำเงิน "Windows protected your PC" ให้กด <b>More info</b> แล้ว <b>Run anyway</b> เพราะโปรแกรมยังไม่ได้ซื้อใบรับรองแบบเสียเงิน</p>
+    </li>
+    <li>
+      <h3 data-i18n="install.3.t">เริ่มพิมพ์</h3>
+      <p data-i18n="install.3.p">ไอคอน p สีส้มจะอยู่ข้างนาฬิกา คลิกเพื่อเปิดหน้าตั้งค่า เลือกโหมด และเปิดให้ทำงานพร้อม Windows</p>
+    </li>
+  </ol>
+</section>
+
+<section class="faq" id="faq">
+  <h2 data-i18n="faq.title">คำถามที่พบบ่อย</h2>
+  <details>
+    <summary data-i18n="faq.av.q">ทำไมโปรแกรมแอนตี้ไวรัสถึงเตือน?</summary>
+    <p data-i18n="faq.av.a">ผิดปุ๊บต้องเห็นปุ่มที่คุณกดเพื่อรู้ว่าพิมพ์อะไรไป และต้องพิมพ์คำที่แก้แล้วแทนคุณ ซึ่งเป็นวิธีเดียวกับที่โปรแกรมดักคีย์บอร์ดใช้ แอนตี้ไวรัสบางตัวจึงเตือนแบบเหมารวม โค้ดทั้งหมดเปิดให้ตรวจ และคุณเช็กได้ว่าไฟล์ที่ได้ตรงกับที่ GitHub build ไว้ โดยเทียบค่า SHA-256 ด้านบน</p>
+  </details>
+  <details>
+    <summary data-i18n="faq.smart.q">SmartScreen บอกว่าไม่รู้จักผู้พัฒนา ปลอดภัยไหม?</summary>
+    <p data-i18n="faq.smart.a">ข้อความนี้ขึ้นกับทุกโปรแกรมที่ไม่ได้ซื้อใบรับรอง code signing ไฟล์ทุกรุ่นถูก build บน GitHub Actions จากโค้ดที่เปิดเผย พร้อมค่า SHA-256 ให้ตรวจ</p>
+  </details>
+  <details>
+    <summary data-i18n="faq.wrong.q">ถ้ามันแก้คำที่ฉันตั้งใจพิมพ์?</summary>
+    <p data-i18n="faq.wrong.a">กด Shift+Backspace ทันทีเพื่อคืนคำเดิม ถ้าคำไหนถูกเตือนบ่อย เช่น ตัวย่อ ให้กด Shift+Esc ตอนที่ bubble ขึ้น คำนั้นจะไม่ถูกเตือนอีก หรือเพิ่มเองในหน้า Words</p>
+  </details>
+  <details>
+    <summary data-i18n="faq.games.q">เล่นเกมอยู่จะกวนไหม?</summary>
+    <p data-i18n="faq.games.a">ไม่กวน ผิดปุ๊บปิดตัวเองในหน้าต่างเต็มจอ และเพิ่มโปรแกรมที่ไม่อยากให้ทำงานได้ในหน้า Programs</p>
+  </details>
+  <details>
+    <summary data-i18n="faq.mac.q">มีสำหรับ macOS หรือมือถือไหม?</summary>
+    <p data-i18n="faq.mac.a">ตอนนี้มีแค่ Windows แกนหลักของโปรแกรมแยกออกจากส่วนที่ผูกกับระบบปฏิบัติการไว้แล้ว รุ่น macOS จึงเป็นไปได้ในอนาคต</p>
+  </details>
+  <details>
+    <summary data-i18n="faq.remove.q">ลบโปรแกรมยังไง?</summary>
+    <p data-i18n="faq.remove.a">คลิกขวาที่ไอคอน เลือก Quit แล้วลบไฟล์ phitpup.exe ถ้าเคยเปิด Start with Windows ให้ปิดก่อน การตั้งค่าอยู่ใน %APPDATA%\PhitPup ลบโฟลเดอร์นั้นได้เลย</p>
+  </details>
+</section>
+
+</main>
+
+<footer>
+  <img src="logo.svg" alt="" width="24" height="24">
+  <p><span data-i18n="footer.made">ทำโดย</span> <b>Intity01</b> · sukudone.team-dev · <a id="source" href="#" data-i18n="footer.source">ซอร์สโค้ด</a> · MIT</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

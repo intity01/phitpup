@@ -1,0 +1,13 @@
+[package]
+name = "phitpup-web"
+description = "PhitPup's core for the website's try-it box (wasm32)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+phitpup-core = { path = "../phitpup-core" }
