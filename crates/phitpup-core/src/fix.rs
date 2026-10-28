@@ -8,6 +8,9 @@
 //! Pressing the hotkey again right away reaches one more word back (up to
 //! [`MAX_WORDS`]). Once there is no earlier word, the next press restores the
 //! original text, which doubles as undo.
+//!
+//! In suggest mode the front end asks for a [`Suggestion`] after every key
+//! and shows it beside the caret; Tab hands it back to [`Fixer::accept`].
 
 use crate::model::Lang;
 use crate::{Detector, Direction};
@@ -24,6 +27,14 @@ pub struct Edit {
     pub insert: String,
     /// Keyboard layout to switch to afterwards, so typing continues correctly.
     pub switch_to: Lang,
+}
+
+/// A fix offered for the word being typed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Suggestion {
+    /// The word as typed, so a stale suggestion is never applied.
+    pub word: String,
+    pub edit: Edit,
 }
 
 #[derive(Debug)]
@@ -72,6 +83,42 @@ impl Fixer {
 
     pub fn text(&self) -> String {
         self.buf.iter().collect()
+    }
+
+    /// The word right before the caret, if the detector (at its own
+    /// thresholds) says it was typed with the wrong layout. Nothing while the
+    /// caret sits after whitespace: the word is finished.
+    pub fn suggestion(&self, detector: &Detector) -> Option<Suggestion> {
+        if self.buf.last().is_none_or(|c| c.is_whitespace()) {
+            return None;
+        }
+        let start = word_start(&self.buf, 1)?;
+        let word: String = self.buf[start..].iter().collect();
+        let v = detector.judge(&word).filter(|v| v.flip)?;
+        Some(Suggestion {
+            edit: Edit {
+                delete: self.buf.len() - start,
+                insert: v.converted,
+                switch_to: target(v.direction),
+            },
+            word,
+        })
+    }
+
+    /// Applies an accepted suggestion. Returns `None` if the text before the
+    /// caret no longer ends with that word.
+    pub fn accept(&mut self, s: &Suggestion) -> Option<Edit> {
+        let word: Vec<char> = s.word.chars().collect();
+        let start = self.buf.len().checked_sub(word.len())?;
+        let fresh =
+            self.buf[start..] == word[..] && (start == 0 || self.buf[start - 1].is_whitespace());
+        if !fresh {
+            return None;
+        }
+        self.session = None;
+        self.buf.truncate(start);
+        self.buf.extend(s.edit.insert.chars());
+        Some(s.edit.clone())
     }
 
     /// The edit for one hotkey press, or `None` if there is no word to fix.
@@ -272,6 +319,52 @@ mod tests {
         assert_eq!(f.hotkey(&d), None);
         f.reset();
         assert!(f.is_empty());
+    }
+
+    #[test]
+    fn suggests_while_typing_and_accepts() {
+        let d = det();
+        let mut f = Fixer::new();
+        f.typed("hello l");
+        assert_eq!(f.suggestion(&d), None, "too early to tell");
+        f.typed(";ylfu");
+        let s = f.suggestion(&d).unwrap();
+        assert_eq!(s.word, "l;ylfu");
+        assert_eq!(
+            s.edit,
+            Edit {
+                delete: 6,
+                insert: "สวัสดี".into(),
+                switch_to: Lang::Thai
+            }
+        );
+        assert_eq!(f.accept(&s), Some(s.edit.clone()));
+        assert_eq!(f.text(), "hello สวัสดี");
+    }
+
+    #[test]
+    fn no_suggestion_for_right_words_or_after_space() {
+        let d = det();
+        let mut f = Fixer::new();
+        f.typed("hello");
+        assert_eq!(f.suggestion(&d), None);
+        f.reset();
+        f.typed("l;ylfu ");
+        assert_eq!(f.suggestion(&d), None);
+    }
+
+    #[test]
+    fn stale_suggestion_is_refused() {
+        let d = det();
+        let mut f = Fixer::new();
+        f.typed("l;ylfu");
+        let s = f.suggestion(&d).unwrap();
+        f.typed("x");
+        assert_eq!(f.accept(&s), None);
+        f.backspace();
+        f.reset();
+        f.typed("al;ylfu");
+        assert_eq!(f.accept(&s), None, "word must start at a boundary");
     }
 
     #[test]

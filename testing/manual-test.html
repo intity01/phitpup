@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PhitPup manual test</title>
+<style>
+  :root { --bg:#f6f7f9; --fg:#1b2130; --muted:#5b6478; --line:#dde1e8; --accent:#2f5bd3; --ok:#1f8a4c; --bad:#b4332b; --card:#fff; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#12151c; --fg:#e4e8f0; --muted:#98a2b6; --line:#2b3240; --accent:#7d9bff; --ok:#5fd18f; --bad:#ff8a80; --card:#1a1f29; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 "Leelawadee UI","Segoe UI",Tahoma,sans-serif; }
+  main { max-width:900px; margin:0 auto; padding:24px 16px 64px; display:flex; flex-direction:column; gap:20px; }
+  h1 { margin:0; font-size:1.6rem; } h2 { margin:0; font-size:1.15rem; }
+  p { margin:0; color:var(--muted); }
+  textarea { width:100%; box-sizing:border-box; min-height:90px; font:20px/1.5 "Leelawadee UI",Tahoma,sans-serif; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg); }
+  .cps { font:13px/1.6 Consolas,monospace; color:var(--muted); word-break:break-all; min-height:1.6em; }
+  table { border-collapse:collapse; width:100%; background:var(--card); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:.85rem; color:var(--muted); }
+  code { font-family:Consolas,monospace; background:var(--bg); padding:1px 5px; border-radius:4px; }
+  select, button { font:inherit; padding:4px 8px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--fg); }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .wrap { overflow-x:auto; }
+  #note { width:100%; box-sizing:border-box; min-height:60px; font:inherit; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg); }
+</style>
+</head>
+<body>
+<main>
+  <h1>ทดสอบ PhitPup</h1>
+  <p>เปิด PhitPup ก่อน แล้วทำแต่ละข้อในแอปที่เลือก หน้านี้ใช้ทดสอบใน Chrome/Edge ได้เลย ส่วนแอปอื่นให้พิมพ์ในแอปนั้นแล้วคัดลอกผลมาวางในช่องข้างล่าง เพื่อดู code point</p>
+
+  <section>
+    <h2>ช่องพิมพ์ทดสอบ</h2>
+    <textarea id="box" placeholder="พิมพ์ที่นี่ หรือวางข้อความจากแอปอื่น"></textarea>
+    <div class="cps" id="cps"></div>
+  </section>
+
+  <section>
+    <label>แอปที่ทดสอบ:
+      <select id="app">
+        <option>Chrome</option><option>Edge</option><option>VS Code</option><option>LINE</option><option>Discord</option><option>Word</option><option>อื่น ๆ</option>
+      </select>
+    </label>
+  </section>
+
+  <div class="wrap"><table>
+    <thead><tr><th>#</th><th>ทำ</th><th>ควรได้</th><th>ผล</th></tr></thead>
+    <tbody id="cases"></tbody>
+  </table></div>
+
+  <section>
+    <h2>หมายเหตุ</h2>
+    <textarea id="note" placeholder="เช่น ลบเกินไปหนึ่งตัว, วงเล็บ ] งอกมา"></textarea>
+  </section>
+
+  <button class="primary" id="copy">คัดลอกผลไปส่ง Claude</button>
+  <p id="copied"></p>
+  <p>LINE / Discord: ทดสอบในแชตกับตัวเองหรือเซิร์ฟเวอร์ส่วนตัว และอย่ากด Enter</p>
+</main>
+<script>
+const CASES = [
+  ["พิมพ์ <code>l;ylfu</code> (แป้นอังกฤษ) แล้วกด Shift+Backspace", "สวัสดี และแป้นเปลี่ยนเป็นไทย"],
+  ["พิมพ์ <code>ok l;ylfu 8iy[</code> แล้วกด Shift+Backspace 3 ครั้ง", "นา สวัสดี ครับ"],
+  ["ต่อจากข้อ 2 กด Shift+Backspace อีกครั้ง", "ok l;ylfu 8iy[ และแป้นกลับเป็นอังกฤษ"],
+  ["สลับเป็นแป้นไทย พิมพ์ <code>hello</code> (จะออกมาเป็น ้ำสสน) แล้วกด Shift+Backspace", "hello"],
+  ["พิมพ์ <code>hello l;ylfu</code> กด Shift+Home เพื่อเลือก แล้วกด Shift+Backspace", "hello สวัสดี"],
+  ["ไม่ได้เลือกอะไรและเพิ่งคลิกในช่อง กด Shift+Backspace", "ลบไป 1 ตัวเหมือน Backspace ปกติ"],
+];
+const tbody = document.getElementById("cases");
+CASES.forEach(([doIt, want], i) => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>${i + 1}</td><td>${doIt}</td><td>${want}</td>
+    <td><select id="r${i}"><option value="">-</option><option>ผ่าน</option><option>ไม่ผ่าน</option></select></td>`;
+  tbody.appendChild(tr);
+});
+const box = document.getElementById("box"), cps = document.getElementById("cps");
+const show = () => { cps.textContent = [...box.value].map(c => "U+" + c.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")).join(" "); };
+box.addEventListener("input", show);
+document.getElementById("copy").addEventListener("click", async () => {
+  const lines = ["PhitPup manual test — " + document.getElementById("app").value];
+  CASES.forEach((_, i) => lines.push(`${i + 1}. ${document.getElementById("r" + i).value || "-"}`));
+  lines.push("text: " + box.value, "codepoints: " + cps.textContent, "note: " + document.getElementById("note").value);
+  const text = lines.join("\n");
+  try { await navigator.clipboard.writeText(text); document.getElementById("copied").textContent = "คัดลอกแล้ว วางในแชตกับ Claude ได้เลย"; }
+  catch { box.value = text; box.select(); document.getElementById("copied").textContent = "คัดลอกอัตโนมัติไม่ได้ ข้อความอยู่ในช่องพิมพ์แล้ว กด Ctrl+C เอง"; }
+});
+</script>
+</body>
+</html>

@@ -117,6 +117,66 @@ pub fn lang_of(hkl: isize) -> Option<Lang> {
     }
 }
 
+/// Whether the foreground window belongs to a process running as
+/// administrator. Windows blocks a normal process from typing into it.
+pub fn foreground_is_elevated() -> bool {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Security::{
+        GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
+    };
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    // SAFETY: handles are checked and closed; the token query writes into a
+    // correctly sized struct.
+    unsafe {
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(GetForegroundWindow(), &mut pid);
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if process.is_null() {
+            return false;
+        }
+        let mut token = std::ptr::null_mut();
+        let mut elevated = TOKEN_ELEVATION { TokenIsElevated: 0 };
+        let mut len = 0u32;
+        let ok = OpenProcessToken(process, TOKEN_QUERY, &mut token) != 0
+            && GetTokenInformation(
+                token,
+                TokenElevation,
+                (&mut elevated as *mut TOKEN_ELEVATION).cast(),
+                std::mem::size_of::<TOKEN_ELEVATION>() as u32,
+                &mut len,
+            ) != 0;
+        if !token.is_null() {
+            CloseHandle(token);
+        }
+        CloseHandle(process);
+        ok && elevated.TokenIsElevated != 0
+    }
+}
+
+/// Whether keyboard focus is in a standard password box. Fields drawn by the
+/// app itself (browsers, most password managers) need UI Automation, which
+/// comes with the self-disable rules.
+pub fn focus_is_password() -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        ES_PASSWORD, GWL_STYLE, GetClassNameW, GetWindowLongW,
+    };
+    // SAFETY: plain queries into stack buffers.
+    unsafe {
+        let tid = GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
+        let mut info: GUITHREADINFO = std::mem::zeroed();
+        info.cbSize = std::mem::size_of::<GUITHREADINFO>() as u32;
+        if GetGUIThreadInfo(tid, &mut info) == 0 || info.hwndFocus.is_null() {
+            return false;
+        }
+        let mut class = [0u16; 64];
+        let n = GetClassNameW(info.hwndFocus, class.as_mut_ptr(), class.len() as i32);
+        let class = String::from_utf16_lossy(&class[..n.max(0) as usize]).to_ascii_lowercase();
+        class.contains("edit") && GetWindowLongW(info.hwndFocus, GWL_STYLE) & ES_PASSWORD != 0
+    }
+}
+
 /// Asks the focused window to switch to `hkl`, like picking it in the tray.
 pub fn activate(hkl: isize) {
     // SAFETY: plain queries and a posted message.

@@ -62,12 +62,23 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
      false-positive submissions to AV vendors (track in milestone 7). Never work around AV.
    - Selection converts only the words the detector is sure about at `AUTO` thresholds
      (`Detector::selection`); if none qualify the whole selection flips.
-   - The old `target/` folder kept files the antivirus had locked; builds now use
-     `CARGO_TARGET_DIR=target-fresh` until `target/` can be deleted.
+   - The old `target/` folder kept files the antivirus had locked; `.cargo/config.toml` builds
+     into `target-fresh/` until `target/` can be deleted.
+   - Chrome/Edge, VS Code, LINE, Discord need a manual pass: the computer-use tool cannot type
+     into browsers or IDEs, Word is not installed, and chat apps would mean typing into real
+     chats. Checklist + code-point viewer: `testing/manual-test.html`.
    - Risks to check live: apps that delete a whole Thai cluster per Backspace (Chrome?),
      Ctrl+Insert not copying in some apps (LINE?), Shift released by selection path.
 4. Tray icon + `config.toml` + self-disable rules
-5. Suggest bubble (layered window at caret)
+5. ✅ Suggest bubble (layered window at caret) (2026-10-28, done before 4)
+   - `Fixer::suggestion` judges the word being typed at `SUGGEST` thresholds; `Fixer::accept`
+     applies it only if the text still ends with that word at a word boundary.
+   - `--suggest` flag (until `config.toml`): bubble under the caret with the fixed word and a
+     "Tab" hint; Tab accepts (and switches layout), Esc dismisses until the word ends. Never
+     takes focus or clicks; per-monitor DPI; hidden in standard `Edit` password boxes.
+   - Caret from `GetGUIThreadInfo`; apps that draw their own caret (Chrome, Electron) fall
+     back to the mouse pointer until UI Automation lands in milestone 4.
+   - Confirmed working by the user (2026-10-28).
 6. Auto mode
 7. Website (GitHub Pages + WASM) and GitHub Actions release
 

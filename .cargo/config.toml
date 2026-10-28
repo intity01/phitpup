@@ -1,2 +1,7 @@
+# The old target/ folder holds files the antivirus locked during testing.
+# Switch back to the default once target/ has been deleted.
+[build]
+target-dir = "target-fresh"
+
 [alias]
 xtask = "run --quiet --release --package xtask --"

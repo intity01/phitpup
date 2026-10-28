@@ -3,15 +3,18 @@
 //! The keyboard hook keeps [`Fixer`](phitpup_core::Fixer) in step with what
 //! is typed before the caret and catches Shift+Backspace. It must return
 //! quickly, so the fix itself runs on the worker thread.
+//!
+//! In suggest mode it also asks the fixer for a suggestion after every key,
+//! and Tab or Esc act on the bubble while one is shown.
 
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 
 use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, GetKeyState, ToUnicodeEx, VK_BACK, VK_CAPITAL, VK_CONTROL, VK_LCONTROL,
-    VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_PACKET, VK_RCONTROL, VK_RMENU, VK_RSHIFT, VK_RWIN,
-    VK_SHIFT,
+    GetAsyncKeyState, GetKeyState, ToUnicodeEx, VK_BACK, VK_CAPITAL, VK_CONTROL, VK_ESCAPE,
+    VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_PACKET, VK_RCONTROL, VK_RMENU,
+    VK_RSHIFT, VK_RWIN, VK_SHIFT, VK_TAB,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetForegroundWindow, HC_ACTION, KBDLLHOOKSTRUCT, PostThreadMessageW,
@@ -19,12 +22,14 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_XBUTTONDOWN,
 };
 
-use crate::{APP, WM_FIX, inject, layout};
+use crate::{APP, App, WM_ACCEPT, WM_BUBBLE, WM_FIX, inject, layout};
 
 /// CapsLock as we last saw it; GetKeyState is stale for other threads' input.
 static CAPS: AtomicBool = AtomicBool::new(false);
 /// Foreground window at the last key; a change means the caret moved.
 static LAST_FOREGROUND: AtomicIsize = AtomicIsize::new(0);
+/// Esc dismissed the bubble; it stays away until the word ends.
+static DISMISSED: AtomicBool = AtomicBool::new(false);
 
 /// ToUnicodeEx: leave the keyboard state (dead keys) alone. Windows 10 1607+.
 const NO_STATE_CHANGE: u32 = 0x4;
@@ -50,10 +55,47 @@ fn down(vk: u16) -> bool {
     unsafe { GetAsyncKeyState(vk.into()) < 0 }
 }
 
-fn reset() {
+fn reset(why: &str) {
     if let Some(app) = APP.get() {
-        app.fixer.lock().unwrap().reset();
+        let mut fixer = app.fixer.lock().unwrap();
+        if !fixer.is_empty() {
+            debug!("forgot what was typed: {why}");
+        }
+        fixer.reset();
+        drop(fixer);
+        DISMISSED.store(false, Ordering::Relaxed);
+        set_suggestion(app, None);
     }
+}
+
+fn post(app: &App, msg: u32) {
+    // SAFETY: posting to the worker thread's queue.
+    unsafe { PostThreadMessageW(app.worker, msg, 0, 0) };
+}
+
+/// Shows `s` in the bubble (or hides it), telling the worker only on change.
+fn set_suggestion(app: &App, s: Option<phitpup_core::Suggestion>) {
+    let mut current = app.suggestion.lock().unwrap();
+    if *current != s {
+        *current = s;
+        post(app, WM_BUBBLE);
+    }
+}
+
+/// Asks the fixer whether the word being typed needs fixing.
+fn refresh(app: &App) {
+    if !app.suggest {
+        return;
+    }
+    let s = if layout::focus_is_password() {
+        None
+    } else {
+        app.fixer.lock().unwrap().suggestion(&app.detector)
+    };
+    if s.is_none() {
+        DISMISSED.store(false, Ordering::Relaxed);
+    }
+    set_suggestion(app, s.filter(|_| !DISMISSED.load(Ordering::Relaxed)));
 }
 
 unsafe extern "system" fn keyboard(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -76,13 +118,32 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
     // SAFETY: plain query.
     let fg = unsafe { GetForegroundWindow() } as isize;
     if LAST_FOREGROUND.swap(fg, Ordering::Relaxed) != fg {
-        reset();
+        reset("switched to another window");
     }
 
     let shift = down(VK_SHIFT);
     let ctrl = down(VK_CONTROL);
     let alt = down(VK_MENU);
     let win = down(VK_LWIN) || down(VK_RWIN);
+    let plain = !shift && !ctrl && !alt && !win;
+
+    if plain && matches!(vk, VK_TAB | VK_ESCAPE) {
+        let shown = app.suggestion.lock().unwrap().take();
+        if let Some(s) = shown {
+            post(app, WM_BUBBLE);
+            if vk == VK_ESCAPE {
+                debug!("Esc: suggestion dismissed");
+                DISMISSED.store(true, Ordering::Relaxed);
+                return true;
+            }
+            if let Some(edit) = app.fixer.lock().unwrap().accept(&s) {
+                *app.accepted.lock().unwrap() = Some(edit);
+                post(app, WM_ACCEPT);
+                return true;
+            }
+            debug!("Tab: the suggestion was out of date; Tab passed through");
+        }
+    }
 
     match vk {
         VK_SHIFT | VK_LSHIFT | VK_RSHIFT | VK_CONTROL | VK_LCONTROL | VK_RCONTROL | VK_MENU
@@ -91,27 +152,35 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
             CAPS.fetch_xor(true, Ordering::Relaxed);
         }
         VK_BACK if shift && !ctrl && !alt && !win => {
-            // SAFETY: posting to the worker thread's queue.
-            unsafe { PostThreadMessageW(app.worker, WM_FIX, 0, 0) };
+            debug!(
+                "Shift+Backspace caught ({} chars remembered)",
+                app.fixer.lock().unwrap().text().chars().count()
+            );
+            set_suggestion(app, None);
+            post(app, WM_FIX);
             return true;
         }
-        VK_BACK if !ctrl && !alt && !win => app.fixer.lock().unwrap().backspace(),
+        VK_BACK if !ctrl && !alt && !win => {
+            app.fixer.lock().unwrap().backspace();
+            refresh(app);
+        }
         // A character sent as Unicode (IMEs, automation, on-screen keyboards).
         VK_PACKET => match char::from_u32(k.scanCode) {
             Some(c) if !c.is_control() => {
-                app.fixer.lock().unwrap().typed(c.encode_utf8(&mut [0; 4]))
+                app.fixer.lock().unwrap().typed(c.encode_utf8(&mut [0; 4]));
+                refresh(app);
             }
-            _ => reset(),
+            _ => reset("control character"),
         },
         // Shortcuts (and AltGr) do not type into the buffer we mirror.
-        _ if ctrl || alt || win => reset(),
+        _ if ctrl || alt || win => reset("shortcut key"),
         _ => {
             let text = translate(k.vkCode, k.scanCode, shift);
-            let mut fixer = app.fixer.lock().unwrap();
             if text.is_empty() {
-                fixer.reset(); // arrows, Enter, Tab, Esc, F-keys…
+                reset("a key that moves the caret or types nothing (arrows, Enter, Tab…)");
             } else {
-                fixer.typed(&text);
+                app.fixer.lock().unwrap().typed(&text);
+                refresh(app);
             }
         }
     }
@@ -158,7 +227,7 @@ unsafe extern "system" fn mouse(code: i32, wparam: WPARAM, lparam: LPARAM) -> LR
             WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN
         )
     {
-        reset(); // a click can move the caret anywhere
+        reset("mouse click"); // a click can move the caret anywhere
     }
     // SAFETY: forwarding the unchanged arguments.
     unsafe { CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam) }

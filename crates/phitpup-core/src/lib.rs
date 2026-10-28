@@ -16,5 +16,5 @@ pub mod thai;
 
 pub use convert::Converter;
 pub use detect::{Detector, Direction, Thresholds, Verdict};
-pub use fix::{Edit, Fixer};
+pub use fix::{Edit, Fixer, Suggestion};
 pub use layouts::{Key, Layout};
