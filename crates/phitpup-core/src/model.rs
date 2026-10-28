@@ -5,6 +5,12 @@
 //! `cargo xtask train-model` and embedded in the binary. Costs are stored as
 //! `u8` in units of 1/[`SCALE`] bit: dense unigram and bigram tables, plus a
 //! sorted list of the trigrams seen often enough to keep.
+//!
+//! A model can also carry a lexicon of common words with their frequency. A
+//! word in it costs whichever is cheaper: its trigram cost or −log2 of its
+//! frequency. Short, very common words (ที่, การ) are where the trigrams alone
+//! are weakest, because they often spell a plausible English word on the
+//! other layout.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -14,7 +20,7 @@ pub const SCALE: f32 = 10.0;
 /// Extra cost when a trigram is missing and the bigram is used instead.
 const BACKOFF: u32 = 15;
 const BOUNDARY: usize = 0;
-const MAGIC: &[u8; 4] = b"PPM1";
+const MAGIC: &[u8; 4] = b"PPM2";
 
 static EMBEDDED: &[u8] = include_bytes!("model.bin");
 
@@ -61,6 +67,8 @@ pub struct LangModel {
     bi: Vec<u8>,
     tri_keys: Vec<u32>,
     tri_costs: Vec<u8>,
+    /// Word → −log2(frequency) in 1/[`SCALE`] bit. English keys are lowercase.
+    lexicon: HashMap<String, u16>,
 }
 
 impl LangModel {
@@ -74,6 +82,31 @@ impl LangModel {
             bi: vec![c; a * a],
             tri_keys: vec![],
             tri_costs: vec![],
+            lexicon: HashMap::new(),
+        }
+    }
+
+    /// Replaces the lexicon with `(word, probability)` pairs.
+    pub fn set_lexicon(&mut self, words: impl IntoIterator<Item = (String, f64)>) {
+        self.lexicon = words
+            .into_iter()
+            .map(|(w, p)| {
+                (
+                    self.normalize(&w),
+                    (-p.log2() * SCALE as f64).round().clamp(0.0, 65535.0) as u16,
+                )
+            })
+            .collect();
+    }
+
+    pub fn lexicon_len(&self) -> usize {
+        self.lexicon.len()
+    }
+
+    fn normalize(&self, word: &str) -> String {
+        match self.lang {
+            Lang::Thai => word.to_owned(),
+            Lang::English => word.to_ascii_lowercase(),
         }
     }
 
@@ -106,6 +139,11 @@ impl LangModel {
             n += 1;
             (a, b) = (b, c);
         }
+        if !self.lexicon.is_empty()
+            && let Some(&lex) = self.lexicon.get(&self.normalize(word))
+        {
+            total = total.min(lex.into());
+        }
         total as f32 / n as f32 / SCALE
     }
 
@@ -117,6 +155,15 @@ impl LangModel {
             out.extend_from_slice(&k.to_le_bytes());
         }
         out.extend_from_slice(&self.tri_costs);
+
+        let mut words: Vec<(&String, &u16)> = self.lexicon.iter().collect();
+        words.sort_unstable();
+        out.extend_from_slice(&(words.len() as u32).to_le_bytes());
+        for (w, cost) in words {
+            out.push(w.len() as u8);
+            out.extend_from_slice(w.as_bytes());
+            out.extend_from_slice(&cost.to_le_bytes());
+        }
     }
 
     fn read(lang: Lang, bytes: &mut &[u8]) -> Option<Self> {
@@ -129,12 +176,22 @@ impl LangModel {
             .map(|k| u32::from_le_bytes(k.try_into().unwrap()))
             .collect();
         let tri_costs = take(bytes, n)?.to_vec();
+
+        let n = u32::from_le_bytes(take(bytes, 4)?.try_into().ok()?) as usize;
+        let mut lexicon = HashMap::with_capacity(n);
+        for _ in 0..n {
+            let len = take(bytes, 1)?[0] as usize;
+            let word = std::str::from_utf8(take(bytes, len)?).ok()?.to_owned();
+            let cost = u16::from_le_bytes(take(bytes, 2)?.try_into().ok()?);
+            lexicon.insert(word, cost);
+        }
         Some(Self {
             lang,
             uni,
             bi,
             tri_keys,
             tri_costs,
+            lexicon,
         })
     }
 }
@@ -271,6 +328,7 @@ impl Trainer {
             bi,
             tri_keys: tri.iter().map(|&(k, _)| k).collect(),
             tri_costs: tri.iter().map(|&(_, c)| c).collect(),
+            lexicon: HashMap::new(),
         }
     }
 }
@@ -287,16 +345,33 @@ mod tests {
         }
         let mut th = Trainer::new(Lang::Thai);
         th.add("สวัสดี", 1.0);
-        let m = Model::new(th.finish(1.0), t.finish(1.0));
+        let mut th = th.finish(1.0);
+        th.set_lexicon([("ที่".to_string(), 0.03)]);
+        let m = Model::new(th, t.finish(1.0));
         let back = Model::from_bytes(&m.to_bytes()).unwrap();
         assert_eq!(back.to_bytes(), m.to_bytes());
+        assert_eq!(back.lang(Lang::Thai).lexicon_len(), 1);
         let en = back.lang(Lang::English);
         assert!(en.cost("hello") < en.cost("qzxv"));
     }
 
     #[test]
+    fn lexicon_lowers_cost_of_common_words() {
+        let mut t = Trainer::new(Lang::English);
+        t.add("hello", 1.0);
+        let mut m = t.finish(1.0);
+        let (shy, hello) = (m.cost("shy"), m.cost("hello"));
+        m.set_lexicon([("Shy".to_string(), 0.01)]);
+        assert!(m.cost("SHY") < shy);
+        // 3 letters + end of word = 4 symbols
+        assert!((m.cost("SHY") - 0.01f32.log2().abs() / 4.0).abs() < 0.1);
+        assert_eq!(m.cost("hello"), hello);
+    }
+
+    #[test]
     fn rejects_bad_bytes() {
         assert!(Model::from_bytes(b"").is_none());
-        assert!(Model::from_bytes(b"PPM1\0").is_none());
+        assert!(Model::from_bytes(b"PPM2\0").is_none());
+        assert!(Model::from_bytes(b"PPM1").is_none());
     }
 }

@@ -28,16 +28,22 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
      `_` and ั each sit on two keys, so Thai→English picks the unshifted key.
 2. ✅ Direction detector (rules + trigrams) with a test corpus and false-positive budget (2026-10-28)
    - `thai::check` spelling rules (accepts 99.9% of held-out TNC words; rejects doubled tone marks).
-   - Trigram model (`model.bin`, 165 KB) from PyThaiNLP TNC freq (CC0) + Hunspell en (SCOWL).
-     `cargo xtask fetch-corpus` → `train-model` → `eval-detector`.
-   - Presets on held-out words, Kedmanee:
-     | preset | min chars | EN→TH recall / false+ | TH→EN recall / false+ (by freq) |
-     |---|---|---|---|
-     | `SUGGEST` | 2 | 97.7% / 0.35% | 99.2% / 0.04% |
-     | `AUTO` | 3 | 94.6% / 0.12% | 97.6% / 0.0005% |
-   - Known gaps: Pattachote's most frequent words collide with English words (`shy`=ที่, `ward`=ต้อง),
-     so its frequency-weighted recall at `AUTO` is ~67%. English false positives are mostly
-     lowercase acronyms (mvp, gdp, lcd). Next lever: a frequency lexicon bonus for common words.
+   - Model (`model.bin`, 357 KB): character trigrams from PyThaiNLP TNC freq (CC0) + Hunspell en
+     (SCOWL), plus a lexicon of the 10k most frequent Thai words; a lexicon word costs
+     min(trigram cost, −log2 freq). `cargo xtask fetch-corpus` → `train-model` →
+     `eval-detector [--lexicon N]`.
+   - Presets on held-out words (trigrams held out; lexicon from the full list, so Thai recall
+     is reported weighted by word frequency):
+     | layout | preset | min chars | TH-meant recall (freq) / EN words misread | EN-meant recall / TH misread (freq) |
+     |---|---|---|---|---|
+     | Kedmanee | `SUGGEST` | 2 | 99.8% / 0.35% | 99.2% / 0.04% |
+     | Kedmanee | `AUTO` | 3 | 95.7% / 0.12% | 97.6% / 0.0005% |
+     | Pattachote | `SUGGEST` | 2 | 99.5% / 0.51% | 98.1% / 0.08% |
+     | Pattachote | `AUTO` | 3 | 89.3% / 0.16% | 92.5% / 0.0006% |
+   - The lexicon lifted Pattachote `AUTO` recall from 66.9% to 89.3% (shy→ที่ now flips).
+   - Known gaps: English false positives are mostly lowercase acronyms (mvp, gdp, lcd), and
+     English recall/false-positive numbers are unweighted because the English list has no
+     frequencies. An English frequency tier list (SCOWL sizes) would fix both.
 3. Keyboard hook + manual hotkey + SendInput injection + layout switch
 4. Tray icon + `config.toml` + self-disable rules
 5. Suggest bubble (layered window at caret)

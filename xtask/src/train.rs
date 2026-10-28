@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use phitpup_core::model::{Lang, Model, Trainer};
-use phitpup_core::{Detector, Direction, Layout, thai};
+use phitpup_core::{Detector, Direction, Layout, Thresholds, thai};
 
 use crate::corpus::{self, Word};
 
@@ -11,34 +11,54 @@ use crate::corpus::{self, Word};
 /// drowning out the long tail; English words weigh 1 each.
 const MIN_TRIGRAM_THAI: f64 = 2.0;
 const MIN_TRIGRAM_ENGLISH: f64 = 2.0;
+/// Most frequent Thai words kept as a lexicon in the shipped model.
+pub const THAI_LEXICON: usize = 10_000;
 
-pub fn build(dir: &Path, include_test: bool) -> Model {
+/// Trigrams come from the train split only unless `include_test`. The lexicon
+/// always comes from the whole corpus: it stands for "words the user will
+/// type often", which in real use are known words, so it is judged by the
+/// frequency-weighted numbers.
+pub fn build(dir: &Path, include_test: bool, thai_lexicon: usize) -> Model {
+    let thai_words = corpus::thai(dir);
     let mut th = Trainer::new(Lang::Thai);
-    for w in corpus::thai(dir) {
+    for w in &thai_words {
         if include_test || !w.test {
             th.add(&w.text, (1.0 + w.freq).ln());
         }
     }
+    let mut th = th.finish(MIN_TRIGRAM_THAI);
+
+    let total: f64 = thai_words.iter().map(|w| w.freq).sum();
+    let mut by_freq: Vec<&Word> = thai_words.iter().collect();
+    by_freq.sort_by(|a, b| b.freq.total_cmp(&a.freq).then_with(|| a.text.cmp(&b.text)));
+    th.set_lexicon(
+        by_freq
+            .iter()
+            .take(thai_lexicon)
+            .map(|w| (w.text.clone(), w.freq / total)),
+    );
+
     let mut en = Trainer::new(Lang::English);
     for w in corpus::english(dir) {
         if include_test || !w.test {
             en.add(&w.text, 1.0);
         }
     }
-    Model::new(th.finish(MIN_TRIGRAM_THAI), en.finish(MIN_TRIGRAM_ENGLISH))
+    Model::new(th, en.finish(MIN_TRIGRAM_ENGLISH))
 }
 
 pub fn train(root: &Path) {
-    let model = build(&root.join("corpus"), true);
+    let model = build(&root.join("corpus"), true, THAI_LEXICON);
     let bytes = model.to_bytes();
     let dest = root.join("crates/phitpup-core/src/model.bin");
     std::fs::write(&dest, &bytes).expect("write model.bin");
     println!(
-        "wrote {} ({} KB; trigrams: thai {}, english {})",
+        "wrote {} ({} KB; trigrams: thai {}, english {}; thai lexicon {})",
         dest.display(),
         bytes.len() / 1024,
         model.lang(Lang::Thai).trigram_count(),
         model.lang(Lang::English).trigram_count(),
+        model.lang(Lang::Thai).lexicon_len(),
     );
 }
 
@@ -59,10 +79,11 @@ struct Scored {
     right_text: bool,
 }
 
-pub fn eval(root: &Path) {
+pub fn eval(root: &Path, thai_lexicon: usize) {
+    println!("Thai lexicon: {thai_lexicon} words");
     let dir = root.join("corpus");
     // Train without the held-out words so the numbers mean something.
-    let model: &'static Model = Box::leak(Box::new(build(&dir, false)));
+    let model: &'static Model = Box::leak(Box::new(build(&dir, false, thai_lexicon)));
     let thai_words: Vec<Word> = corpus::thai(&dir).into_iter().filter(|w| w.test).collect();
     let english_words: Vec<Word> = corpus::english(&dir)
         .into_iter()
@@ -90,7 +111,13 @@ pub fn eval(root: &Path) {
 
     let en = Layout::us_qwerty();
     for th in [Layout::kedmanee(), Layout::pattachote()] {
-        let det = Detector::with_model(&en, &th, model);
+        let mut det = Detector::with_model(&en, &th, model);
+        // Raw margins; `report` applies the thresholds it sweeps.
+        det.thresholds = Thresholds {
+            to_thai: 0.0,
+            to_english: 0.0,
+            min_chars: 0,
+        };
         println!("\n== {} ==", th.name());
 
         // Thai meant, typed on the English layout / English meant, typed on Thai.

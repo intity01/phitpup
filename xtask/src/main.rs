@@ -52,7 +52,16 @@ fn main() {
         Some("gen-layouts") => gen_layouts(),
         Some("fetch-corpus") => fetch_corpus(),
         Some("train-model") => train::train(&root()),
-        Some("eval-detector") => train::eval(&root()),
+        Some("eval-detector") => {
+            let lexicon = match args.get(1).map(String::as_str) {
+                Some("--lexicon") => args
+                    .get(2)
+                    .and_then(|n| n.parse().ok())
+                    .expect("--lexicon <words>"),
+                _ => train::THAI_LEXICON,
+            };
+            train::eval(&root(), lexicon)
+        }
         _ => {
             eprintln!(
                 "usage: cargo xtask <gen-layouts | fetch-corpus | train-model | eval-detector>"

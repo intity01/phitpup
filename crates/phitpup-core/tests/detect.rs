@@ -39,6 +39,21 @@ fn flips_thai_typed_on_english() {
 }
 
 #[test]
+fn pattachote_common_words_flip() {
+    // Their Pattachote key sequences are English-looking ("shy" = ที่), so
+    // only the frequency lexicon gets them over the AUTO threshold.
+    let mut d = Detector::new(&Layout::us_qwerty(), &Layout::pattachote());
+    d.thresholds = Thresholds::AUTO;
+    for meant in ["ที่", "การ", "เป็น", "ไม่", "ของ", "สวัสดี"]
+    {
+        let typed = d.convert(meant, Direction::ToEnglish);
+        let v = d.judge(&typed).unwrap();
+        assert!(v.flip, "{typed} → {} margin {:+.2}", v.converted, v.margin);
+        assert_eq!(v.converted, meant);
+    }
+}
+
+#[test]
 fn flips_english_typed_on_thai() {
     let d = kedmanee(Thresholds::AUTO);
     for (typed, meant) in [

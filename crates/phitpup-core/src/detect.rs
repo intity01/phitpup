@@ -27,10 +27,11 @@ pub struct Thresholds {
     pub min_chars: usize,
 }
 
-// Numbers from `cargo xtask eval-detector` on held-out words, Kedmanee:
-//   suggest: Thai recall 97.7% / 0.35% English words misread;
+// Numbers from `cargo xtask eval-detector` on held-out words, Kedmanee
+// (Thai recall weighted by word frequency):
+//   suggest: Thai recall 99.8% / 0.35% English words misread;
 //            English recall 99.2% / 0.04% Thai (by frequency) misread.
-//   auto:    Thai recall 94.6% / 0.12%; English recall 97.6% / 0.0005%.
+//   auto:    Thai recall 95.7% / 0.12%; English recall 97.6% / 0.0005%.
 impl Thresholds {
     /// For the suggestion bubble: a wrong guess costs one ignored popup.
     pub const SUGGEST: Thresholds = Thresholds {
