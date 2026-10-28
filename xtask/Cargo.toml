@@ -6,3 +6,4 @@ license.workspace = true
 publish = false
 
 [dependencies]
+phitpup-core = { path = "../crates/phitpup-core" }

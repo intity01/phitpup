@@ -1,0 +1,118 @@
+use phitpup_core::model::Model;
+use phitpup_core::{Detector, Direction, Layout, Thresholds};
+
+fn kedmanee(thresholds: Thresholds) -> Detector {
+    let mut d = Detector::new(&Layout::us_qwerty(), &Layout::kedmanee());
+    d.thresholds = thresholds;
+    d
+}
+
+#[test]
+fn embedded_model_is_trained() {
+    assert!(
+        Model::embedded().is_trained(),
+        "run `cargo xtask train-model`"
+    );
+}
+
+#[test]
+fn flips_thai_typed_on_english() {
+    let d = kedmanee(Thresholds::AUTO);
+    assert_eq!(d.convert("สวัสดี", Direction::ToEnglish), "l;ylfu");
+    for meant in [
+        "สวัสดี",
+        "ครับ",
+        "ขอบคุณ",
+        "ภาษาไทย",
+        "อากาศ",
+        "โปรแกรม",
+        "วันนี้",
+        "กินข้าว",
+        "ไม่เป็นไร",
+    ] {
+        let typed = d.convert(meant, Direction::ToEnglish);
+        let v = d.judge(&typed).unwrap();
+        assert_eq!(v.direction, Direction::ToThai, "{typed}");
+        assert!(v.flip, "{typed} → {} margin {:+.2}", v.converted, v.margin);
+        assert_eq!(v.converted, meant);
+    }
+}
+
+#[test]
+fn flips_english_typed_on_thai() {
+    let d = kedmanee(Thresholds::AUTO);
+    for (typed, meant) in [
+        ("้ำสสน", "hello"),
+        ("ไนพสก", "world"),
+        ("แนพพำแะ", "correct"),
+        ("ะ้ำ", "the"),
+    ] {
+        let v = d.judge(typed).unwrap();
+        assert_eq!(v.direction, Direction::ToEnglish);
+        assert!(v.flip, "{typed} → {} margin {:+.2}", v.converted, v.margin);
+        assert_eq!(v.converted, meant);
+    }
+}
+
+#[test]
+fn keeps_correct_english() {
+    let d = kedmanee(Thresholds::AUTO);
+    for w in [
+        "hello", "world", "the", "and", "code", "Thailand", "keyboard", "PhitPup", "don't", "OK",
+        "email", "JSON",
+    ] {
+        let v = d.judge(w).unwrap();
+        assert!(!v.flip, "{w} → {} margin {:+.2}", v.converted, v.margin);
+    }
+}
+
+#[test]
+fn keeps_correct_thai() {
+    let d = kedmanee(Thresholds::AUTO);
+    for w in [
+        "สวัสดี",
+        "ครับ",
+        "ภาษาไทย",
+        "ที่",
+        "การ",
+        "เป็น",
+        "น้ำ",
+        "ค่าาา",
+        "โปรแกรม",
+        "คอมพิวเตอร์",
+    ] {
+        let v = d.judge(w).unwrap();
+        assert!(!v.flip, "{w} → {} margin {:+.2}", v.converted, v.margin);
+    }
+}
+
+#[test]
+fn numbers_stay() {
+    let d = kedmanee(Thresholds::SUGGEST);
+    for w in ["2026", "12.5", "10:30", "1/2", "-5%"] {
+        let v = d.judge(w).unwrap();
+        assert!(v.vetoed && !v.flip, "{w}");
+    }
+}
+
+#[test]
+fn nothing_to_judge() {
+    let d = kedmanee(Thresholds::SUGGEST);
+    assert!(d.judge("😀").is_none());
+    assert!(d.judge("").is_none());
+}
+
+#[test]
+fn manual_flips_by_script() {
+    let d = kedmanee(Thresholds::SUGGEST);
+    assert_eq!(d.manual("hello"), Some((Direction::ToThai, "้ำสสน".into())));
+    assert_eq!(
+        d.manual("l;ylfu 8iy["),
+        Some((Direction::ToThai, "สวัสดี ครับ".into()))
+    );
+    assert_eq!(
+        d.manual("้ำสสน"),
+        Some((Direction::ToEnglish, "hello".into()))
+    );
+    assert_eq!(d.manual("   "), None);
+}

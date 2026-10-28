@@ -5,6 +5,9 @@
 //! `KbdLayerDescriptor` tables directly, so no layout is loaded into or
 //! activated in the user's session.
 
+mod corpus;
+mod train;
+
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
@@ -23,13 +26,66 @@ const LAYOUTS: &[(&str, &str, &str)] = &[
     ("PATTACHOTE", "KBDTH1.DLL", "Thai Pattachote"),
 ];
 
+/// Training corpora. Downloaded into `corpus/` (not committed); only the model
+/// built from them is. (file name, URL, license)
+const CORPUS: &[(&str, &str, &str)] = &[
+    (
+        "tnc_freq.txt",
+        "https://raw.githubusercontent.com/PyThaiNLP/pythainlp/dev/pythainlp/corpus/tnc_freq.txt",
+        "CC0-1.0 (PyThaiNLP, Thai National Corpus word frequencies)",
+    ),
+    (
+        "en.dic",
+        "https://raw.githubusercontent.com/wooorm/dictionaries/main/dictionaries/en/index.dic",
+        "SCOWL / Hunspell en, MIT-like (see en.license)",
+    ),
+    (
+        "en.license",
+        "https://raw.githubusercontent.com/wooorm/dictionaries/main/dictionaries/en/license",
+        "-",
+    ),
+];
+
 fn main() {
-    match std::env::args().nth(1).as_deref() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args.first().map(String::as_str) {
         Some("gen-layouts") => gen_layouts(),
+        Some("fetch-corpus") => fetch_corpus(),
+        Some("train-model") => train::train(&root()),
+        Some("eval-detector") => train::eval(&root()),
         _ => {
-            eprintln!("usage: cargo xtask gen-layouts");
+            eprintln!(
+                "usage: cargo xtask <gen-layouts | fetch-corpus | train-model | eval-detector>"
+            );
             std::process::exit(2);
         }
+    }
+}
+
+fn root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
+}
+
+fn fetch_corpus() {
+    let dir = root().join("corpus");
+    std::fs::create_dir_all(&dir).expect("create corpus/");
+    for &(file, url, license) in CORPUS {
+        let dest = dir.join(file);
+        let ok = std::process::Command::new("curl")
+            .args([
+                "--fail",
+                "--location",
+                "--silent",
+                "--show-error",
+                "--output",
+            ])
+            .arg(&dest)
+            .arg(url)
+            .status()
+            .is_ok_and(|s| s.success());
+        assert!(ok, "download failed: {url}");
+        let size = std::fs::metadata(&dest).map(|m| m.len()).unwrap_or(0);
+        println!("{file:<14} {size:>9} bytes  {license}");
     }
 }
 
