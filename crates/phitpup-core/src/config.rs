@@ -13,6 +13,9 @@ pub enum Mode {
     Manual,
     /// Also a bubble while typing; Tab accepts it.
     Suggest,
+    /// Like suggest, and Space fixes the word just typed when the detector
+    /// is sure ([`Thresholds::AUTO`](crate::Thresholds::AUTO)).
+    Auto,
 }
 
 impl Mode {
@@ -20,6 +23,7 @@ impl Mode {
         match self {
             Mode::Manual => "manual",
             Mode::Suggest => "suggest",
+            Mode::Auto => "auto",
         }
     }
 }
@@ -62,6 +66,8 @@ pub const TEMPLATE: &str = r#"# ผิดปุ๊บ PhitPup settings. The tray
 # "suggest" : show a bubble while you type; Tab accepts, Esc hides
 #             (Shift+Backspace works too)
 # "manual"  : fix only when you press Shift+Backspace
+# "auto"    : like suggest, and Space fixes the word when PhitPup is sure;
+#             Shift+Backspace right after puts it back
 mode = "suggest"
 
 # Turn PhitPup off in windows that cover the whole screen (games, videos).
@@ -107,12 +113,7 @@ impl Config {
                 "mode" => match string(value).as_deref() {
                     Some("manual") => Some(Mode::Manual),
                     Some("suggest") => Some(Mode::Suggest),
-                    Some("auto") => {
-                        problems.push(format!(
-                            "{at}: auto mode is not available yet; using suggest"
-                        ));
-                        Some(Mode::Suggest)
-                    }
+                    Some("auto") => Some(Mode::Auto),
                     _ => None,
                 }
                 .map(|m| c.mode = m),
@@ -298,10 +299,16 @@ accept_key = \"shift+backspace\"",
     }
 
     #[test]
-    fn auto_falls_back_to_suggest() {
+    fn reads_auto_mode() {
         let (c, problems) = Config::parse("mode = \"auto\"");
-        assert_eq!(c.mode, Mode::Suggest);
-        assert_eq!(problems.len(), 1);
+        assert_eq!(c.mode, Mode::Auto);
+        assert!(problems.is_empty());
+        let text = Config {
+            mode: Mode::Auto,
+            ..Config::default()
+        }
+        .write_to(TEMPLATE);
+        assert_eq!(Config::parse(&text).0.mode, Mode::Auto);
     }
 
     #[test]

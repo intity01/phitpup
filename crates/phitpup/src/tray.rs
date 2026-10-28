@@ -43,11 +43,13 @@ const CLASS: &str = "PhitPupTray";
 const RELOAD_TIMER: usize = 1;
 
 const CMD_PAUSE: usize = 1;
+// The three modes need consecutive ids for CheckMenuRadioItem.
 const CMD_MANUAL: usize = 2;
 const CMD_SUGGEST: usize = 3;
-const CMD_STARTUP: usize = 4;
-const CMD_SETTINGS: usize = 5;
-const CMD_QUIT: usize = 6;
+const CMD_AUTO: usize = 4;
+const CMD_STARTUP: usize = 5;
+const CMD_SETTINGS: usize = 6;
+const CMD_QUIT: usize = 7;
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain([0]).collect()
@@ -289,20 +291,21 @@ fn show_menu(hwnd: HWND) {
             CMD_SUGGEST,
             &format!("Suggest while typing\t{accept}"),
         );
+        add(MF_STRING, CMD_AUTO, "Fix automatically\tSpace");
         add(
             MF_STRING,
             CMD_MANUAL,
             &format!("Fix on hotkey only\t{hotkey}"),
         );
-        let current = if mode == Mode::Suggest {
-            CMD_SUGGEST
-        } else {
-            CMD_MANUAL
+        let current = match mode {
+            Mode::Manual => CMD_MANUAL,
+            Mode::Suggest => CMD_SUGGEST,
+            Mode::Auto => CMD_AUTO,
         };
         CheckMenuRadioItem(
             menu,
             CMD_MANUAL as u32,
-            CMD_SUGGEST as u32,
+            CMD_AUTO as u32,
             current as u32,
             MF_BYCOMMAND,
         );
@@ -335,11 +338,11 @@ fn show_menu(hwnd: HWND) {
 
     match cmd {
         CMD_PAUSE => toggle_pause(),
-        CMD_MANUAL | CMD_SUGGEST => {
-            let mode = if cmd == CMD_SUGGEST {
-                Mode::Suggest
-            } else {
-                Mode::Manual
+        CMD_MANUAL | CMD_SUGGEST | CMD_AUTO => {
+            let mode = match cmd {
+                CMD_SUGGEST => Mode::Suggest,
+                CMD_AUTO => Mode::Auto,
+                _ => Mode::Manual,
             };
             let mut c = app.config.lock().unwrap().clone();
             c.mode = mode;

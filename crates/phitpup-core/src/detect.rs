@@ -178,7 +178,8 @@ impl Detector {
         self.judge_with(word, self.thresholds)
     }
 
-    fn judge_with(&self, word: &str, thresholds: Thresholds) -> Option<Verdict> {
+    /// Judges one word at `thresholds` instead of the detector's own.
+    pub fn judge_with(&self, word: &str, thresholds: Thresholds) -> Option<Verdict> {
         let direction = self.direction(word)?;
         let converted = self.convert(word, direction);
         let th = self.model.lang(Lang::Thai);

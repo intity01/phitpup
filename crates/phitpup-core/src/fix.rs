@@ -11,10 +11,12 @@
 //!
 //! In suggest mode the front end asks for a [`Suggestion`] after every key
 //! and shows it beside the caret; Tab hands it back to [`Fixer::accept`].
-//! Shift+Backspace right after that puts the word back as it was typed.
+//! In auto mode a space after a word goes to [`Fixer::auto`] instead of
+//! [`Fixer::typed`]. Either way, Shift+Backspace right after puts the word
+//! back as it was typed.
 
 use crate::model::Lang;
-use crate::{Detector, Direction};
+use crate::{Detector, Direction, Thresholds};
 
 /// Characters remembered before the caret. Older ones are forgotten.
 pub const MAX_CHARS: usize = 300;
@@ -140,6 +142,61 @@ impl Fixer {
         self.buf.truncate(start);
         self.buf.extend(s.edit.insert.chars());
         Some(s.edit.clone())
+    }
+
+    /// Auto mode: `sep` (a space) was just typed after a word. If the
+    /// detector is sure at [`Thresholds::AUTO`] that the word was typed in
+    /// the wrong layout, and `skip` does not exempt it, returns the edit that
+    /// replaces the word and types `sep` after it; the caller then must not
+    /// let the key through. Otherwise records `sep` like [`typed`](Self::typed)
+    /// and returns `None`.
+    pub fn auto(
+        &mut self,
+        detector: &Detector,
+        sep: &str,
+        skip: impl Fn(&str) -> bool,
+    ) -> Option<Edit> {
+        let fix = (|| {
+            if self.buf.last().is_none_or(|c| c.is_whitespace()) {
+                return None;
+            }
+            let start = word_start(&self.buf, 1)?;
+            let word: String = self.buf[start..].iter().collect();
+            if skip(&word) {
+                return None;
+            }
+            let v = detector
+                .judge_with(&word, Thresholds::AUTO)
+                .filter(|v| v.flip)?;
+            Some((start, v))
+        })();
+        let Some((start, v)) = fix else {
+            self.typed(sep);
+            return None;
+        };
+        let switch_to = target(v.direction);
+        let edit = Edit {
+            delete: self.buf.len() - start,
+            insert: v.converted + sep,
+            switch_to,
+        };
+        let mut original = std::mem::take(&mut self.buf);
+        original.extend(sep.chars());
+        self.buf = original[..start]
+            .iter()
+            .copied()
+            .chain(edit.insert.chars())
+            .collect();
+        self.session = None;
+        self.undo = Some(Undo {
+            original,
+            start,
+            back_to: match switch_to {
+                Lang::Thai => Lang::English,
+                Lang::English => Lang::Thai,
+            },
+        });
+        Some(edit)
     }
 
     /// The edit for one hotkey press, or `None` if there is no word to fix.
@@ -314,6 +371,56 @@ mod tests {
         apply(&mut screen, &f.hotkey(&d).unwrap());
         // ครับ is already Thai; converting toward Thai leaves it alone.
         assert_eq!(screen, "ครับ สวัสดี");
+    }
+
+    #[test]
+    fn auto_fixes_on_space_and_hotkey_undoes() {
+        let d = det();
+        let mut f = Fixer::new();
+        let mut screen = String::from("hello l;ylfu");
+        f.typed(&screen);
+        let e = f.auto(&d, " ", |_| false).unwrap();
+        assert_eq!(e.delete, 6);
+        assert_eq!(e.switch_to, Lang::Thai);
+        apply(&mut screen, &e);
+        assert_eq!(screen, "hello สวัสดี ");
+        assert_eq!(f.text(), screen);
+
+        let e = f.hotkey(&d).unwrap();
+        apply(&mut screen, &e);
+        assert_eq!(screen, "hello l;ylfu ");
+        assert_eq!(e.switch_to, Lang::English);
+        assert_eq!(f.text(), screen);
+    }
+
+    #[test]
+    fn auto_leaves_right_short_and_skipped_words() {
+        let d = det();
+        for (typed, skip) in [
+            ("hello", ""),
+            ("ok", ""),
+            ("l;ylfu", "l;ylfu"),
+            ("สวัสดี", ""),
+        ] {
+            let mut f = Fixer::new();
+            f.typed(typed);
+            assert_eq!(f.auto(&d, " ", |w| w == skip), None, "{typed}");
+            assert_eq!(f.text(), format!("{typed} "), "the space is recorded");
+        }
+        let mut f = Fixer::new();
+        f.typed("l;ylfu ");
+        assert_eq!(f.auto(&d, " ", |_| false), None, "after a space: no word");
+    }
+
+    #[test]
+    fn typing_after_auto_ends_the_undo() {
+        let d = det();
+        let mut f = Fixer::new();
+        f.typed("l;ylfu");
+        f.auto(&d, " ", |_| false).unwrap();
+        f.typed("ok");
+        // The hotkey now fixes the new word instead of undoing.
+        assert_eq!(f.hotkey(&d).unwrap().insert, "นา");
     }
 
     #[test]

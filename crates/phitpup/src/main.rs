@@ -104,8 +104,9 @@ mod app {
     pub const WM_FIX: u32 = WM_APP + 1;
     /// Posted by the hook to the worker: the suggestion changed.
     pub const WM_BUBBLE: u32 = WM_APP + 2;
-    /// Posted by the hook to the worker: Tab accepted the suggestion, whose
-    /// edit is waiting in [`App::accepted`].
+    /// Posted by the hook to the worker: the accept key took the suggestion,
+    /// or auto mode fixed a word on Space; the edit is waiting in
+    /// [`App::accepted`].
     pub const WM_ACCEPT: u32 = WM_APP + 3;
     /// Posted by the hook to the worker: write [`App::config`] to the
     /// settings file (Shift+Esc added a word).
@@ -316,7 +317,7 @@ mod app {
         let app = APP.get().unwrap();
         if let Some(e) = app.accepted.lock().unwrap().take() {
             debug!(
-                "Tab: erase {} chars, type {} chars, switch to {:?}",
+                "accepted: erase {} chars, type {} chars, switch to {:?}",
                 e.delete,
                 e.insert.chars().count(),
                 e.switch_to

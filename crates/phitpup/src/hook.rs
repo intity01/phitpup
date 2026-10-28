@@ -6,7 +6,9 @@
 //!
 //! In suggest mode it also asks the fixer for a suggestion after every key,
 //! and the accept key (Tab), Esc or Shift+Esc act on the bubble while one is
-//! shown. Both shortcuts come from the settings.
+//! shown. Both shortcuts come from the settings. In auto mode, Space after
+//! a word the detector is sure about is swallowed and the worker types the
+//! fixed word and the space instead.
 //!
 //! Where [`context::gate`] says PhitPup is off (password fields and the
 //! like), keys pass untouched and nothing is remembered.
@@ -18,7 +20,7 @@ use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyState, ToUnicodeEx, VK_BACK, VK_CAPITAL, VK_CONTROL, VK_ESCAPE,
     VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_PACKET, VK_RCONTROL, VK_RMENU,
-    VK_RSHIFT, VK_RWIN, VK_SHIFT,
+    VK_RSHIFT, VK_RWIN, VK_SHIFT, VK_SPACE,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetForegroundWindow, HC_ACTION, KBDLLHOOKSTRUCT, PostThreadMessageW,
@@ -94,7 +96,7 @@ fn set_suggestion(app: &App, s: Option<phitpup_core::Suggestion>) {
 
 /// Asks the fixer whether the word being typed needs fixing.
 fn refresh(app: &App, quiet: bool) {
-    if quiet || app.mode() != Mode::Suggest {
+    if quiet || app.mode() == Mode::Manual {
         return;
     }
     let s = app
@@ -193,6 +195,23 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
             }
             debug!("accept key: the suggestion was out of date; the key passed through");
         }
+    }
+
+    if vk == VK_SPACE && !ctrl && !alt && !win && !quiet && app.mode() == Mode::Auto {
+        let edit = {
+            let ignored = app.config.lock().unwrap().ignore_words.clone();
+            let skip = |w: &str| ignored.contains(&w.to_lowercase());
+            app.fixer.lock().unwrap().auto(&app.detector, " ", skip)
+        };
+        set_suggestion(app, None);
+        DISMISSED.store(false, Ordering::Relaxed);
+        if let Some(edit) = edit {
+            debug!("Space: the word is fixed automatically");
+            *app.accepted.lock().unwrap() = Some(edit);
+            post(app, WM_ACCEPT);
+            return true;
+        }
+        return false; // the fixer already recorded the space
     }
 
     if !win && hotkey.matches(vk, ctrl, shift, alt) {

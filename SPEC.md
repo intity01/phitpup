@@ -131,7 +131,16 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
 - Live check (2026-10-28): second start opens the window in front, dark theme, 876×639 at 100%.
   Clicking through the pages, the program picker and typing words still need a manual pass.
 
-6. Auto mode
+6. ✅ Auto mode (2026-10-28, code done; manual pass pending)
+   - `mode = "auto"`: everything suggest does, plus Space after a word fixes it when the
+     detector is sure at `Thresholds::AUTO` (Kedmanee: 95.7% Thai recall, 0.12% English words
+     misread). The Space is swallowed and the worker types the fixed word and the space
+     (`Fixer::auto`); the hotkey right after puts the word back and switches the layout back.
+   - Off where the bubble is off (terminals, code editors, `quiet_apps`), and for `ignore_words`.
+   - Only Space triggers it for now; Enter and punctuation would need their key re-sent.
+   - Tray menu and settings window offer it as a third mode.
+   - About page in the settings window: made by Intity01, team sukudone.team-dev, version, MIT,
+     privacy note.
 7. Website (GitHub Pages + WASM) and GitHub Actions release
 
 ## Environment (checked 2026-10-28)

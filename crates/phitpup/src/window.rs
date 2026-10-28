@@ -1,8 +1,8 @@
 //! The settings window, opened by clicking the tray icon.
 //!
-//! Four pages: General (on/off, mode, start with Windows, full screen),
+//! Five pages: General (on/off, mode, start with Windows, full screen),
 //! Programs (where PhitPup is off or shows no bubble), Words (never
-//! suggested) and Shortcuts. Every change is saved to `config.toml` at once
+//! suggested), Shortcuts and About. Every change is saved to `config.toml` at once
 //! and applies right away; the window always shows the running settings, so
 //! changes from the tray menu or the file show up here too.
 //!
@@ -58,7 +58,7 @@ use crate::{APP, bubble, clipboard, context, settings, tray};
 
 // Layout at 96 DPI.
 const W: f32 = 860.0;
-const H: f32 = 600.0;
+const H: f32 = 640.0;
 const SIDEBAR: f32 = 240.0;
 const LEFT: f32 = 264.0;
 const RIGHT: f32 = W - 32.0;
@@ -81,6 +81,11 @@ const G_FULLSCREEN: char = '\u{E740}';
 const G_FILE: char = '\u{E8A7}';
 const G_BULB: char = '\u{EA80}';
 const G_EDIT: char = '\u{E70F}';
+const G_INFO: char = '\u{E946}';
+const G_PERSON: char = '\u{E77B}';
+const G_PEOPLE: char = '\u{E716}';
+const G_LOCK: char = '\u{E72E}';
+const G_DOC: char = '\u{E8A5}';
 const G_CLOSE: char = '\u{E711}';
 const G_ADD: char = '\u{E710}';
 const G_HIDE: char = '\u{ED1A}';
@@ -163,14 +168,20 @@ enum Page {
     Programs,
     Words,
     Shortcuts,
+    About,
 }
 
-const PAGES: [(Page, char, &str); 4] = [
+const PAGES: [(Page, char, &str); 5] = [
     (Page::General, G_SETTINGS, "General"),
     (Page::Programs, G_APPS, "Programs"),
     (Page::Words, G_FONT, "Words"),
     (Page::Shortcuts, G_KEYBOARD, "Shortcuts"),
+    (Page::About, G_INFO, "About"),
 ];
+
+/// Who makes PhitPup, for the About page.
+const AUTHOR: &str = "Intity01";
+const TEAM: &str = "sukudone.team-dev";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Which {
@@ -887,6 +898,7 @@ fn build<'a>(win: &'a Win, c: &Config, dc: HDC) -> Builder<'a> {
         Page::Programs => programs_page(&mut b, c, top),
         Page::Words => words(&mut b, c, win, top),
         Page::Shortcuts => shortcuts(&mut b, c, win, top),
+        Page::About => about(&mut b, top),
     };
     b.bottom = bottom + 32.0;
     sidebar(&mut b, win.page);
@@ -980,6 +992,14 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
             ),
         ),
         (
+            Mode::Auto,
+            "Fix automatically when I press Space".to_string(),
+            format!(
+                "Only words it is very sure about. {} right after undoes it.",
+                c.hotkey.label()
+            ),
+        ),
+        (
             Mode::Manual,
             format!("Only when I press {}", c.hotkey.label()),
             "Fixes the last word; press again to reach further back.".to_string(),
@@ -992,7 +1012,7 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
         68.0,
         Some(G_BULB),
         "When to offer a fix",
-        "The hotkey works in both.",
+        "The hotkey always works.",
         None,
     );
     b.fill(
@@ -1296,6 +1316,66 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
         );
         y += 18.0;
     }
+    y
+}
+
+fn about(b: &mut Builder, y: f32) -> f32 {
+    let p = b.pal;
+    let mut y = y + 8.0;
+    b.shapes.push(Shape::Logo {
+        r: R::new(LEFT, y, 64.0, 64.0),
+        tone: Tone::Active,
+    });
+    let x = LEFT + 84.0;
+    b.text(
+        R::new(x, y + 2.0, WIDTH - 84.0, 36.0),
+        "PhitPup",
+        F::Title,
+        p.text,
+        LINE,
+    );
+    b.text(
+        R::new(x, y + 40.0, WIDTH - 84.0, 22.0),
+        "ผิดปุ๊บ",
+        F::Word,
+        p.sub,
+        LINE,
+    );
+    y += 88.0;
+    y += b.para(
+        LEFT,
+        y,
+        WIDTH,
+        "Fixes text typed in the wrong keyboard layout, Thai ⇄ English.",
+        F::Body,
+        p.text,
+    );
+    y += 16.0;
+
+    let version = env!("CARGO_PKG_VERSION");
+    let rows = [
+        (G_PERSON, "Made by", AUTHOR),
+        (G_PEOPLE, "Team", TEAM),
+        (G_INFO, "Version", version),
+        (G_DOC, "License", "MIT"),
+    ];
+    for (glyph, title, value) in rows {
+        let (cy, _) = b.row(y, 52.0, 52.0, Some(glyph), title, "", None);
+        let r = R::new(RIGHT - 20.0 - 260.0, cy - 10.0, 260.0, 20.0);
+        b.text(r, value, F::Strong, p.text, LINE | DT_RIGHT);
+        y += 56.0;
+    }
+
+    y += 16.0;
+    b.glyph(R::new(LEFT, y, 16.0, 20.0), G_LOCK, F::SmallGlyph, p.sub);
+    y += b.para(
+        LEFT + 24.0,
+        y,
+        WIDTH - 24.0,
+        "Works offline and never connects to the internet. What you type is kept in memory          only until you click or switch windows, and is never sent anywhere. The only thing          saved is your settings file, including the words you add.",
+        F::Caption,
+        p.sub,
+    );
     y
 }
 
