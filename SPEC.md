@@ -112,6 +112,25 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
   16–256 that the MSVC linker embeds; `cargo xtask icons` exports `assets/icon/` (ICO, PNGs,
   SVG). PNG/ICO/RES writers are dependency-free.
 
+### Settings window (2026-10-28)
+- Clicking the tray icon (or starting PhitPup again while it runs) opens a native settings
+  window; the tray menu keeps the quick switches (Settings…, pause, mode, start with Windows,
+  quit). Pages: **General** (on/off, mode, start with Windows, full screen, settings file),
+  **Programs** (add from running programs; per program "Off" or "No bubble"; built-in lists
+  explained), **Words** (never suggested; Shift+Esc on the bubble adds the word), **Shortcuts**
+  (fix hotkey and accept key are changeable; Esc / Shift+Esc fixed).
+- Drawn by hand like the bubble (per-pixel shapes + ClearType GDI text), Windows 11 Settings
+  colours in light/dark, coral accent, per-monitor DPI, dark title bar. Fonts: Segoe UI Variable,
+  falling back to Segoe UI; each face is checked after creation because a broken font registry
+  can hand back the italic. Previews: `cargo test -p phitpup window_preview -- --ignored`.
+- New settings keys: `ignore_words`, `hotkey`, `accept_key` (`phitpup_core::hotkey`: names like
+  `"ctrl+shift+space"`; keys that type a character need Ctrl or Alt). Every change is saved at
+  once; edits made by hand in the file are still picked up within 2 s.
+- PhitPup is off in its own windows, so shortcuts can be recorded there.
+- Bubble badge now uses the logo coral; its key hint shows the configured accept key.
+- Live check (2026-10-28): second start opens the window in front, dark theme, 876×639 at 100%.
+  Clicking through the pages, the program picker and typing words still need a manual pass.
+
 6. Auto mode
 7. Website (GitHub Pages + WASM) and GitHub Actions release
 

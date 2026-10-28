@@ -1,5 +1,6 @@
 //! The suggestion bubble: a small card under the caret with the fixed word,
-//! a TH/EN badge for the layout it switches to, and a "Tab" key hint.
+//! a TH/EN badge (in the logo's coral) for the layout it switches to, and a
+//! hint for the accept key (Tab unless the settings say otherwise).
 //!
 //! It is drawn here, pixel by pixel, into a premultiplied 32-bit bitmap
 //! (anti-aliased corners, soft shadow, hairline border, grayscale text from
@@ -94,7 +95,7 @@ const DARK: Palette = Palette {
     text: hex(0xFFFFFF),
     hint: hex(0xC8C8C8),
     key: hex(0x3D3D3D),
-    accent: hex(0x4C8DF6),
+    accent: hex(0xFF6B3D),
     on_accent: hex(0xFFFFFF),
     border: (hex(0xFFFFFF), 0.10),
     shadow: 0.42,
@@ -105,7 +106,7 @@ const LIGHT: Palette = Palette {
     text: hex(0x1B1B1B),
     hint: hex(0x5C5C5C),
     key: hex(0xEBEBEB),
-    accent: hex(0x2563EB),
+    accent: hex(0xE8461E),
     on_accent: hex(0xFFFFFF),
     border: (hex(0x000000), 0.10),
     shadow: 0.20,
@@ -113,7 +114,7 @@ const LIGHT: Palette = Palette {
 
 /// Whether apps should use the dark theme (Settings → Personalization →
 /// Colors → app mode).
-fn dark_theme() -> bool {
+pub fn dark_theme() -> bool {
     let key: Vec<u16> = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
         .encode_utf16()
         .chain([0])
@@ -141,6 +142,8 @@ fn dark_theme() -> bool {
 struct Look {
     word: String,
     lang: Lang,
+    /// The accept key's label.
+    hint: String,
     dpi: u32,
     dark: bool,
 }
@@ -349,9 +352,14 @@ fn show(word: String, lang: Lang) {
     let (anchor, caret_h) = caret();
     let (work, dpi) = monitor_of(anchor);
     let scale = dpi as f32 / 96.0;
+    let hint = APP.get().map_or_else(
+        || "Tab".into(),
+        |a| a.config.lock().unwrap().accept_key.label(),
+    );
     let look = Look {
         word,
         lang,
+        hint,
         dpi,
         dark: dark_theme(),
     };
@@ -592,7 +600,7 @@ fn render(look: &Look) -> Image {
         Lang::Thai => "TH",
         Lang::English => "EN",
     });
-    let hint = wide("Tab");
+    let hint = wide(&look.hint);
 
     // SAFETY: GDI objects are created, selected, restored and deleted here;
     // the mask DIB holds w*h pixels and is read only after GdiFlush.
@@ -806,6 +814,7 @@ mod tests {
                     let look = Look {
                         word: word.into(),
                         lang,
+                        hint: "Tab".into(),
                         dpi,
                         dark,
                     };

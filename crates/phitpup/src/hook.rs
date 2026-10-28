@@ -5,7 +5,8 @@
 //! quickly, so the fix itself runs on the worker thread.
 //!
 //! In suggest mode it also asks the fixer for a suggestion after every key,
-//! and Tab or Esc act on the bubble while one is shown.
+//! and the accept key (Tab), Esc or Shift+Esc act on the bubble while one is
+//! shown. Both shortcuts come from the settings.
 //!
 //! Where [`context::gate`] says PhitPup is off (password fields and the
 //! like), keys pass untouched and nothing is remembered.
@@ -17,7 +18,7 @@ use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyState, ToUnicodeEx, VK_BACK, VK_CAPITAL, VK_CONTROL, VK_ESCAPE,
     VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_PACKET, VK_RCONTROL, VK_RMENU,
-    VK_RSHIFT, VK_RWIN, VK_SHIFT, VK_TAB,
+    VK_RSHIFT, VK_RWIN, VK_SHIFT,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetForegroundWindow, HC_ACTION, KBDLLHOOKSTRUCT, PostThreadMessageW,
@@ -28,7 +29,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 use phitpup_core::config::Mode;
 
 use crate::context::{self, Gate};
-use crate::{APP, App, WM_ACCEPT, WM_BUBBLE, WM_FIX, inject, layout};
+use crate::{APP, App, WM_ACCEPT, WM_BUBBLE, WM_FIX, WM_SAVE, inject, layout};
 
 /// CapsLock as we last saw it; GetKeyState is stale for other threads' input.
 static CAPS: AtomicBool = AtomicBool::new(false);
@@ -96,7 +97,15 @@ fn refresh(app: &App, quiet: bool) {
     if quiet || app.mode() != Mode::Suggest {
         return;
     }
-    let s = app.fixer.lock().unwrap().suggestion(&app.detector);
+    let s = app
+        .fixer
+        .lock()
+        .unwrap()
+        .suggestion(&app.detector)
+        .filter(|s| {
+            let word = s.word.to_lowercase();
+            !app.config.lock().unwrap().ignore_words.contains(&word)
+        });
     if s.is_none() {
         DISMISSED.store(false, Ordering::Relaxed);
     }
@@ -151,15 +160,30 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
     let ctrl = down(VK_CONTROL);
     let alt = down(VK_MENU);
     let win = down(VK_LWIN) || down(VK_RWIN);
-    let plain = !shift && !ctrl && !alt && !win;
+    let (hotkey, accept) = {
+        let c = app.config.lock().unwrap();
+        (c.hotkey, c.accept_key)
+    };
+    let escape = !ctrl && !alt && !win && vk == VK_ESCAPE;
+    let accepting = !win && accept.matches(vk, ctrl, shift, alt);
 
-    if plain && matches!(vk, VK_TAB | VK_ESCAPE) {
+    if escape || accepting {
         let shown = app.suggestion.lock().unwrap().take();
         if let Some(s) = shown {
             post(app, WM_BUBBLE);
-            if vk == VK_ESCAPE {
-                debug!("Esc: suggestion dismissed");
+            if escape {
                 DISMISSED.store(true, Ordering::Relaxed);
+                if shift {
+                    debug!("Shift+Esc: the word will not be suggested again");
+                    let mut c = app.config.lock().unwrap();
+                    let word = s.word.to_lowercase();
+                    if phitpup_core::config::storable(&word) && !c.ignore_words.contains(&word) {
+                        c.ignore_words.push(word);
+                        post(app, WM_SAVE);
+                    }
+                } else {
+                    debug!("Esc: suggestion dismissed");
+                }
                 return true;
             }
             if let Some(edit) = app.fixer.lock().unwrap().accept(&s) {
@@ -167,8 +191,18 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
                 post(app, WM_ACCEPT);
                 return true;
             }
-            debug!("Tab: the suggestion was out of date; Tab passed through");
+            debug!("accept key: the suggestion was out of date; the key passed through");
         }
+    }
+
+    if !win && hotkey.matches(vk, ctrl, shift, alt) {
+        debug!(
+            "hotkey caught ({} chars remembered)",
+            app.fixer.lock().unwrap().text().chars().count()
+        );
+        set_suggestion(app, None);
+        post(app, WM_FIX);
+        return true;
     }
 
     match vk {
@@ -176,15 +210,6 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
         | VK_LMENU | VK_RMENU | VK_LWIN | VK_RWIN => {}
         VK_CAPITAL => {
             CAPS.fetch_xor(true, Ordering::Relaxed);
-        }
-        VK_BACK if shift && !ctrl && !alt && !win => {
-            debug!(
-                "Shift+Backspace caught ({} chars remembered)",
-                app.fixer.lock().unwrap().text().chars().count()
-            );
-            set_suggestion(app, None);
-            post(app, WM_FIX);
-            return true;
         }
         VK_BACK if !ctrl && !alt && !win => {
             app.fixer.lock().unwrap().backspace();

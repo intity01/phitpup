@@ -1,14 +1,19 @@
 //! `%APPDATA%\PhitPup\config.toml`, and the "start with Windows" entry.
 
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::SystemTime;
 
-use phitpup_core::config::{self, Config, Mode, TEMPLATE};
+use phitpup_core::config::{Config, TEMPLATE};
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::System::Registry::{
     HKEY, HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_SZ, RegCloseKey, RegDeleteValueW,
     RegOpenKeyExW, RegQueryValueExW, RegSetValueExW,
 };
+use windows_sys::Win32::UI::Shell::ShellExecuteW;
+use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+use crate::{APP, hook};
 
 pub fn path() -> PathBuf {
     let base = std::env::var_os("APPDATA").map_or_else(|| PathBuf::from("."), PathBuf::from);
@@ -23,24 +28,69 @@ pub fn modified() -> Option<SystemTime> {
 /// none. The second value lists problems to show the user.
 pub fn load() -> (Config, Vec<String>) {
     let path = path();
-    match std::fs::read_to_string(&path) {
+    let out = match std::fs::read_to_string(&path) {
         Ok(text) => Config::parse(&text),
         Err(_) => {
             let _ = std::fs::create_dir_all(path.parent().unwrap());
             let _ = std::fs::write(&path, TEMPLATE);
             (Config::default(), Vec::new())
         }
+    };
+    *SEEN.lock().unwrap() = modified();
+    out
+}
+
+/// The file's modification time when we last read or wrote it, so our own
+/// saves are not mistaken for edits made by hand.
+static SEEN: Mutex<Option<SystemTime>> = Mutex::new(None);
+
+/// Writes `config` into the file, keeping its comments and layout.
+pub fn save(config: &Config) {
+    let path = path();
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|_| TEMPLATE.into());
+    let _ = std::fs::create_dir_all(path.parent().unwrap());
+    match std::fs::write(&path, config.write_to(&text)) {
+        Ok(()) => *SEEN.lock().unwrap() = modified(),
+        Err(e) => debug!("could not save settings: {e}"),
     }
 }
 
-pub fn save_mode(mode: Mode) {
-    let path = path();
-    let text = std::fs::read_to_string(&path).unwrap_or_else(|_| TEMPLATE.into());
-    let text = config::set(&text, "mode", &format!("\"{}\"", mode.as_str()));
-    let _ = std::fs::create_dir_all(path.parent().unwrap());
-    if let Err(e) = std::fs::write(&path, text) {
-        debug!("could not save settings: {e}");
+/// Makes `config` the running settings and saves it.
+pub fn apply(config: Config) {
+    let Some(app) = APP.get() else { return };
+    save(&config);
+    *app.config.lock().unwrap() = config;
+    crate::context::forget();
+    hook::reset("settings changed");
+}
+
+/// Reads the file again if it changed since we last read or wrote it.
+pub fn changed_on_disk() -> Option<(Config, Vec<String>)> {
+    let now = modified();
+    let mut seen = SEEN.lock().unwrap();
+    if *seen == now {
+        return None;
     }
+    *seen = now;
+    drop(seen);
+    Some(load())
+}
+
+/// Opens the settings file in Notepad, creating it first if needed.
+pub fn open_file() {
+    load();
+    let file = wide(&format!("\"{}\"", path().display()));
+    // SAFETY: NUL-terminated strings.
+    unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            wide("open").as_ptr(),
+            wide("notepad.exe").as_ptr(),
+            file.as_ptr(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
 }
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";

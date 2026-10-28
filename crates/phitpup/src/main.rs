@@ -1,7 +1,7 @@
 //! ผิดปุ๊บ (PhitPup): fix text typed with the wrong keyboard layout.
 //!
-//! Runs in the notification area; the tray menu and `config.toml` hold the
-//! settings.
+//! Runs in the notification area. Clicking its icon opens the settings
+//! window; everything is kept in `config.toml`.
 //!
 //! Shift+Backspace converts the last word between Thai and English (press
 //! again to reach further back, and once more to undo), or the selection if
@@ -54,6 +54,8 @@ mod settings;
 mod tray;
 #[cfg(windows)]
 mod uia;
+#[cfg(windows)]
+mod window;
 
 #[cfg(windows)]
 fn main() {
@@ -71,7 +73,7 @@ fn main() {
 }
 
 #[cfg(windows)]
-pub use app::{APP, App, WM_ACCEPT, WM_BUBBLE, WM_FIX};
+pub use app::{APP, App, WM_ACCEPT, WM_BUBBLE, WM_FIX, WM_SAVE};
 
 #[cfg(windows)]
 mod app {
@@ -80,6 +82,7 @@ mod app {
     use std::time::{Duration, Instant};
 
     use phitpup_core::config::{Config, Mode};
+    use phitpup_core::hotkey::VK_BACK;
     use phitpup_core::model::{Lang, Model};
     use phitpup_core::{Detector, Direction, Edit, Fixer, Suggestion};
     use windows_sys::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, HWND};
@@ -104,6 +107,9 @@ mod app {
     /// Posted by the hook to the worker: Tab accepted the suggestion, whose
     /// edit is waiting in [`App::accepted`].
     pub const WM_ACCEPT: u32 = WM_APP + 3;
+    /// Posted by the hook to the worker: write [`App::config`] to the
+    /// settings file (Shift+Esc added a word).
+    pub const WM_SAVE: u32 = WM_APP + 4;
 
     pub struct App {
         pub fixer: Mutex<Fixer>,
@@ -163,10 +169,13 @@ mod app {
                 wide(r"Local\PhitPup.SingleInstance").as_ptr(),
             );
             if GetLastError() == ERROR_ALREADY_EXISTS {
-                message(
-                    "PhitPup is already running. Look for its icon in the notification area (bottom right).",
-                    MB_ICONINFORMATION,
-                );
+                // Started again: show the running copy's settings window.
+                if !tray::open_settings_of_running_copy() {
+                    message(
+                        "PhitPup is already running. Look for its icon in the notification area (bottom right).",
+                        MB_ICONINFORMATION,
+                    );
+                }
                 return Ok(());
             }
         }
@@ -265,6 +274,7 @@ mod app {
                     WM_FIX => fix(owner),
                     WM_BUBBLE => bubble::schedule(),
                     WM_ACCEPT => accept(),
+                    WM_SAVE => settings::save(&APP.get().unwrap().config.lock().unwrap().clone()),
                     _ => {}
                 }
             }
@@ -292,9 +302,10 @@ mod app {
             }
             None => {
                 debug!("hotkey: nothing typed since the caret moved; trying the selection");
-                if !convert_selection(owner) {
+                // Nothing to fix: Shift+Backspace behaves like Backspace.
+                if !convert_selection(owner) && app.config.lock().unwrap().hotkey.vk == VK_BACK {
                     debug!("hotkey: no selection either; sent a plain Backspace");
-                    inject::backspace(); // nothing to fix: behave like Backspace
+                    inject::backspace();
                 }
             }
         }

@@ -1,11 +1,11 @@
 //! The notification-area icon and its menu, on a thread of their own.
 //!
-//! Left click pauses or resumes. The menu switches the mode, the "start with
-//! Windows" entry, opens the settings file, and quits. The thread also
-//! reloads the settings when the file changes.
+//! Left click opens the settings window, which also runs on this thread.
+//! The right-click menu has the quick switches: pause, mode, start with
+//! Windows, quit. The thread also reloads the settings when the file is
+//! edited by hand.
 
 use std::sync::atomic::Ordering;
-use std::time::SystemTime;
 
 use phitpup_core::config::Mode;
 use phitpup_core::icon::{self, Tone};
@@ -18,21 +18,28 @@ use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::HiDpi::{GetDpiForSystem, GetSystemMetricsForDpi};
 use windows_sys::Win32::UI::Shell::{
     NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP, NIIF_INFO, NIM_ADD, NIM_DELETE, NIM_MODIFY,
-    NOTIFYICONDATAW, Shell_NotifyIconW, ShellExecuteW,
+    NOTIFYICONDATAW, Shell_NotifyIconW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CheckMenuRadioItem, CreateIconIndirect, CreatePopupMenu, CreateWindowExW,
     DefWindowProcW, DestroyIcon, DestroyMenu, DispatchMessageW, GetCursorPos, GetMessageW, HICON,
-    ICONINFO, MB_ICONWARNING, MB_OK, MF_BYCOMMAND, MF_CHECKED, MF_GRAYED, MF_SEPARATOR, MF_STRING,
-    MSG, MessageBoxW, PostMessageW, PostThreadMessageW, RegisterClassExW, RegisterWindowMessageW,
-    SM_CXSMICON, SW_SHOWNORMAL, SetForegroundWindow, SetTimer, TPM_RETURNCMD, TPM_RIGHTBUTTON,
-    TrackPopupMenu, WM_APP, WM_CONTEXTMENU, WM_LBUTTONUP, WM_NULL, WM_QUIT, WM_RBUTTONUP, WM_TIMER,
-    WNDCLASSEXW,
+    ICONINFO, MB_ICONWARNING, MB_OK, MF_BYCOMMAND, MF_CHECKED, MF_SEPARATOR, MF_STRING, MSG,
+    MessageBoxW, PostMessageW, PostThreadMessageW, RegisterClassExW, RegisterWindowMessageW,
+    SM_CXSMICON, SetForegroundWindow, SetMenuDefaultItem, SetTimer, TPM_RETURNCMD, TPM_RIGHTBUTTON,
+    TrackPopupMenu, TranslateMessage, WM_APP, WM_CONTEXTMENU, WM_LBUTTONUP, WM_NULL, WM_QUIT,
+    WM_RBUTTONUP, WM_TIMER, WNDCLASSEXW,
 };
 
-use crate::{APP, hook, settings};
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    ASFW_ANY, AllowSetForegroundWindow, FindWindowW,
+};
+
+use crate::{APP, hook, settings, window};
 
 const WM_TRAY: u32 = WM_APP + 10;
+/// Sent by a second copy of PhitPup: open the settings window.
+const WM_OPEN_SETTINGS: u32 = WM_APP + 11;
+const CLASS: &str = "PhitPupTray";
 const RELOAD_TIMER: usize = 1;
 
 const CMD_PAUSE: usize = 1;
@@ -50,7 +57,6 @@ struct Tray {
     hwnd: HWND,
     main_thread: u32,
     taskbar_created: u32,
-    modified: Option<SystemTime>,
 }
 
 thread_local! {
@@ -61,7 +67,7 @@ thread_local! {
 /// are settings lines that could not be read.
 pub fn start(main_thread: u32, welcome: bool, problems: Vec<String>) {
     std::thread::spawn(move || {
-        let class = wide("PhitPupTray");
+        let class = wide(CLASS);
         // SAFETY: the class name outlives both calls; window_proc is 'static.
         let hwnd = unsafe {
             let instance = GetModuleHandleW(std::ptr::null());
@@ -96,14 +102,19 @@ pub fn start(main_thread: u32, welcome: bool, problems: Vec<String>) {
                 main_thread,
                 // SAFETY: plain registration of a well-known name.
                 taskbar_created: unsafe { RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()) },
-                modified: settings::modified(),
             })
         });
         update_icon(NIM_ADD);
         if welcome {
+            let (accept, hotkey) = APP.get().map_or_else(Default::default, |a| {
+                let c = a.config.lock().unwrap();
+                (c.accept_key.label(), c.hotkey.label())
+            });
             balloon(
                 "PhitPup is running",
-                "Typed in the wrong layout? Press Tab on the suggestion, or Shift+Backspace.\nRight-click this icon for options.",
+                &format!(
+                    "Typed in the wrong layout? Press {accept} on the suggestion, or {hotkey}.\nClick this icon for settings."
+                ),
             );
         }
         if !problems.is_empty() {
@@ -114,10 +125,26 @@ pub fn start(main_thread: u32, welcome: bool, problems: Vec<String>) {
             SetTimer(hwnd, RELOAD_TIMER, 2000, None);
             let mut msg: MSG = std::mem::zeroed();
             while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+                TranslateMessage(&msg); // typing in the settings window
                 DispatchMessageW(&msg);
             }
         }
     });
+}
+
+/// Asks the copy of PhitPup that is already running to open its settings
+/// window. False if it could not be found.
+pub fn open_settings_of_running_copy() -> bool {
+    // SAFETY: plain window lookup and post; ASFW_ANY lets the running copy
+    // bring its window to the front, since this process is in front now.
+    unsafe {
+        let hwnd = FindWindowW(wide(CLASS).as_ptr(), std::ptr::null());
+        if hwnd.is_null() {
+            return false;
+        }
+        AllowSetForegroundWindow(ASFW_ANY);
+        PostMessageW(hwnd, WM_OPEN_SETTINGS, 0, 0) != 0
+    }
 }
 
 fn hwnd() -> HWND {
@@ -153,7 +180,7 @@ fn update_icon(action: u32) {
     copy(
         &mut nid.szTip,
         if paused {
-            "PhitPup: paused (click to resume)"
+            "PhitPup: paused"
         } else {
             "PhitPup: fixes text typed in the wrong layout"
         },
@@ -239,7 +266,10 @@ fn draw_icon(tone: Tone) -> HICON {
 
 fn show_menu(hwnd: HWND) {
     let Some(app) = APP.get() else { return };
-    let mode = app.config.lock().unwrap().mode;
+    let (mode, hotkey, accept) = {
+        let c = app.config.lock().unwrap();
+        (c.mode, c.hotkey.label(), c.accept_key.label())
+    };
     let startup = settings::starts_with_windows();
     let checked = |on: bool| if on { MF_CHECKED } else { 0 };
     // SAFETY: the menu is built, shown and destroyed here; strings are
@@ -249,16 +279,21 @@ fn show_menu(hwnd: HWND) {
         let add = |flags: u32, id: usize, text: &str| {
             AppendMenuW(menu, flags, id, wide(text).as_ptr());
         };
-        add(
-            MF_STRING | MF_GRAYED,
-            0,
-            &format!("PhitPup {}", env!("CARGO_PKG_VERSION")),
-        );
+        add(MF_STRING, CMD_SETTINGS, "Settings…");
+        SetMenuDefaultItem(menu, CMD_SETTINGS as u32, 0);
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
         add(MF_STRING | checked(paused()), CMD_PAUSE, "Pause");
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
-        add(MF_STRING, CMD_SUGGEST, "Suggest while typing\tTab");
-        add(MF_STRING, CMD_MANUAL, "Fix on hotkey only\tShift+Backspace");
+        add(
+            MF_STRING,
+            CMD_SUGGEST,
+            &format!("Suggest while typing\t{accept}"),
+        );
+        add(
+            MF_STRING,
+            CMD_MANUAL,
+            &format!("Fix on hotkey only\t{hotkey}"),
+        );
         let current = if mode == Mode::Suggest {
             CMD_SUGGEST
         } else {
@@ -277,7 +312,6 @@ fn show_menu(hwnd: HWND) {
             CMD_STARTUP,
             "Start with Windows",
         );
-        add(MF_STRING, CMD_SETTINGS, "Edit settings file…");
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
         add(MF_STRING, CMD_QUIT, "Quit PhitPup");
 
@@ -307,46 +341,30 @@ fn show_menu(hwnd: HWND) {
             } else {
                 Mode::Manual
             };
-            app.config.lock().unwrap().mode = mode;
-            settings::save_mode(mode);
-            TRAY.with_borrow_mut(|t| {
-                if let Some(t) = t {
-                    t.modified = settings::modified();
-                }
-            });
-            hook::reset("mode changed");
+            let mut c = app.config.lock().unwrap().clone();
+            c.mode = mode;
+            settings::apply(c);
             debug!("mode: {}", mode.as_str());
         }
         CMD_STARTUP => settings::set_start_with_windows(!startup),
-        CMD_SETTINGS => {
-            settings::load(); // creates the file if it is missing
-            let file = wide(&format!("\"{}\"", settings::path().display()));
-            // SAFETY: NUL-terminated strings.
-            unsafe {
-                ShellExecuteW(
-                    std::ptr::null_mut(),
-                    wide("open").as_ptr(),
-                    wide("notepad.exe").as_ptr(),
-                    file.as_ptr(),
-                    std::ptr::null(),
-                    SW_SHOWNORMAL,
-                )
-            };
-        }
+        CMD_SETTINGS => window::open(),
         CMD_QUIT => quit(),
         _ => {}
     }
+    window::refresh();
 }
 
-fn toggle_pause() {
+pub fn toggle_pause() {
     let Some(app) = APP.get() else { return };
     let now = !app.paused.load(Ordering::Relaxed);
     app.paused.store(now, Ordering::Relaxed);
     hook::reset(if now { "paused" } else { "resumed" });
     update_icon(NIM_MODIFY);
+    window::refresh();
 }
 
 fn quit() {
+    window::close();
     let nid = notify_data();
     // SAFETY: removing our own icon, then ending the main message loop.
     unsafe {
@@ -356,18 +374,14 @@ fn quit() {
     }
 }
 
-/// Applies the settings file if it changed since we last looked.
+/// Applies the settings file if it was edited since we last read or wrote
+/// it, and redraws the settings window (Shift+Esc may have added a word).
 fn reload_if_changed() {
-    let now = settings::modified();
-    let changed = TRAY.with_borrow_mut(|t| {
-        let t = t.as_mut()?;
-        (t.modified != now).then(|| t.modified = now)
-    });
-    if changed.is_none() {
+    window::refresh();
+    let Some((config, problems)) = settings::changed_on_disk() else {
         return;
-    }
+    };
     let Some(app) = APP.get() else { return };
-    let (config, problems) = settings::load();
     debug!("settings reloaded ({} problems)", problems.len());
     *app.config.lock().unwrap() = config;
     crate::context::forget();
@@ -384,9 +398,14 @@ unsafe extern "system" fn window_proc(
     lparam: LPARAM,
 ) -> LRESULT {
     match msg {
+        WM_OPEN_SETTINGS => {
+            debug!("another copy asked for the settings window");
+            window::open();
+            0
+        }
         WM_TRAY => {
             match lparam as u32 {
-                WM_LBUTTONUP => toggle_pause(),
+                WM_LBUTTONUP => window::open(),
                 WM_RBUTTONUP | WM_CONTEXTMENU => show_menu(hwnd),
                 _ => {}
             }

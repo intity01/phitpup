@@ -133,7 +133,11 @@ pub fn gate(app: &App, fg: HWND) -> Gate {
             let class = class_of(fg);
             *w = Window {
                 hwnd: fg as isize,
-                verdict: judge(app, &exe_of(fg), &class),
+                verdict: if pid_of(fg) == std::process::id() {
+                    Gate::Off("PhitPup's own window")
+                } else {
+                    judge(app, &exe_of(fg), &class)
+                },
                 shell: SHELL_CLASSES.contains(&class.as_str()),
             };
         }
@@ -167,12 +171,22 @@ fn judge(app: &App, exe: &str, class: &str) -> Gate {
     }
 }
 
+fn pid_of(hwnd: HWND) -> u32 {
+    let mut pid = 0u32;
+    // SAFETY: plain query.
+    unsafe { GetWindowThreadProcessId(hwnd, &mut pid) };
+    pid
+}
+
 /// The lowercased file name of the program that owns `hwnd`.
-fn exe_of(hwnd: HWND) -> String {
+pub fn exe_of(hwnd: HWND) -> String {
+    exe_of_process(pid_of(hwnd))
+}
+
+/// The lowercased file name of process `pid`'s program.
+pub fn exe_of_process(pid: u32) -> String {
     // SAFETY: the process handle is checked and closed; the buffer is sized.
     unsafe {
-        let mut pid = 0u32;
-        GetWindowThreadProcessId(hwnd, &mut pid);
         let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if process.is_null() {
             return String::new();
