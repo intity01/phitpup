@@ -6,6 +6,9 @@
 //!
 //! In suggest mode it also asks the fixer for a suggestion after every key,
 //! and Tab or Esc act on the bubble while one is shown.
+//!
+//! Where [`context::gate`] says PhitPup is off (password fields and the
+//! like), keys pass untouched and nothing is remembered.
 
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 
@@ -22,6 +25,9 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_XBUTTONDOWN,
 };
 
+use phitpup_core::config::Mode;
+
+use crate::context::{self, Gate};
 use crate::{APP, App, WM_ACCEPT, WM_BUBBLE, WM_FIX, inject, layout};
 
 /// CapsLock as we last saw it; GetKeyState is stale for other threads' input.
@@ -30,6 +36,8 @@ static CAPS: AtomicBool = AtomicBool::new(false);
 static LAST_FOREGROUND: AtomicIsize = AtomicIsize::new(0);
 /// Esc dismissed the bubble; it stays away until the word ends.
 static DISMISSED: AtomicBool = AtomicBool::new(false);
+/// The gate at the last key, to log only its changes.
+static LAST_GATE: std::sync::Mutex<Gate> = std::sync::Mutex::new(Gate::On);
 
 /// ToUnicodeEx: leave the keyboard state (dead keys) alone. Windows 10 1607+.
 const NO_STATE_CHANGE: u32 = 0x4;
@@ -55,7 +63,8 @@ fn down(vk: u16) -> bool {
     unsafe { GetAsyncKeyState(vk.into()) < 0 }
 }
 
-fn reset(why: &str) {
+/// Forgets what was typed and hides the bubble.
+pub fn reset(why: &str) {
     if let Some(app) = APP.get() {
         let mut fixer = app.fixer.lock().unwrap();
         if !fixer.is_empty() {
@@ -83,15 +92,11 @@ fn set_suggestion(app: &App, s: Option<phitpup_core::Suggestion>) {
 }
 
 /// Asks the fixer whether the word being typed needs fixing.
-fn refresh(app: &App) {
-    if !app.suggest {
+fn refresh(app: &App, quiet: bool) {
+    if quiet || app.mode() != Mode::Suggest {
         return;
     }
-    let s = if layout::focus_is_password() {
-        None
-    } else {
-        app.fixer.lock().unwrap().suggestion(&app.detector)
-    };
+    let s = app.fixer.lock().unwrap().suggestion(&app.detector);
     if s.is_none() {
         DISMISSED.store(false, Ordering::Relaxed);
     }
@@ -116,10 +121,31 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
     let vk = k.vkCode as u16;
 
     // SAFETY: plain query.
-    let fg = unsafe { GetForegroundWindow() } as isize;
-    if LAST_FOREGROUND.swap(fg, Ordering::Relaxed) != fg {
+    let fg = unsafe { GetForegroundWindow() };
+    if LAST_FOREGROUND.swap(fg as isize, Ordering::Relaxed) != fg as isize {
         reset("switched to another window");
     }
+
+    let gate = context::gate(app, fg);
+    {
+        let mut last = LAST_GATE.lock().unwrap();
+        if *last != gate {
+            match gate {
+                Gate::On => debug!("on"),
+                Gate::Quiet(why) => debug!("bubble off: {why}"),
+                Gate::Off(why) => debug!("off: {why}"),
+            }
+            *last = gate;
+        }
+    }
+    if let Gate::Off(why) = gate {
+        if vk == VK_CAPITAL {
+            CAPS.fetch_xor(true, Ordering::Relaxed);
+        }
+        reset(why);
+        return false;
+    }
+    let quiet = matches!(gate, Gate::Quiet(_));
 
     let shift = down(VK_SHIFT);
     let ctrl = down(VK_CONTROL);
@@ -162,13 +188,13 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
         }
         VK_BACK if !ctrl && !alt && !win => {
             app.fixer.lock().unwrap().backspace();
-            refresh(app);
+            refresh(app, quiet);
         }
         // A character sent as Unicode (IMEs, automation, on-screen keyboards).
         VK_PACKET => match char::from_u32(k.scanCode) {
             Some(c) if !c.is_control() => {
                 app.fixer.lock().unwrap().typed(c.encode_utf8(&mut [0; 4]));
-                refresh(app);
+                refresh(app, quiet);
             }
             _ => reset("control character"),
         },
@@ -180,7 +206,7 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
                 reset("a key that moves the caret or types nothing (arrows, Enter, Tab…)");
             } else {
                 app.fixer.lock().unwrap().typed(&text);
-                refresh(app);
+                refresh(app, quiet);
             }
         }
     }

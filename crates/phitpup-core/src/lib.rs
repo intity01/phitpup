@@ -7,6 +7,7 @@
 //! Nothing here calls the operating system, so it builds for WASM and tests on
 //! any platform.
 
+pub mod config;
 pub mod convert;
 pub mod detect;
 pub mod fix;

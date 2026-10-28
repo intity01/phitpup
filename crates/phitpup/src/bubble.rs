@@ -28,7 +28,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 
-use crate::APP;
+use crate::{APP, uia};
 
 const TIMER: usize = 1;
 /// Time for the app to draw the key just typed before we look for its caret.
@@ -56,6 +56,9 @@ struct Bubble {
 }
 
 thread_local! {
+    /// For apps that draw their own caret; created on first use.
+    static AUTOMATION: Option<uia::Automation> = uia::Automation::new();
+
     static BUBBLE: RefCell<Option<Bubble>> = const { RefCell::new(None) };
 }
 
@@ -337,8 +340,9 @@ fn paint(hwnd: HWND) {
 }
 
 /// Bottom-left of the caret in screen pixels, the caret's height, and the
-/// window it belongs to. Apps that draw their own caret (most browsers and
-/// Electron apps) do not report one; the mouse pointer stands in for it.
+/// window it belongs to. Apps that draw their own caret (browsers, Electron)
+/// are asked through UI Automation; if that fails too, the mouse pointer
+/// stands in for it.
 fn caret() -> (POINT, i32, HWND) {
     // SAFETY: plain queries.
     unsafe {
@@ -354,6 +358,16 @@ fn caret() -> (POINT, i32, HWND) {
             };
             ClientToScreen(info.hwndCaret, &mut p);
             return (p, r.bottom - r.top, info.hwndCaret);
+        }
+        if let Some(r) = AUTOMATION.with(|a| a.as_ref().and_then(uia::Automation::caret)) {
+            return (
+                POINT {
+                    x: r.left,
+                    y: r.bottom,
+                },
+                r.bottom - r.top,
+                fg,
+            );
         }
         let mut p = POINT { x: 0, y: 0 };
         GetCursorPos(&mut p);

@@ -1,16 +1,26 @@
 //! ผิดปุ๊บ (PhitPup): fix text typed with the wrong keyboard layout.
 //!
+//! Runs in the notification area; the tray menu and `config.toml` hold the
+//! settings.
+//!
 //! Shift+Backspace converts the last word between Thai and English (press
 //! again to reach further back, and once more to undo), or the selection if
 //! nothing was typed since the caret last moved.
 //!
-//! With `--suggest`, a bubble under the caret offers the fix while the word is
-//! being typed; Tab accepts it and Esc dismisses it.
+//! In suggest mode, a bubble under the caret offers the fix while the word is
+//! being typed; Tab accepts it and Esc dismisses it. PhitPup stays out of
+//! password fields, password managers, remote desktop and full-screen
+//! windows, and keeps the bubble out of terminals and code editors.
 //!
 //! Threads: the main thread owns the keyboard and mouse hooks and runs their
 //! message loop; it must answer each key within milliseconds. The worker
 //! thread does the slow part (SendInput, the clipboard) when the hook posts
 //! [`WM_FIX`] to it. The suggestion bubble also lives on the worker thread.
+//! The tray icon and the focus watcher (UI Automation) have a thread each.
+
+// No console window; `cargo run` still shows debug output through the
+// handles it passes down.
+#![cfg_attr(windows, windows_subsystem = "windows")]
 
 /// `PHITPUP_DEBUG=1` prints what the program decides to stderr. It never
 /// prints what was typed, only counts and reasons.
@@ -31,16 +41,25 @@ mod bubble;
 #[cfg(windows)]
 mod clipboard;
 #[cfg(windows)]
+mod context;
+#[cfg(windows)]
 mod hook;
 #[cfg(windows)]
 mod inject;
 #[cfg(windows)]
 mod layout;
+#[cfg(windows)]
+mod settings;
+#[cfg(windows)]
+mod tray;
+#[cfg(windows)]
+mod uia;
 
 #[cfg(windows)]
 fn main() {
     if let Err(e) = app::run() {
         eprintln!("phitpup: {e}");
+        app::alert(&e);
         std::process::exit(1);
     }
 }
@@ -56,23 +75,27 @@ pub use app::{APP, App, WM_ACCEPT, WM_BUBBLE, WM_FIX};
 
 #[cfg(windows)]
 mod app {
+    use std::sync::atomic::AtomicBool;
     use std::sync::{Mutex, OnceLock, mpsc};
     use std::time::{Duration, Instant};
 
+    use phitpup_core::config::{Config, Mode};
     use phitpup_core::model::{Lang, Model};
     use phitpup_core::{Detector, Direction, Edit, Fixer, Suggestion};
-    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, HWND};
+    use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
-    use windows_sys::Win32::System::Threading::GetCurrentThreadId;
+    use windows_sys::Win32::System::Threading::{CreateMutexW, GetCurrentThreadId};
     use windows_sys::Win32::UI::HiDpi::{
         DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DispatchMessageW, GetMessageW, HWND_MESSAGE, MSG, PM_NOREMOVE,
-        PeekMessageW, TranslateMessage, WM_APP,
+        CreateWindowExW, DispatchMessageW, GetMessageW, HWND_MESSAGE, MB_ICONERROR,
+        MB_ICONINFORMATION, MB_OK, MSG, MessageBoxW, PM_NOREMOVE, PeekMessageW, TranslateMessage,
+        WM_APP,
     };
 
-    use crate::{bubble, clipboard, hook, inject, layout};
+    use crate::{bubble, clipboard, context, hook, inject, layout, settings, tray};
 
     /// Posted by the hook to the worker: the user pressed Shift+Backspace.
     pub const WM_FIX: u32 = WM_APP + 1;
@@ -88,8 +111,9 @@ mod app {
         pub english: isize,
         pub thai: isize,
         pub worker: u32,
-        /// Suggest mode is on.
-        pub suggest: bool,
+        /// Paused from the tray: keys pass untouched.
+        pub paused: AtomicBool,
+        pub config: Mutex<Config>,
         /// What the bubble shows, if anything.
         pub suggestion: Mutex<Option<Suggestion>>,
         pub accepted: Mutex<Option<Edit>>,
@@ -97,10 +121,59 @@ mod app {
 
     pub static APP: OnceLock<App> = OnceLock::new();
 
+    impl App {
+        pub fn mode(&self) -> Mode {
+            self.config.lock().unwrap().mode
+        }
+    }
+
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain([0]).collect()
+    }
+
+    pub fn alert(text: &str) {
+        message(text, MB_ICONERROR);
+    }
+
+    fn message(text: &str, icon: u32) {
+        // SAFETY: NUL-terminated strings; blocks until dismissed.
+        unsafe {
+            MessageBoxW(
+                std::ptr::null_mut(),
+                wide(text).as_ptr(),
+                wide("ผิดปุ๊บ PhitPup").as_ptr(),
+                MB_OK | icon,
+            )
+        };
+    }
+
     pub fn run() -> Result<(), String> {
-        let suggest = std::env::args().skip(1).any(|a| a == "--suggest");
+        if *crate::DEBUG {
+            // Started from a terminal without `cargo run`: borrow its console.
+            // SAFETY: plain call; fails harmlessly if there is none.
+            unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
+        }
+        // One copy per sign-in; two would both catch every key. The handle
+        // stays open for the life of the process.
+        // SAFETY: plain named-mutex creation.
+        unsafe {
+            CreateMutexW(
+                std::ptr::null(),
+                0,
+                wide(r"Local\PhitPup.SingleInstance").as_ptr(),
+            );
+            if GetLastError() == ERROR_ALREADY_EXISTS {
+                message(
+                    "ผิดปุ๊บกำลังทำงานอยู่แล้ว ดูที่ไอคอน ผ ในถาดระบบ (มุมขวาล่าง)",
+                    MB_ICONINFORMATION,
+                );
+                return Ok(());
+            }
+        }
         // SAFETY: plain process setting; the bubble then sizes itself per monitor.
         unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+        let welcome = !settings::path().exists();
+        let (config, problems) = settings::load();
         let (english, thai) = layout::find_pair()?;
         let detector = Detector::new(&english.layout, &thai.layout);
         if !Model::embedded().is_trained() {
@@ -114,12 +187,12 @@ mod app {
         println!("ผิดปุ๊บ PhitPup {}", env!("CARGO_PKG_VERSION"));
         println!("  {}  ⇄  {}", english.layout.name(), thai.layout.name());
         println!("  Shift+Backspace: fix the last word (again: one word further, then undo)");
-        if suggest {
-            println!("  Suggestions on: Tab accepts the bubble, Esc dismisses it");
-        } else {
-            println!("  Run with --suggest to see fixes while you type");
-        }
-        println!("  Close this window or press Ctrl+C to quit.");
+        println!(
+            "  Mode: {} (change it from the tray icon)",
+            config.mode.as_str()
+        );
+        println!("  Settings: {}", settings::path().display());
+        println!("  Quit from the tray icon.");
         debug!("debug output on (counts and reasons only, never the text you type)");
 
         let app = App {
@@ -128,13 +201,18 @@ mod app {
             english: english.hkl,
             thai: thai.hkl,
             worker,
-            suggest,
+            paused: AtomicBool::new(false),
+            config: Mutex::new(config),
             suggestion: Mutex::new(None),
             accepted: Mutex::new(None),
         };
         APP.set(app).map_err(|_| "already running")?;
         hook::install()?;
+        context::watch_focus();
+        // SAFETY: plain query.
+        tray::start(unsafe { GetCurrentThreadId() }, welcome, problems);
         message_loop();
+        debug!("quit from the tray");
         Ok(())
     }
 

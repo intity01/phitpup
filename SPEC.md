@@ -69,7 +69,25 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
      chats. Checklist + code-point viewer: `testing/manual-test.html`.
    - Risks to check live: apps that delete a whole Thai cluster per Backspace (Chrome?),
      Ctrl+Insert not copying in some apps (LINE?), Shift released by selection path.
-4. Tray icon + `config.toml` + self-disable rules
+4. ✅ Tray icon + `config.toml` + self-disable rules (2026-10-28, code done; manual pass pending)
+   - No console (`windows_subsystem = "windows"`); one copy per sign-in (named mutex);
+     errors and "already running" shown in a message box; first run shows a tray balloon.
+   - Tray (own thread): icon drawn at runtime (white ผ on blue, grey when paused); left click
+     pauses; menu: pause, manual/suggest, start with Windows (HKCU `Run`), open settings, quit.
+   - `%APPDATA%\PhitPup\config.toml` (`phitpup_core::config`, a flat TOML subset): `mode`,
+     `off_in_fullscreen`, `off_apps`, `quiet_apps`. Bad lines keep defaults and are reported;
+     the tray rewrites only the `mode` line; edits apply within 2 s without a restart.
+   - `context::gate` per key: **off** (keys untouched, nothing remembered) when paused, in
+     password fields, password managers, credential prompts, remote desktop / VM viewers,
+     full-screen windows, `off_apps`; **quiet** (no bubble) in terminals and code editors and
+     `quiet_apps`. Password fields: Win32 `ES_PASSWORD` plus UI Automation `IsPassword` on a
+     focus-watcher thread (`SetWinEventHook`), which assumes "password" until it knows.
+   - UI Automation through hand-written COM vtable calls (`uia.rs`, slots checked against the
+     SDK's `UIAutomationClient.h`) instead of the `windows` crate. Also gives the bubble the
+     caret in apps that draw their own (TextPattern2 caret range) before the mouse fallback.
+   - Smoke test: starts, writes the settings template, a second copy refuses to start. Tray
+     menu, UIA password detection and caret placement in Chrome/Discord still need a manual pass.
+   - Not yet: configurable hotkey, auto mode (`mode = "auto"` falls back to suggest).
 5. ✅ Suggest bubble (layered window at caret) (2026-10-28, done before 4)
    - `Fixer::suggestion` judges the word being typed at `SUGGEST` thresholds; `Fixer::accept`
      applies it only if the text still ends with that word at a word boundary.
