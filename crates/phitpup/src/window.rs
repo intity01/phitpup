@@ -43,7 +43,8 @@ use windows_sys::Win32::UI::HiDpi::{
 };
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyState, TME_LEAVE, TRACKMOUSEEVENT, TrackMouseEvent, VK_CONTROL, VK_LCONTROL, VK_LMENU,
-    VK_LSHIFT, VK_LWIN, VK_MENU, VK_RCONTROL, VK_RMENU, VK_RSHIFT, VK_RWIN, VK_SHIFT,
+    VK_LSHIFT, VK_LWIN, VK_MENU, VK_RCONTROL, VK_RETURN, VK_RMENU, VK_RSHIFT, VK_RWIN, VK_SHIFT,
+    VK_SPACE, VK_TAB,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
@@ -486,6 +487,8 @@ struct Win {
     capture: Option<Which>,
     /// A message under the control that was just used.
     note: Option<String>,
+    /// What the keyboard focus ring is on (Tab moves it).
+    kb: Option<Hit>,
 }
 
 impl Win {
@@ -631,6 +634,7 @@ pub fn open() {
                 caret_on: true,
                 capture: None,
                 note: None,
+                kb: None,
             })
         });
         debug!("settings window opened");
@@ -1019,6 +1023,16 @@ fn build<'a>(win: &'a Win, c: &Config, dc: HDC) -> Builder<'a> {
     };
     b.bottom = bottom + 32.0;
     sidebar(&mut b, win.page);
+    // The keyboard focus ring, drawn in pen colour around the focused item.
+    if let Some(&(r, _)) = win.kb.and_then(|k| b.hits.iter().find(|&&(_, h)| h == k)) {
+        let p = b.pal;
+        b.shapes.push(Shape::Stroke {
+            r: R::new(r.x - 2.0, r.y - 2.0, r.w + 4.0, r.h + 4.0),
+            rad: 6.0,
+            width: 2.0,
+            c: p.accent,
+        });
+    }
     b
 }
 
@@ -2172,6 +2186,66 @@ fn running_programs() -> Vec<String> {
 
 /// Takes the pressed key as the new shortcut. Returns false to let Windows
 /// handle the key.
+/// Tab and Shift+Tab move a focus ring through everything that can be
+/// clicked (the pages first), Enter or Space click it, Esc hides the ring.
+/// `typing` is true while the Words box takes the keys.
+fn navigate(hwnd: HWND, vk: u16, typing: bool) -> bool {
+    // SAFETY: plain key-state query for this thread's input.
+    let shift = unsafe { GetKeyState(VK_SHIFT.into()) < 0 };
+    match vk {
+        VK_TAB => {
+            with(|w| {
+                let mut order: Vec<(R, Hit)> = Vec::new();
+                let nav = w.hits.iter().filter(|(_, h)| matches!(h, Hit::Nav(_)));
+                let rest = w.hits.iter().filter(|(_, h)| !matches!(h, Hit::Nav(_)));
+                for &(r, h) in nav.chain(rest) {
+                    if !order.iter().any(|&(_, o)| o == h) {
+                        order.push((r, h));
+                    }
+                }
+                let n = order.len();
+                if n == 0 {
+                    return;
+                }
+                let at = w.kb.and_then(|k| order.iter().position(|&(_, h)| h == k));
+                let next = match (at, shift) {
+                    (None, false) => 0,
+                    (None, true) => n - 1,
+                    (Some(i), false) => (i + 1) % n,
+                    (Some(i), true) => (i + n - 1) % n,
+                };
+                let (r, h) = order[next];
+                w.kb = Some(h);
+                w.focus = h == Hit::Input;
+                // Bring it into view; the pages in the sidebar never scroll.
+                if !matches!(h, Hit::Nav(_)) {
+                    if r.y < 16.0 {
+                        w.scroll = (w.scroll - (16.0 - r.y)).max(0.0);
+                    } else if r.y + r.h > H - 16.0 {
+                        w.scroll = (w.scroll + r.y + r.h - (H - 16.0)).min(w.max_scroll);
+                    }
+                }
+            });
+            invalidate(hwnd);
+            true
+        }
+        VK_RETURN | VK_SPACE if !typing => match with(|w| w.kb).flatten() {
+            Some(h) => {
+                click(hwnd, Some(h));
+                with(|w| w.kb = Some(h));
+                invalidate(hwnd);
+                true
+            }
+            None => false,
+        },
+        VK_ESCAPE if with(|w| w.kb.take()).flatten().is_some() => {
+            invalidate(hwnd);
+            true
+        }
+        _ => false,
+    }
+}
+
 fn key_down(hwnd: HWND, vk: u16) -> bool {
     let Some((capture, focus)) = with(|w| (w.capture, w.focus && w.page == Page::Words)) else {
         return false;
@@ -2182,7 +2256,7 @@ fn key_down(hwnd: HWND, vk: u16) -> bool {
             invalidate(hwnd);
             return true;
         }
-        return false;
+        return navigate(hwnd, vk, focus);
     };
     let modifier = [
         VK_SHIFT,
@@ -2324,6 +2398,7 @@ unsafe extern "system" fn window_proc(
             let hit = with(|w| {
                 let p = mouse_at(lparam, w.scale());
                 w.mouse = Some(p);
+                w.kb = None; // the ring is for the keyboard
                 w.hit_at(p)
             })
             .flatten();
@@ -2473,6 +2548,7 @@ mod tests {
                         caret_on: true,
                         capture: (page == Page::Shortcuts).then_some(Which::Accept),
                         note: None,
+                        kb: (page == Page::General).then_some(Hit::Startup),
                     };
                     let s = dpi as f32 / 96.0;
                     let (w, h) = ((W * s).round() as i32, (H * s).round() as i32);
