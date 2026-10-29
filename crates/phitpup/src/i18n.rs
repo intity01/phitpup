@@ -76,6 +76,10 @@ fn thai_for(en: &str) -> Option<&'static str> {
         "Such as เเม่ → แม่, ทํา → ทำ, ก่ี → กี่. Tab accepts." => {
             "เช่น เเม่ → แม่, ทํา → ทำ, ก่ี → กี่ กด Tab เพื่อแก้"
         }
+        "Fix Caps Lock slips and doubled words" => "แก้ตอนลืมปิด Caps Lock และคำที่พิมพ์ซ้ำ",
+        "Such as hELLO \u{2192} Hello and the the \u{2192} the." => {
+            "เช่น hELLO \u{2192} Hello และ the the \u{2192} the"
+        }
         "Start with Windows" => "เปิดพร้อม Windows",
         "Run PhitPup when you sign in." => "เปิดผิดปุ๊บเมื่อเข้าสู่ระบบ",
         "Turn off in full-screen windows" => "ปิดในหน้าต่างเต็มจอ",

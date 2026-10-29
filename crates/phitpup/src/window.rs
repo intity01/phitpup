@@ -203,6 +203,7 @@ enum Hit {
     DoubleShift,
     Underline,
     Spelling,
+    Typos,
     Updates,
     Report,
     AddProgram,
@@ -1196,6 +1197,18 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
     b.toggle(cy, c.spelling, hovered);
     y += 72.0;
 
+    let (cy, hovered) = b.row(
+        y,
+        68.0,
+        68.0,
+        Some(G_EDIT),
+        t("Fix Caps Lock slips and doubled words"),
+        t("Such as hELLO \u{2192} Hello and the the \u{2192} the."),
+        Some(Hit::Typos),
+    );
+    b.toggle(cy, c.typos, hovered);
+    y += 72.0;
+
     let startup = settings::starts_with_windows();
     let (cy, hovered) = b.row(
         y,
@@ -2024,6 +2037,7 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
         Hit::Mode(mode) => edit(|c| c.mode = mode),
         Hit::Underline => edit(|c| c.underline = !c.underline),
         Hit::Spelling => edit(|c| c.spelling = !c.spelling),
+        Hit::Typos => edit(|c| c.typos = !c.typos),
         Hit::DoubleShift => edit(|c| c.double_shift = !c.double_shift),
         Hit::Startup => settings::set_start_with_windows(!settings::starts_with_windows()),
         Hit::Fullscreen => edit(|c| c.off_in_fullscreen = !c.off_in_fullscreen),

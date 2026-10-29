@@ -16,9 +16,10 @@ pub mod icon;
 pub mod layouts;
 pub mod model;
 pub mod thai;
+pub mod typo;
 pub mod update;
 
 pub use convert::Converter;
 pub use detect::{Detector, Direction, Thresholds, Verdict};
-pub use fix::{Edit, Fixer, Suggestion};
+pub use fix::{Edit, Fixer, Kind, Suggestion};
 pub use layouts::{Key, Layout};

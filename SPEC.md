@@ -213,5 +213,19 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
    - Wrong-layout fixes come first; Tab accepts, auto mode fixes on Space, Shift+Backspace right
      after undoes it and keeps the Thai layout (and stops suggesting that word). Not on the hotkey.
 
+14. Thai interface, keyboard, typos, reports (2026-10-29)
+   - The settings window, tray menu, balloons and messages follow the Windows display language
+     (`i18n.rs`, English text as the key; `PHITPUP_LANG=th|en` overrides). Paragraphs wrap at
+     Uniscribe word breaks so Thai does not break mid-word.
+   - Settings window keyboard: Tab / Shift+Tab move a pen-coloured focus ring (pages first),
+     Enter or Space click, Esc hides it.
+   - `typos = true` (General page): Caps Lock slips (hELLO → Hello, badge Aa; suggest and auto)
+     and the same Latin word twice (the the → the, badge ×2; suggest only, not for Thai, a short
+     list of words that are fine twice is skipped).
+   - About page "Report a problem": copies version, Windows build, layouts and settings (word
+     lists as counts) and opens a new GitHub issue. After an update a balloon links to
+     `changes.html`; the last version run is kept in `%APPDATA%\PhitPup\last-version`.
+   - Website: `changes.html` (every version) and `privacy.html`.
+
 ## Environment (checked 2026-10-28)
 rustc/cargo 1.96, rustup 1.29, Visual Studio Community 2026 (MSVC), git 2.54, gh 2.102, node 26.3.

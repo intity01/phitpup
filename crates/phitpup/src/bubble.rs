@@ -293,10 +293,13 @@ fn current() -> Option<(String, String, &'static str)> {
 }
 
 fn badge(s: &phitpup_core::Suggestion) -> &'static str {
-    match (s.spelling, s.edit.switch_to) {
-        (true, _) => "สะกด",
-        (false, Lang::Thai) => "TH",
-        (false, Lang::English) => "EN",
+    use phitpup_core::Kind;
+    match (s.kind, s.edit.switch_to) {
+        (Kind::Layout, Lang::Thai) => "TH",
+        (Kind::Layout, Lang::English) => "EN",
+        (Kind::Spelling, _) => "สะกด",
+        (Kind::Caps, _) => "Aa",
+        (Kind::Doubled, _) => "\u{00D7}2",
     }
 }
 
@@ -851,6 +854,8 @@ mod tests {
                     ("สวัสดี", "TH", "th"),
                     ("hello", "EN", "en"),
                     ("แม่", "สะกด", "spelling"),
+                    ("Hello", "Aa", "caps"),
+                    ("the", "×2", "doubled"),
                 ] {
                     let look = Look {
                         word: word.into(),

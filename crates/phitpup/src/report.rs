@@ -117,9 +117,10 @@ pub fn details() -> String {
         line(
             "Switches",
             format!(
-                "underline {}, spelling {}, double Shift {}, learn {}, off in full screen {}, update reminder {}",
+                "underline {}, spelling {}, typos {}, double Shift {}, learn {}, off in full screen {}, update reminder {}",
                 c.underline,
                 c.spelling,
+                c.typos,
                 c.double_shift,
                 c.learn,
                 c.off_in_fullscreen,

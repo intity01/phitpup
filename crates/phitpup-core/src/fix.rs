@@ -24,7 +24,7 @@
 //! [`auto`](Fixer::auto) are fixed whatever the detector thinks.
 
 use crate::model::Lang;
-use crate::{Detector, Direction, Thresholds, thai};
+use crate::{Detector, Direction, Thresholds, thai, typo};
 
 /// Characters remembered before the caret. Older ones are forgotten.
 pub const MAX_CHARS: usize = 300;
@@ -40,15 +40,27 @@ pub struct Edit {
     pub switch_to: Lang,
 }
 
+/// What kind of slip a suggestion fixes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    /// Typed with the wrong keyboard layout.
+    Layout,
+    /// Thai in an order that looks right but is not ([`thai::respell`]).
+    Spelling,
+    /// Caps Lock left on ([`typo::caps`]).
+    Caps,
+    /// The same word twice ([`typo::doubled`]); `word` holds both.
+    Doubled,
+}
+
 /// A fix offered for the word being typed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Suggestion {
-    /// The word as typed, so a stale suggestion is never applied.
+    /// The word as typed (both copies for [`Kind::Doubled`]), so a stale
+    /// suggestion is never applied.
     pub word: String,
     pub edit: Edit,
-    /// Thai typed in the right layout but in the wrong order
-    /// ([`thai::respell`]), rather than typed in the wrong layout.
-    pub spelling: bool,
+    pub kind: Kind,
 }
 
 #[derive(Debug)]
@@ -69,13 +81,13 @@ struct Undo {
     back_to: Lang,
 }
 
-/// The layout to go back to when a fix is undone: the other one, or the
-/// same one for a spelling fix.
-fn back_to(edit: &Edit, spelling: bool) -> Lang {
-    match (edit.switch_to, spelling) {
-        (lang, true) => lang,
-        (Lang::Thai, false) => Lang::English,
-        (Lang::English, false) => Lang::Thai,
+/// The layout to go back to when a fix is undone: the other one for a
+/// layout fix, the same one otherwise.
+fn back_to(edit: &Edit, kind: Kind) -> Lang {
+    match (edit.switch_to, kind) {
+        (Lang::Thai, Kind::Layout) => Lang::English,
+        (Lang::English, Kind::Layout) => Lang::Thai,
+        (lang, _) => lang,
     }
 }
 
@@ -90,6 +102,9 @@ pub struct Fixer {
     rejected: Option<String>,
     /// Also offer [`thai::respell`] fixes (suggest and auto mode).
     pub spelling: bool,
+    /// Also offer [`typo`] fixes: Caps Lock slips (suggest and auto mode)
+    /// and doubled words (suggest mode only).
+    pub typos: bool,
 }
 
 impl Fixer {
@@ -166,19 +181,39 @@ impl Fixer {
                     switch_to: target(direction),
                 },
                 word,
-                spelling: false,
+                kind: Kind::Layout,
             });
         }
-        let respelled = thai::respell(&word).filter(|_| self.spelling)?;
+        if let Some((insert, switch_to, kind)) = self.other_slip(&word) {
+            return Some(Suggestion {
+                edit: Edit {
+                    delete,
+                    insert,
+                    switch_to,
+                },
+                word,
+                kind,
+            });
+        }
+        let (n, insert) = typo::doubled(&self.buf).filter(|_| self.typos)?;
         Some(Suggestion {
+            word: self.buf[self.buf.len() - n..].iter().collect(),
             edit: Edit {
-                delete,
-                insert: respelled,
-                switch_to: Lang::Thai,
+                delete: n,
+                insert,
+                switch_to: Lang::English,
             },
-            word,
-            spelling: true,
+            kind: Kind::Doubled,
         })
+    }
+
+    /// A Thai spelling or Caps Lock fix for `word`, if those are on.
+    fn other_slip(&self, word: &str) -> Option<(String, Lang, Kind)> {
+        if let Some(fixed) = thai::respell(word).filter(|_| self.spelling) {
+            return Some((fixed, Lang::Thai, Kind::Spelling));
+        }
+        let fixed = typo::caps(word).filter(|_| self.typos)?;
+        Some((fixed, Lang::English, Kind::Caps))
     }
 
     /// Applies an accepted suggestion. Returns `None` if the text before the
@@ -195,7 +230,7 @@ impl Fixer {
         self.undo = Some(Undo {
             original: self.buf.clone(),
             start,
-            back_to: back_to(&s.edit, s.spelling),
+            back_to: back_to(&s.edit, s.kind),
         });
         self.buf.truncate(start);
         self.buf.extend(s.edit.insert.chars());
@@ -226,12 +261,12 @@ impl Fixer {
             }
             if let Some((direction, converted)) = judge(detector, &word, Thresholds::AUTO, learned)
             {
-                return Some((start, converted, target(direction), false));
+                return Some((start, converted, target(direction), Kind::Layout));
             }
-            let respelled = thai::respell(&word).filter(|_| self.spelling)?;
-            Some((start, respelled, Lang::Thai, true))
+            let (fixed, lang, kind) = self.other_slip(&word)?;
+            Some((start, fixed, lang, kind))
         })();
-        let Some((start, converted, switch_to, spelling)) = fix else {
+        let Some((start, converted, switch_to, kind)) = fix else {
             self.typed(sep);
             return None;
         };
@@ -252,7 +287,7 @@ impl Fixer {
         self.undo = Some(Undo {
             original,
             start,
-            back_to: back_to(&edit, spelling),
+            back_to: back_to(&edit, kind),
         });
         Some(edit)
     }
@@ -681,7 +716,7 @@ mod tests {
         assert_eq!(f.suggestion(&d, &[]), None, "off by default");
         f.spelling = true;
         let s = f.suggestion(&d, &[]).unwrap();
-        assert!(s.spelling);
+        assert_eq!(s.kind, Kind::Spelling);
         assert_eq!(s.edit.insert, "แม่");
         apply(&mut screen, &f.accept(&s).unwrap());
         assert_eq!(screen, "ไป แม่");
@@ -703,6 +738,39 @@ mod tests {
         assert_eq!(e.insert, "ทำงาน ");
         assert_eq!(e.switch_to, Lang::Thai);
         assert_eq!(f.text(), "ทำงาน ");
+    }
+
+    #[test]
+    fn caps_lock_slip_is_fixed_and_doubled_word_offered() {
+        let d = det();
+        let mut f = Fixer::new();
+        f.typos = true;
+        let mut screen = String::from("say hELLO");
+        f.typed(&screen);
+        let s = f.suggestion(&d, &[]).unwrap();
+        assert_eq!((s.kind, s.edit.insert.as_str()), (Kind::Caps, "Hello"));
+        apply(&mut screen, &f.accept(&s).unwrap());
+        assert_eq!(screen, "say Hello");
+
+        let mut f = Fixer::new();
+        f.typos = true;
+        let mut screen = String::from("I saw the the");
+        f.typed(&screen);
+        let s = f.suggestion(&d, &[]).unwrap();
+        assert_eq!(s.kind, Kind::Doubled);
+        apply(&mut screen, &f.accept(&s).unwrap());
+        assert_eq!(screen, "I saw the");
+        let e = f.hotkey(&d).unwrap();
+        apply(&mut screen, &e);
+        assert_eq!(screen, "I saw the the", "undo");
+        assert_eq!(e.switch_to, Lang::English);
+
+        // Off unless asked for, and never automatic for doubled words.
+        let mut f = Fixer::new();
+        f.typed("the the");
+        assert_eq!(f.suggestion(&d, &[]), None);
+        f.typos = true;
+        assert_eq!(f.auto(&d, " ", |_| false, &[]), None);
     }
 
     #[test]
