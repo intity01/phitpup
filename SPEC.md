@@ -172,6 +172,15 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
      by the word's length, stepped until `GetText` matches the word exactly (apps count Thai
      marks differently). No match or no text pattern → the bubble shows instead.
    - Redrawn on every suggestion change; it does not follow scrolling between keys.
+10. Settings sidebar, double Shift, update reminder (2026-10-29)
+   - Sidebar pages are wide tiles, icon over label; the current one is tinted coral. The Words
+     tile is ก with a text cursor.
+   - `double_shift` (Shortcuts page): two quick Shift taps (each under 250 ms, at most 400 ms
+     apart, no other key between) fix like the hotkey, but never fall back to a Backspace.
+   - `remind_updates` (About page, on by default): once the build is 60 days old, a tray balloon
+     at most every 30 days; clicking it opens the latest release. The build time comes from
+     `build.rs`; the last reminder date is kept in `%APPDATA%\PhitPup\update-reminder`. Still
+     no networking code.
 
 ## Environment (checked 2026-10-28)
 rustc/cargo 1.96, rustup 1.29, Visual Studio Community 2026 (MSVC), git 2.54, gh 2.102, node 26.3.
