@@ -54,6 +54,11 @@ pub struct Config {
     /// Also offer to fix a word typed with Caps Lock left on (hELLO) and
     /// the same word typed twice (the the).
     pub typos: bool,
+    /// Also offer the common Thai word a slip of the finger turned into
+    /// something else (ส้วสดี for สวัสดี). Suggested only, never automatic.
+    pub slips: bool,
+    /// Show the bubble above the line instead of under the caret.
+    pub bubble_above: bool,
     /// Tapping Shift twice also fixes the last word.
     pub double_shift: bool,
     /// A tray reminder to look for a new version once this one is old.
@@ -77,6 +82,8 @@ impl Default for Config {
             underline: false,
             spelling: true,
             typos: true,
+            slips: true,
+            bubble_above: false,
             double_shift: false,
             remind_updates: true,
             hotkey: Hotkey::FIX,
@@ -107,6 +114,15 @@ spelling = true
 # Also offer to fix a word typed with Caps Lock left on (hELLO -> Hello)
 # and the same word typed twice (the the -> the).
 typos = true
+
+# Also offer the common Thai word that a slip of the finger turned into
+# something else (a key next to the right one, two keys swapped, one too many
+# or one missing: ส้วสดี -> สวัสดี). Suggested only, never fixed by itself.
+slips = true
+
+# Show the bubble above the line, so it does not cover lists that open under
+# the text (search suggestions, the address bar).
+bubble_above = false
 
 # Turn PhitPup off in windows that cover the whole screen (games, videos).
 off_in_fullscreen = true
@@ -177,6 +193,8 @@ impl Config {
                 "underline" => boolean(value).map(|b| c.underline = b),
                 "spelling" => boolean(value).map(|b| c.spelling = b),
                 "typos" => boolean(value).map(|b| c.typos = b),
+                "slips" => boolean(value).map(|b| c.slips = b),
+                "bubble_above" => boolean(value).map(|b| c.bubble_above = b),
                 "double_shift" => boolean(value).map(|b| c.double_shift = b),
                 "remind_updates" => boolean(value).map(|b| c.remind_updates = b),
                 "hotkey" => shortcut(value).map(|k| c.hotkey = k),
@@ -210,6 +228,8 @@ impl Config {
         t = set(&t, "underline", &self.underline.to_string());
         t = set(&t, "spelling", &self.spelling.to_string());
         t = set(&t, "typos", &self.typos.to_string());
+        t = set(&t, "slips", &self.slips.to_string());
+        t = set(&t, "bubble_above", &self.bubble_above.to_string());
         t = set(&t, "off_in_fullscreen", &self.off_in_fullscreen.to_string());
         t = set(&t, "off_apps", &array(&self.off_apps));
         t = set(&t, "quiet_apps", &array(&self.quiet_apps));
@@ -385,6 +405,8 @@ accept_key = \"shift+backspace\"",
             underline: true,
             spelling: false,
             typos: false,
+            slips: false,
+            bubble_above: true,
             double_shift: true,
             remind_updates: false,
             hotkey: Hotkey::parse("ctrl+backslash").unwrap(),

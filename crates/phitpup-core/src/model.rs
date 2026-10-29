@@ -103,6 +103,12 @@ impl LangModel {
         self.lexicon.len()
     }
 
+    /// The lexicon: each word with −log2 of its frequency in 1/[`SCALE`]
+    /// bit.
+    pub fn lexicon(&self) -> impl Iterator<Item = (&str, u16)> {
+        self.lexicon.iter().map(|(w, &c)| (w.as_str(), c))
+    }
+
     fn normalize(&self, word: &str) -> String {
         match self.lang {
             Lang::Thai => word.to_owned(),

@@ -204,6 +204,8 @@ enum Hit {
     Underline,
     Spelling,
     Typos,
+    Slips,
+    BubbleAbove,
     Updates,
     Report,
     AddProgram,
@@ -1189,6 +1191,18 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
         y,
         68.0,
         68.0,
+        Some(G_EDIT),
+        t("Show the bubble above the line"),
+        t("So it does not cover lists that open under the text, like search suggestions."),
+        Some(Hit::BubbleAbove),
+    );
+    b.toggle(cy, c.bubble_above, hovered);
+    y += 72.0;
+
+    let (cy, hovered) = b.row(
+        y,
+        68.0,
+        68.0,
         Some(G_FONT),
         t("Fix Thai typed in the wrong order"),
         t("Such as เเม่ → แม่, ทํา → ทำ, ก่ี → กี่. Tab accepts."),
@@ -1207,6 +1221,18 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
         Some(Hit::Typos),
     );
     b.toggle(cy, c.typos, hovered);
+    y += 72.0;
+
+    let (cy, hovered) = b.row(
+        y,
+        68.0,
+        68.0,
+        Some(G_EDIT),
+        t("Suggest Thai words typed with a slip"),
+        t("Such as \u{0E2A}\u{0E49}\u{0E27}\u{0E2A}\u{0E14}\u{0E35} \u{2192} \u{0E2A}\u{0E27}\u{0E31}\u{0E2A}\u{0E14}\u{0E35}. Only suggested, never fixed by itself."),
+        Some(Hit::Slips),
+    );
+    b.toggle(cy, c.slips, hovered);
     y += 72.0;
 
     let startup = settings::starts_with_windows();
@@ -2038,6 +2064,8 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
         Hit::Underline => edit(|c| c.underline = !c.underline),
         Hit::Spelling => edit(|c| c.spelling = !c.spelling),
         Hit::Typos => edit(|c| c.typos = !c.typos),
+        Hit::Slips => edit(|c| c.slips = !c.slips),
+        Hit::BubbleAbove => edit(|c| c.bubble_above = !c.bubble_above),
         Hit::DoubleShift => edit(|c| c.double_shift = !c.double_shift),
         Hit::Startup => settings::set_start_with_windows(!settings::starts_with_windows()),
         Hit::Fullscreen => edit(|c| c.off_in_fullscreen = !c.off_in_fullscreen),
@@ -2562,6 +2590,11 @@ mod tests {
             )),
             _ => {}
         }
+        // PHITPUP_PREVIEW_SCROLL=<pixels> scrolls each page down.
+        let scroll = std::env::var("PHITPUP_PREVIEW_SCROLL")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0.0);
         for dark in [false, true] {
             for dpi in [96, 144] {
                 for (page, _, name) in PAGES {
@@ -2574,7 +2607,7 @@ mod tests {
                         page,
                         mouse: Some((400.0, 120.0)),
                         tracking: false,
-                        scroll: 0.0,
+                        scroll,
                         max_scroll: 0.0,
                         hits: Vec::new(),
                         input: None,

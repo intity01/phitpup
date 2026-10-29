@@ -300,7 +300,13 @@ fn badge(s: &phitpup_core::Suggestion) -> &'static str {
         (Kind::Spelling, _) => "สะกด",
         (Kind::Caps, _) => "Aa",
         (Kind::Doubled, _) => "\u{00D7}2",
+        (Kind::Slip, _) => "สะกด",
     }
+}
+
+fn above_line() -> bool {
+    APP.get()
+        .is_some_and(|a| a.config.lock().unwrap().bubble_above)
 }
 
 fn underline_on() -> bool {
@@ -340,8 +346,14 @@ fn settle() {
         return hide();
     };
     if underline_on() {
+        let asked = Instant::now();
         let rects =
             AUTOMATION.with(|a| a.as_ref().map(|a| a.word_rects(&typed)).unwrap_or_default());
+        debug!(
+            "underline: the app said where the word is in {} ms ({} lines)",
+            asked.elapsed().as_millis(),
+            rects.len()
+        );
         if !rects.is_empty() {
             let dpi = monitor_of(POINT {
                 x: rects[0].left,
@@ -416,22 +428,31 @@ fn show(word: String, badge: &'static str) {
         }
         let card = b.image.as_ref().unwrap().card;
 
-        // Line the badge up with the caret, card just under it; above it if
-        // there is no room below.
+        // Line the badge up with the caret, card just under it, or above
+        // the line if so set; the other side when there is no room.
         let gap = (4.0 * scale) as i32;
         let x = (anchor.x - card.left).clamp(
             work.left - card.left,
             (work.right - card.right).max(work.left - card.left),
         );
-        let mut y = anchor.y + gap - card.top;
-        if y + card.bottom > work.bottom {
-            y = anchor.y - caret_h - gap - card.bottom;
-        }
+        let below = anchor.y + gap - card.top;
+        let above = anchor.y - caret_h - gap - card.bottom;
+        let y = if above_line() {
+            if above + card.top >= work.top {
+                above
+            } else {
+                below
+            }
+        } else if below + card.bottom <= work.bottom {
+            below
+        } else {
+            above
+        };
 
         let now = Instant::now();
         if !b.visible {
-            // Fade in, sliding up into place.
-            let slide = SLIDE_PX * scale;
+            // Fade in, sliding into place away from the line.
+            let slide = if y < anchor.y { -SLIDE_PX } else { SLIDE_PX } * scale;
             let from_alpha = if b.on_screen { b.alpha.at(now) } else { 0.0 };
             b.x = Tween::still(x as f32);
             b.y = Tween {

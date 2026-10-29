@@ -140,11 +140,11 @@ fn refresh(app: &App, quiet: bool) {
         (
             c.ignore_words.clone(),
             c.learned_words.clone(),
-            (c.spelling, c.typos),
+            (c.spelling, c.typos, c.slips),
         )
     };
     let mut fixer = app.fixer.lock().unwrap();
-    (fixer.spelling, fixer.typos) = extras;
+    (fixer.spelling, fixer.typos, fixer.slips) = extras;
     let s = fixer
         .suggestion(&app.detector, &learned)
         .filter(|s| !ignored.contains(&s.word.to_lowercase()));
@@ -285,12 +285,12 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
                 (
                     c.ignore_words.clone(),
                     c.learned_words.clone(),
-                    (c.spelling, c.typos),
+                    (c.spelling, c.typos, c.slips),
                 )
             };
             let skip = |w: &str| ignored.contains(&w.to_lowercase());
             let mut fixer = app.fixer.lock().unwrap();
-            (fixer.spelling, fixer.typos) = extras;
+            (fixer.spelling, fixer.typos, fixer.slips) = extras;
             fixer.auto(&app.detector, " ", skip, &learned)
         };
         set_suggestion(app, None);

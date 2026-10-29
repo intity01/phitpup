@@ -24,7 +24,7 @@
 //! [`auto`](Fixer::auto) are fixed whatever the detector thinks.
 
 use crate::model::Lang;
-use crate::{Detector, Direction, Thresholds, thai, typo};
+use crate::{Detector, Direction, Thresholds, near, thai, typo};
 
 /// Characters remembered before the caret. Older ones are forgotten.
 pub const MAX_CHARS: usize = 300;
@@ -51,6 +51,8 @@ pub enum Kind {
     Caps,
     /// The same word twice ([`typo::doubled`]); `word` holds both.
     Doubled,
+    /// A Thai word with a slip of the finger in it ([`near::Near`]).
+    Slip,
 }
 
 /// A fix offered for the word being typed.
@@ -105,6 +107,8 @@ pub struct Fixer {
     /// Also offer [`typo`] fixes: Caps Lock slips (suggest and auto mode)
     /// and doubled words (suggest mode only).
     pub typos: bool,
+    /// Also offer [`near`] fixes (suggest mode only).
+    pub slips: bool,
 }
 
 impl Fixer {
@@ -193,6 +197,17 @@ impl Fixer {
                 },
                 word,
                 kind,
+            });
+        }
+        if let Some((n, insert)) = near::Near::embedded().fix(&word).filter(|_| self.slips) {
+            return Some(Suggestion {
+                word: self.buf[self.buf.len() - n..].iter().collect(),
+                edit: Edit {
+                    delete: n,
+                    insert,
+                    switch_to: Lang::Thai,
+                },
+                kind: Kind::Slip,
             });
         }
         let (n, insert) = typo::doubled(&self.buf).filter(|_| self.typos)?;
@@ -771,6 +786,26 @@ mod tests {
         assert_eq!(f.suggestion(&d, &[]), None);
         f.typos = true;
         assert_eq!(f.auto(&d, " ", |_| false, &[]), None);
+    }
+
+    #[test]
+    fn thai_slip_is_offered_but_never_automatic() {
+        let d = det();
+        let mut f = Fixer::new();
+        f.slips = true;
+        let mut screen = String::from("วันนี้ ส้วสดี");
+        f.typed(&screen);
+        let s = f.suggestion(&d, &[]).unwrap();
+        assert_eq!((s.kind, s.word.as_str()), (Kind::Slip, "ส้วสดี"));
+        apply(&mut screen, &f.accept(&s).unwrap());
+        assert_eq!(screen, "วันนี้ สวัสดี");
+
+        let mut f = Fixer::new();
+        f.slips = true;
+        f.typed("ส้วสดี");
+        assert_eq!(f.auto(&d, " ", |_| false, &[]), None);
+        f.slips = false;
+        assert_eq!(f.suggestion(&d, &[]), None);
     }
 
     #[test]

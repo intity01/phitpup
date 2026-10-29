@@ -15,6 +15,7 @@ pub mod hotkey;
 pub mod icon;
 pub mod layouts;
 pub mod model;
+pub mod near;
 pub mod thai;
 pub mod typo;
 pub mod update;

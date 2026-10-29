@@ -80,6 +80,14 @@ fn thai_for(en: &str) -> Option<&'static str> {
         "Such as hELLO \u{2192} Hello and the the \u{2192} the." => {
             "เช่น hELLO \u{2192} Hello และ the the \u{2192} the"
         }
+        "Suggest Thai words typed with a slip" => "เสนอคำไทยที่พิมพ์พลาด",
+        "Such as \u{0E2A}\u{0E49}\u{0E27}\u{0E2A}\u{0E14}\u{0E35} \u{2192} \u{0E2A}\u{0E27}\u{0E31}\u{0E2A}\u{0E14}\u{0E35}. Only suggested, never fixed by itself." => {
+            "เช่น ส้วสดี \u{2192} สวัสดี เสนอให้เท่านั้น ไม่แก้เอง"
+        }
+        "Show the bubble above the line" => "แสดงฟองเหนือบรรทัด",
+        "So it does not cover lists that open under the text, like search suggestions." => {
+            "ไม่บังรายการที่เด้งใต้ช่องพิมพ์ เช่น คำค้นที่แนะนำ"
+        }
         "Start with Windows" => "เปิดพร้อม Windows",
         "Run PhitPup when you sign in." => "เปิดผิดปุ๊บเมื่อเข้าสู่ระบบ",
         "Turn off in full-screen windows" => "ปิดในหน้าต่างเต็มจอ",
