@@ -165,6 +165,13 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
    - `learn = true` turns it on (default); the Words page has the switch and both lists.
    - About page: "Check for updates" opens the latest release in the browser. The app itself
      still has no networking code.
+9. Underline instead of the bubble (2026-10-29, not yet tried live)
+   - `underline = true` (General page switch): a wavy coral line under the word, click-through,
+     on the worker thread (`underline.rs`). The accept key and Esc work as with the bubble.
+   - The word's rectangles come from UI Automation: the caret range with its start moved back
+     by the word's length, stepped until `GetText` matches the word exactly (apps count Thai
+     marks differently). No match or no text pattern → the bubble shows instead.
+   - Redrawn on every suggestion change; it does not follow scrolling between keys.
 
 ## Environment (checked 2026-10-28)
 rustc/cargo 1.96, rustup 1.29, Visual Studio Community 2026 (MSVC), git 2.54, gh 2.102, node 26.3.

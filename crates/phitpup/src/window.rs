@@ -81,6 +81,7 @@ const G_FULLSCREEN: char = '\u{E740}';
 const G_FILE: char = '\u{E8A7}';
 const G_BULB: char = '\u{EA80}';
 const G_EDIT: char = '\u{E70F}';
+const G_UNDERLINE: char = '\u{E8DC}';
 const G_UPDATE: char = '\u{E895}';
 const G_INFO: char = '\u{E946}';
 const G_PERSON: char = '\u{E77B}';
@@ -200,6 +201,7 @@ enum Hit {
     Startup,
     Fullscreen,
     OpenFile,
+    Underline,
     Updates,
     AddProgram,
     /// Program `i` of [`programs`]: off (true) or no bubble (false).
@@ -1051,6 +1053,18 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
     }
     y += h + 4.0;
 
+    let (cy, hovered) = b.row(
+        y,
+        68.0,
+        68.0,
+        Some(G_UNDERLINE),
+        "Underline the word instead of a bubble",
+        "Falls back to the bubble where an app cannot show it.",
+        Some(Hit::Underline),
+    );
+    b.toggle(cy, c.underline, hovered);
+    y += 72.0;
+
     let startup = settings::starts_with_windows();
     let (cy, hovered) = b.row(
         y,
@@ -1720,6 +1734,7 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
         }
         Hit::On => tray::toggle_pause(),
         Hit::Mode(mode) => edit(|c| c.mode = mode),
+        Hit::Underline => edit(|c| c.underline = !c.underline),
         Hit::Startup => settings::set_start_with_windows(!settings::starts_with_windows()),
         Hit::Fullscreen => edit(|c| c.off_in_fullscreen = !c.off_in_fullscreen),
         Hit::OpenFile => settings::open_file(),

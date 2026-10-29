@@ -14,11 +14,12 @@
 //! | IUIAutomationTextPattern2 | 10 | GetCaretRange |
 //! | IUIAutomationTextRange | 3 | Clone |
 //! | IUIAutomationTextRange | 10 | GetBoundingRectangles |
+//! | IUIAutomationTextRange | 12 | GetText |
 //! | IUIAutomationTextRange | 14 | MoveEndpointByUnit |
 
 use std::ffi::c_void;
 
-use windows_sys::Win32::Foundation::RECT;
+use windows_sys::Win32::Foundation::{RECT, SysFreeString, SysStringLen};
 use windows_sys::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, SAFEARRAY,
 };
@@ -26,7 +27,7 @@ use windows_sys::Win32::System::Ole::{
     SafeArrayAccessData, SafeArrayDestroy, SafeArrayGetLBound, SafeArrayGetUBound,
     SafeArrayUnaccessData,
 };
-use windows_sys::core::{GUID, HRESULT};
+use windows_sys::core::{BSTR, GUID, HRESULT};
 
 type Raw = *mut c_void;
 
@@ -111,6 +112,50 @@ impl Automation {
 
     /// The caret of the focused text field, in screen pixels.
     pub fn caret(&self) -> Option<RECT> {
+        let range = self.caret_range()?;
+        if let Some(r) = rects(&range).first() {
+            return Some(edge(r, false));
+        }
+        // An empty range often has no rectangle; take the character before
+        // the caret and use its right edge.
+        let before = range.get(3)?;
+        move_start(&before, -1);
+        rects(&before).last().map(|r| edge(r, true))
+    }
+
+    /// Where `word`, typed just before the caret, is drawn: one rectangle
+    /// per line, in screen pixels. Empty if the app cannot say, or if the
+    /// text there is not `word`.
+    pub fn word_rects(&self, word: &str) -> Vec<RECT> {
+        let Some(range) = self.caret_range().and_then(|r| r.get(3)) else {
+            return Vec::new();
+        };
+        let n = word.chars().count() as i32;
+        move_start(&range, -n);
+        // Apps count characters differently (a Thai vowel or tone mark can be
+        // a character of its own or part of the one before), so step the
+        // start until the range holds exactly `word`.
+        for _ in 0..=n {
+            let Some(text) = text(&range) else { break };
+            if text == word {
+                return rects(&range).iter().map(rect).collect();
+            }
+            let step = if text.ends_with(word) {
+                1 // took too much
+            } else if word.ends_with(text.as_str()) {
+                -1 // took too little
+            } else {
+                break;
+            };
+            if move_start(&range, step) == 0 {
+                break;
+            }
+        }
+        Vec::new()
+    }
+
+    /// The (usually empty) range at the caret of the focused text field.
+    fn caret_range(&self) -> Option<Com> {
         let el = self.focused()?;
         let mut tp: Raw = std::ptr::null_mut();
         // SAFETY: slot 14 is GetCurrentPatternAs(this, id, riid, *mut Raw).
@@ -136,28 +181,54 @@ impl Automation {
                 &mut range,
             )
         };
-        if hr < 0 || range.is_null() {
+        (hr >= 0 && !range.is_null()).then_some(Com(range))
+    }
+}
+
+/// Moves the start of `range` by `count` characters; returns how far it
+/// actually moved.
+fn move_start(range: &Com, count: i32) -> i32 {
+    let mut moved = 0i32;
+    // SAFETY: slot 14 is MoveEndpointByUnit(this, endpoint, unit, count, *mut i32).
+    unsafe {
+        range.slot::<unsafe extern "system" fn(Raw, i32, i32, i32, *mut i32) -> HRESULT>(14)(
+            range.0,
+            ENDPOINT_START,
+            UNIT_CHARACTER,
+            count,
+            &mut moved,
+        )
+    };
+    moved
+}
+
+/// The text in `range`.
+fn text(range: &Com) -> Option<String> {
+    let mut s: BSTR = std::ptr::null();
+    // SAFETY: slot 12 is GetText(this, maxLength, *mut BSTR); the string is
+    // copied and then freed.
+    unsafe {
+        let hr = range.slot::<unsafe extern "system" fn(Raw, i32, *mut BSTR) -> HRESULT>(12)(
+            range.0, 64, &mut s,
+        );
+        if hr < 0 || s.is_null() {
             return None;
         }
-        let range = Com(range);
-        if let Some(r) = rects(&range).first() {
-            return Some(edge(r, false));
-        }
-        // An empty range often has no rectangle; take the character before
-        // the caret and use its right edge.
-        let before = range.get(3)?;
-        let mut moved = 0i32;
-        // SAFETY: slot 14 is MoveEndpointByUnit(this, endpoint, unit, count, *mut i32).
-        unsafe {
-            before.slot::<unsafe extern "system" fn(Raw, i32, i32, i32, *mut i32) -> HRESULT>(14)(
-                before.0,
-                ENDPOINT_START,
-                UNIT_CHARACTER,
-                -1,
-                &mut moved,
-            )
-        };
-        rects(&before).last().map(|r| edge(r, true))
+        let units = std::slice::from_raw_parts(s, SysStringLen(s) as usize);
+        let text = String::from_utf16_lossy(units);
+        SysFreeString(s);
+        Some(text)
+    }
+}
+
+/// [left, top, width, height] as a RECT.
+fn rect(r: &[f64; 4]) -> RECT {
+    let [left, top, width, height] = r.map(|v| v.round() as i32);
+    RECT {
+        left,
+        top,
+        right: left + width,
+        bottom: top + height,
     }
 }
 

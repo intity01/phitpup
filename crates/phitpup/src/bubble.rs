@@ -12,6 +12,9 @@
 //! instead of jumping with every key. It waits for a short pause in typing
 //! before first appearing, so fast typing does not make it flicker.
 //!
+//! With `underline = true` the suggestion is a wavy line under the word
+//! instead (see [`underline`]), wherever the app says where the word is.
+//!
 //! It lives on the worker thread; the hook posts
 //! [`WM_BUBBLE`](crate::WM_BUBBLE) whenever the suggestion changes.
 
@@ -40,7 +43,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 
-use crate::{APP, uia};
+use crate::{APP, uia, underline};
 
 /// Waits for the suggestion to settle before acting on it.
 const SETTLE: usize = 1;
@@ -276,14 +279,20 @@ pub fn create() {
     });
 }
 
-fn current() -> Option<(String, Lang)> {
+/// The word as typed, its fix and the layout the fix switches to.
+fn current() -> Option<(String, String, Lang)> {
     APP.get().and_then(|app| {
         app.suggestion
             .lock()
             .unwrap()
             .as_ref()
-            .map(|s| (s.edit.insert.clone(), s.edit.switch_to))
+            .map(|s| (s.word.clone(), s.edit.insert.clone(), s.edit.switch_to))
     })
+}
+
+fn underline_on() -> bool {
+    APP.get()
+        .is_some_and(|a| a.config.lock().unwrap().underline)
 }
 
 /// The suggestion changed: act on it once it settles.
@@ -303,6 +312,7 @@ pub fn schedule() {
 
 /// Fades the bubble out now (a suggestion was accepted).
 pub fn hide() {
+    underline::hide();
     BUBBLE.with_borrow_mut(|b| {
         if let Some(b) = b {
             // SAFETY: our own window.
@@ -313,10 +323,29 @@ pub fn hide() {
 }
 
 fn settle() {
-    match current() {
-        Some((word, lang)) => show(word, lang),
-        None => hide(),
+    let Some((typed, word, lang)) = current() else {
+        return hide();
+    };
+    if underline_on() {
+        let rects =
+            AUTOMATION.with(|a| a.as_ref().map(|a| a.word_rects(&typed)).unwrap_or_default());
+        if !rects.is_empty() {
+            let dpi = monitor_of(POINT {
+                x: rects[0].left,
+                y: rects[0].bottom,
+            })
+            .1;
+            underline::show(&rects, dpi, dark_theme());
+            BUBBLE.with_borrow_mut(|b| {
+                if let Some(b) = b {
+                    fade_out(b);
+                }
+            });
+            return;
+        }
     }
+    underline::hide();
+    show(word, lang)
 }
 
 fn fade_out(b: &mut Bubble) {
@@ -505,7 +534,7 @@ fn frame(b: &mut Bubble) -> bool {
 /// A top-down 32-bit DIB section of `w` x `h` pixels.
 ///
 /// SAFETY: `dc` must be a valid DC; the caller owns the bitmap.
-unsafe fn dib(dc: HDC, w: i32, h: i32) -> (HBITMAP, *mut u32) {
+pub(crate) unsafe fn dib(dc: HDC, w: i32, h: i32) -> (HBITMAP, *mut u32) {
     // SAFETY: a zeroed BITMAPINFO with the header filled in.
     unsafe {
         let mut bmi: BITMAPINFO = std::mem::zeroed();

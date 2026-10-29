@@ -55,6 +55,8 @@ mod tray;
 #[cfg(windows)]
 mod uia;
 #[cfg(windows)]
+mod underline;
+#[cfg(windows)]
 mod window;
 
 #[cfg(windows)]
@@ -260,6 +262,7 @@ mod app {
             )
         };
         bubble::create();
+        crate::underline::create();
         // SAFETY: plain query.
         let _ = tx.send(unsafe { GetCurrentThreadId() });
 

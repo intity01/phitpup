@@ -45,6 +45,9 @@ pub struct Config {
     /// Learn from corrections: an undone fix adds the word to
     /// `ignore_words`, a kept hotkey fix to `learned_words`.
     pub learn: bool,
+    /// Show suggestions as a wavy line under the word instead of a bubble,
+    /// in apps that say where the word is.
+    pub underline: bool,
     /// Fixes the last word.
     pub hotkey: Hotkey,
     /// Accepts the suggestion.
@@ -61,6 +64,7 @@ impl Default for Config {
             ignore_words: Vec::new(),
             learned_words: Vec::new(),
             learn: true,
+            underline: false,
             hotkey: Hotkey::FIX,
             accept_key: Hotkey::ACCEPT,
         }
@@ -77,6 +81,10 @@ pub const TEMPLATE: &str = r#"# ผิดปุ๊บ PhitPup settings. The tray
 # "auto"    : like suggest, and Space fixes the word when PhitPup is sure;
 #             Shift+Backspace right after puts it back
 mode = "suggest"
+
+# Mark the word with a wavy underline instead of the bubble. Apps that do not
+# say where the word is (some games and chat apps) still get the bubble.
+underline = false
 
 # Turn PhitPup off in windows that cover the whole screen (games, videos).
 off_in_fullscreen = true
@@ -137,6 +145,7 @@ impl Config {
                 "ignore_words" => list(value).map(|w| c.ignore_words = w),
                 "learned_words" => list(value).map(|w| c.learned_words = w),
                 "learn" => boolean(value).map(|b| c.learn = b),
+                "underline" => boolean(value).map(|b| c.underline = b),
                 "hotkey" => shortcut(value).map(|k| c.hotkey = k),
                 "accept_key" => shortcut(value).map(|k| c.accept_key = k),
                 _ => {
@@ -165,6 +174,7 @@ impl Config {
             )
         };
         let mut t = set(text, "mode", &quoted(self.mode.as_str()));
+        t = set(&t, "underline", &self.underline.to_string());
         t = set(&t, "off_in_fullscreen", &self.off_in_fullscreen.to_string());
         t = set(&t, "off_apps", &array(&self.off_apps));
         t = set(&t, "quiet_apps", &array(&self.quiet_apps));
@@ -335,6 +345,7 @@ accept_key = \"shift+backspace\"",
             ignore_words: vec!["gdp".into()],
             learned_words: vec!["muj".into()],
             learn: false,
+            underline: true,
             hotkey: Hotkey::parse("ctrl+backslash").unwrap(),
             accept_key: Hotkey::ACCEPT,
         };
