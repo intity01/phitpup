@@ -18,7 +18,7 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
 | Settings | Tray menu + `config.toml`. |
 | Self-disable | Password fields / password managers, fullscreen games, Remote Desktop. Terminals/IDEs: auto & suggest off, manual still works. |
 | Test targets | Chrome/Edge, Word/Notepad, LINE/Discord/Messenger, VS Code. |
-| Release | Public GitHub, MIT, unsigned; SHA256 + GitHub Actions build. |
+| Release | Public GitHub, unsigned; SHA256 + GitHub Actions build. MIT up to 0.3.3; from 0.3.4 PolyForm Noncommercial 1.0.0 plus permission to use official builds for any purpose (free, not for sale). |
 | Website | GitHub Pages, Thai/English: download + SHA256, WASM try-it box, guide + FAQ (SmartScreen, privacy). |
 
 ## Milestones
@@ -139,7 +139,7 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
    - Off where the bubble is off (terminals, code editors, `quiet_apps`), and for `ignore_words`.
    - Only Space triggers it for now; Enter and punctuation would need their key re-sent.
    - Tray menu and settings window offer it as a third mode.
-   - About page in the settings window: made by Intity01, team sukudone.team-dev, version, MIT,
+   - About page in the settings window: made by Intity01, team sukudone.team-dev, version, license,
      privacy note.
 7. Website (GitHub Pages + WASM) and GitHub Actions release (2026-10-29: published)
    - Live: https://intity01.github.io/phitpup/ · repo https://github.com/intity01/phitpup ·

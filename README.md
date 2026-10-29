@@ -59,6 +59,15 @@ The installer is built with [Inno Setup](https://jrsoftware.org/isinfo.php) 6.5 
 
 ## Credits
 
-Made by **Intity01** · sukudone.team-dev. MIT license; data sources in [THIRD_PARTY.md](THIRD_PARTY.md).
-The PhitPup name and logo are not part of the MIT license, and official downloads are only on the
-website and GitHub releases: see [TRADEMARKS.md](TRADEMARKS.md).
+Made by **Intity01** · sukudone.team-dev. Data sources in [THIRD_PARTY.md](THIRD_PARTY.md).
+
+## License
+
+Free to use for everyone, including at work, and not for sale. From 0.3.4 the code is under the
+[PolyForm Noncommercial License 1.0.0](LICENSE): you may read, change and share it for
+noncommercial purposes, but not sell it. The official builds may be used for any purpose. Versions
+up to 0.3.3 were released under the MIT License. The PhitPup name and logo are not licensed, and
+official downloads are only on the website and GitHub releases: see [TRADEMARKS.md](TRADEMARKS.md).
+
+ใช้ฟรีทุกคน รวมถึงใช้ในที่ทำงาน แต่ห้ามขาย ตั้งแต่รุ่น 0.3.4 โค้ดใช้สัญญา PolyForm Noncommercial 1.0.0
+อ่าน แก้ และแจกต่อได้เพื่อการที่ไม่ใช่การค้า รุ่น 0.3.3 ลงไปเป็น MIT

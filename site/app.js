@@ -22,7 +22,7 @@ const EN = {
   "hero.lead": "Forgot to switch to Thai and got <code>l;ylfu</code>? PhitPup sees you meant <b>สวัสดี</b> and fixes it on the spot. No deleting, no retyping.",
   "hero.download": "Download free",
   "hero.try": "Try it in the browser",
-  "hero.meta": "Easy install, no admin rights needed · about 2.5 MB · open source (MIT)",
+  "hero.meta": "Easy install, no admin rights needed · about 2.5 MB · free, not for sale",
   "try.title": "Try it",
   "try.lead": "Type Thai while your keyboard is still on English (or the other way round). It all runs in your browser; nothing is sent anywhere.",
   "try.layout": "Thai layout",
@@ -74,13 +74,14 @@ const EN = {
   "faq.remove.a": "Open Windows Settings, go to Apps &gt; Installed apps, pick PhitPup and click Uninstall. If you use the single file, turn off Start with Windows, right-click the icon, choose Quit and delete phitpup.exe. Settings live in %APPDATA%\\PhitPup; delete that folder too.",
   "footer.made": "Made by",
   "footer.source": "Source code",
+  "footer.license": "Free, not for sale",
   "status.fixed": "Fixed",
   "status.undone": "Put back",
   "status.nothing": "Nothing to fix",
   "status.loading": "Loading PhitPup…",
   "status.failed": "The try-it box could not load in this browser.",
-  "meta.release": (v, size) => `Version ${v} · ${size} · installs without admin rights · open source (MIT)`,
-  "meta.portable": (v, size) => `Version ${v} · ${size} · one file, nothing to install · open source (MIT)`,
+  "meta.release": (v, size) => `Version ${v} · ${size} · installs without admin rights · free, not for sale`,
+  "meta.portable": (v, size) => `Version ${v} · ${size} · one file, nothing to install · free, not for sale`,
 };
 
 const TH_EXTRA = {
@@ -91,8 +92,8 @@ const TH_EXTRA = {
   "status.nothing": "ไม่มีอะไรต้องแก้",
   "status.loading": "กำลังโหลดผิดปุ๊บ…",
   "status.failed": "ช่องทดลองโหลดไม่ได้ในเบราว์เซอร์นี้",
-  "meta.release": (v, size) => `รุ่น ${v} · ${size} · ติดตั้งโดยไม่ต้องใช้สิทธิ์ admin · โอเพนซอร์ส MIT`,
-  "meta.portable": (v, size) => `รุ่น ${v} · ${size} · ไฟล์เดียวไม่ต้องติดตั้ง · โอเพนซอร์ส MIT`,
+  "meta.release": (v, size) => `รุ่น ${v} · ${size} · ติดตั้งโดยไม่ต้องใช้สิทธิ์ admin · ใช้ฟรี ห้ามขาย`,
+  "meta.portable": (v, size) => `รุ่น ${v} · ${size} · ไฟล์เดียวไม่ต้องติดตั้ง · ใช้ฟรี ห้ามขาย`,
 };
 
 const TH = { ...TH_EXTRA };

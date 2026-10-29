@@ -20,7 +20,10 @@ fn main() {
             ),
             ("FileVersion", version),
             ("InternalName", "phitpup-update"),
-            ("LegalCopyright", "\u{a9} 2026 Intity01. MIT License."),
+            (
+                "LegalCopyright",
+                "\u{a9} 2026 Intity01. Free, not for sale (PolyForm Noncommercial 1.0.0).",
+            ),
             ("OriginalFilename", "phitpup-update.exe"),
             ("ProductName", "PhitPup"),
             ("ProductVersion", version),

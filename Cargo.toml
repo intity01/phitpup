@@ -6,7 +6,7 @@ default-members = ["crates/phitpup-core", "crates/phitpup", "crates/phitpup-upda
 [workspace.package]
 version = "0.3.3"
 edition = "2024"
-license = "MIT"
+license = "PolyForm-Noncommercial-1.0.0"
 
 [profile.release]
 opt-level = "z"
