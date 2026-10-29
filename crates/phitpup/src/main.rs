@@ -53,6 +53,8 @@ mod inject;
 #[cfg(windows)]
 mod layout;
 #[cfg(windows)]
+mod report;
+#[cfg(windows)]
 mod settings;
 #[cfg(windows)]
 mod tray;

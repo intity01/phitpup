@@ -204,6 +204,7 @@ enum Hit {
     Underline,
     Spelling,
     Updates,
+    Report,
     AddProgram,
     /// Program `i` of [`programs`]: off (true) or no bubble (false).
     Kind(usize, bool),
@@ -1588,6 +1589,25 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
     b.toggle(cy, c.remind_updates, hovered);
     y += 72.0;
 
+    let copied = crate::report::COPIED.load(std::sync::atomic::Ordering::Relaxed);
+    let caption = if copied {
+        t("Copied. Paste it (Ctrl+V) into the report on GitHub.")
+    } else {
+        t("Copies your version and settings, never what you type, and opens GitHub.")
+    };
+    let (cy, _) = b.row(
+        y,
+        68.0,
+        68.0,
+        Some(G_INFO),
+        t("Report a problem"),
+        caption,
+        None,
+    );
+    let r = R::new(RIGHT - 20.0 - 170.0, cy - 16.0, 170.0, 32.0);
+    b.button(r, t("Copy and report"), None, false, Hit::Report);
+    y += 72.0;
+
     y += 16.0;
     b.glyph(R::new(LEFT, y, 16.0, 20.0), G_LOCK, F::SmallGlyph, p.sub);
     y += b.para(
@@ -2010,6 +2030,7 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
         Hit::OpenFile => settings::open_file(),
         // phitpup-update.exe does the checking: PhitPup has no networking code.
         Hit::Updates => update::click(),
+        Hit::Report => crate::report::copy_and_open(hwnd),
         Hit::Remind => edit(|c| c.remind_updates = !c.remind_updates),
         Hit::AddProgram => add_program(hwnd),
         Hit::Kind(i, off) => edit(|c| {

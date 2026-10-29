@@ -98,6 +98,36 @@ pub fn restore(owner: HWND, snap: &Snapshot) {
     }
 }
 
+/// Puts `s` on the clipboard as text, replacing what was there. Only for
+/// an explicit request (the About page's "Report a problem").
+pub fn set_text(owner: HWND, s: &str) -> bool {
+    let units: Vec<u16> = s.encode_utf16().chain([0]).collect();
+    if !open(owner) {
+        return false;
+    }
+    // SAFETY: the clipboard is open and owned by `owner`; on success
+    // SetClipboardData takes ownership of the allocation.
+    unsafe {
+        EmptyClipboard();
+        let bytes = units.len() * 2;
+        let h = GlobalAlloc(GMEM_MOVEABLE, bytes);
+        let mut ok = false;
+        if !h.is_null() {
+            let p = GlobalLock(h).cast::<u16>();
+            if !p.is_null() {
+                std::ptr::copy_nonoverlapping(units.as_ptr(), p, units.len());
+                GlobalUnlock(h);
+                ok = !SetClipboardData(CF_UNICODETEXT.into(), h).is_null();
+            }
+            if !ok {
+                GlobalFree(h);
+            }
+        }
+        CloseClipboard();
+        ok
+    }
+}
+
 pub fn text(owner: HWND) -> Option<String> {
     if !open(owner) {
         return None;

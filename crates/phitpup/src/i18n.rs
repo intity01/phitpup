@@ -177,6 +177,14 @@ fn thai_for(en: &str) -> Option<&'static str> {
         "Installing. PhitPup will start again by itself." => "กำลังติดตั้ง ผิดปุ๊บจะเปิดขึ้นมาใหม่เอง",
         "Installing\u{2026}" => "กำลังติดตั้ง\u{2026}",
         "Try again" => "ลองอีกครั้ง",
+        "Report a problem" => "แจ้งปัญหา",
+        "Copies your version and settings, never what you type, and opens GitHub." => {
+            "คัดลอกรุ่นและการตั้งค่า (ไม่มีสิ่งที่คุณพิมพ์) แล้วเปิด GitHub"
+        }
+        "Copied. Paste it (Ctrl+V) into the report on GitHub." => {
+            "คัดลอกแล้ว วาง (Ctrl+V) ในหน้าแจ้งปัญหาบน GitHub"
+        }
+        "Copy and report" => "คัดลอกและแจ้ง",
         // What phitpup-update.exe reports (crates/phitpup-update).
         "Could not connect. Check your internet connection." => "เชื่อมต่อไม่ได้ ตรวจดูการต่ออินเทอร์เน็ต",
         "The connection dropped. Try again." => "การเชื่อมต่อหลุด ลองอีกครั้ง",
