@@ -30,20 +30,23 @@ use windows_sys::Win32::Graphics::Gdi::{
     BLENDFUNCTION, ClientToScreen, CreateCompatibleDC, CreateDIBSection, CreateFontW,
     DEFAULT_CHARSET, DIB_RGB_COLORS, DeleteDC, DeleteObject, FW_SEMIBOLD, GdiFlush,
     GetMonitorInfoW, GetTextExtentPoint32W, HBITMAP, HDC, HFONT, MONITOR_DEFAULTTONEAREST,
-    MONITORINFO, MonitorFromPoint, SelectObject, SetBkMode, SetTextColor, TRANSPARENT, TextOutW,
+    MONITORINFO, MonitorFromPoint, ScreenToClient, SelectObject, SetBkMode, SetTextColor,
+    TRANSPARENT, TextOutW,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
 use windows_sys::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, GUITHREADINFO, GetCursorPos, GetForegroundWindow,
-    GetGUIThreadInfo, GetWindowThreadProcessId, HWND_TOPMOST, KillTimer, RegisterClassExW, SW_HIDE,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SetTimer, SetWindowPos, ShowWindow,
-    ULW_ALPHA, UpdateLayeredWindow, WM_TIMER, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    GetGUIThreadInfo, GetWindowThreadProcessId, HWND_TOPMOST, IDC_ARROW, IDC_HAND, KillTimer,
+    LoadCursorW, MA_NOACTIVATE, RegisterClassExW, SW_HIDE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+    SWP_SHOWWINDOW, SetCursor, SetTimer, SetWindowPos, ShowWindow, ULW_ALPHA, UpdateLayeredWindow,
+    WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_SETCURSOR, WM_TIMER, WNDCLASSEXW, WS_EX_LAYERED,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 
-use crate::{APP, fonts, uia, underline};
+use crate::i18n::t;
+use crate::{APP, fonts, hook, uia, underline};
 
 /// Waits for the suggestion to settle before acting on it.
 const SETTLE: usize = 1;
@@ -55,6 +58,9 @@ const FRAME_MS: u32 = 15;
 const SHOW_DELAY_MS: u32 = 120;
 /// A suggestion that disappears for less than this does not hide it.
 const HIDE_DELAY_MS: u32 = 60;
+/// The underline gets in the way less than the bubble, so it may come
+/// sooner.
+const UNDERLINE_DELAY_MS: u32 = 40;
 const UPDATE_DELAY_MS: u32 = 25;
 
 const FADE_IN: Duration = Duration::from_millis(150);
@@ -149,6 +155,8 @@ struct Look {
     badge: &'static str,
     /// The accept key's label.
     hint: String,
+    /// The label of the button that keeps the word as typed.
+    keep: &'static str,
     dpi: u32,
     dark: bool,
 }
@@ -160,6 +168,8 @@ struct Image {
     px: Vec<u32>,
     /// The card inside the bitmap (the rest is shadow).
     card: RECT,
+    /// The "keep as typed" button, in the same pixels.
+    keep: RECT,
 }
 
 #[derive(Clone, Copy)]
@@ -249,7 +259,7 @@ pub fn create() {
         };
         RegisterClassExW(&wc);
         let hwnd = CreateWindowExW(
-            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED,
+            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
             class.as_ptr(),
             std::ptr::null(),
             WS_POPUP,
@@ -319,7 +329,11 @@ pub fn schedule() {
     let has = current().is_some();
     BUBBLE.with_borrow(|b| {
         let Some(b) = b else { return };
-        let ms = match (b.visible, has) {
+        // An underlined word counts as showing, so the line follows along
+        // as quickly as the bubble does.
+        let showing = b.visible || underline::visible();
+        let ms = match (showing, has) {
+            (false, true) if underline_on() => UNDERLINE_DELAY_MS,
             (false, true) => SHOW_DELAY_MS,
             (true, false) => HIDE_DELAY_MS,
             _ => UPDATE_DELAY_MS,
@@ -414,6 +428,7 @@ fn show(word: String, badge: &'static str) {
         word,
         badge,
         hint,
+        keep: t("Leave it"),
         dpi,
         dark: dark_theme(),
     };
@@ -661,6 +676,7 @@ fn render(look: &Look) -> Image {
     let word = wide(&look.word);
     let badge = wide(look.badge);
     let hint = wide(&look.hint);
+    let keep = wide(look.keep);
 
     // SAFETY: GDI objects are created, selected, restored and deleted here;
     // the mask DIB holds w*h pixels and is read only after GdiFlush.
@@ -678,20 +694,28 @@ fn render(look: &Look) -> Image {
         let ws = measure(big, &word);
         let bs = measure(small, &badge);
         let hs = measure(small, &hint);
+        let ks = measure(small, &keep);
 
         let m = px(SHADOW);
         let (pad, gap) = (px(PAD_X), px(GAP));
         let (badge_w, badge_h) = (bs.cx + px(10.0), bs.cy + px(2.0));
         let (key_w, key_h) = (hs.cx + px(12.0), hs.cy + px(4.0));
         let card_h = ws.cy + px(12.0);
-        let card_w = pad + badge_w + gap + ws.cx + px(12.0) + key_w + pad;
+        let keep_w = ks.cx + px(12.0);
+        let card_w = pad + badge_w + gap + ws.cx + px(12.0) + key_w + px(6.0) + keep_w + pad;
         let (w, h) = (card_w + 2 * m, card_h + 2 * m);
         let mid = m + card_h / 2;
 
         let card = Box2::new(m, m, card_w, card_h);
         let badge_box = Box2::new(m + pad, mid - badge_h / 2, badge_w, badge_h);
         let word_x = m + pad + badge_w + gap;
-        let key_box = Box2::new(m + card_w - pad - key_w, mid - key_h / 2, key_w, key_h);
+        let keep_box = Box2::new(m + card_w - pad - keep_w, mid - key_h / 2, keep_w, key_h);
+        let key_box = Box2::new(
+            keep_box.l as i32 - px(6.0) - key_w,
+            mid - key_h / 2,
+            key_w,
+            key_h,
+        );
 
         // Text as white-on-black coverage.
         let (mask_bmp, mask) = dib(dc, w, h);
@@ -720,6 +744,13 @@ fn render(look: &Look) -> Image {
             key_box.t as i32 + (key_h - hs.cy) / 2,
             hint.as_ptr(),
             hint.len() as i32,
+        );
+        TextOutW(
+            dc,
+            keep_box.l as i32 + (keep_w - ks.cx) / 2,
+            keep_box.t as i32 + (key_h - ks.cy) / 2,
+            keep.as_ptr(),
+            keep.len() as i32,
         );
         GdiFlush();
         let mask = std::slice::from_raw_parts(mask, (w * h) as usize).to_vec();
@@ -758,10 +789,16 @@ fn render(look: &Look) -> Image {
                 c = mix(c, pal.accent, in_badge);
                 let in_key = coverage(key_box.distance(fx, fy, 4.0 * s));
                 c = mix(c, pal.key, in_key);
+                // The keep button: an outline, so it reads as a button and
+                // not as another key to press.
+                let dk = keep_box.distance(fx, fy, 4.0 * s);
+                let in_keep = coverage(dk);
+                let keep_ring = (1.0 - (dk + 0.5).abs()).clamp(0.0, 1.0);
+                c = mix(c, pal.hint, keep_ring * 0.6);
                 let ink = (mask[i] & 0xFF) as f32 / 255.0;
                 let ink_color = if in_badge > 0.5 {
                     pal.on_accent
-                } else if in_key > 0.5 {
+                } else if in_key > 0.5 || in_keep > 0.5 {
                     pal.hint
                 } else {
                     pal.text
@@ -786,6 +823,12 @@ fn render(look: &Look) -> Image {
                 top: m,
                 right: m + card_w,
                 bottom: m + card_h,
+            },
+            keep: RECT {
+                left: keep_box.l as i32,
+                top: keep_box.t as i32,
+                right: keep_box.r as i32,
+                bottom: keep_box.b as i32,
             },
         }
     }
@@ -832,6 +875,25 @@ fn caret() -> (POINT, i32) {
     }
 }
 
+/// The pointer is over the keep button of the bubble now showing.
+fn on_keep(hwnd: HWND) -> bool {
+    let mut p = POINT { x: 0, y: 0 };
+    // SAFETY: plain queries into a local.
+    unsafe {
+        GetCursorPos(&mut p);
+        ScreenToClient(hwnd, &mut p);
+    }
+    BUBBLE.with_borrow(|b| {
+        b.as_ref().is_some_and(|b| {
+            b.visible
+                && b.image.as_ref().is_some_and(|i| {
+                    let k = i.keep;
+                    p.x >= k.left && p.x < k.right && p.y >= k.top && p.y < k.bottom
+                })
+        })
+    })
+}
+
 unsafe extern "system" fn window_proc(
     hwnd: HWND,
     msg: u32,
@@ -851,6 +913,18 @@ unsafe extern "system" fn window_proc(
                 // SAFETY: our own window.
                 unsafe { KillTimer(hwnd, FRAME) };
             }
+            0
+        }
+        // Clicks never take focus from the app being typed in.
+        WM_MOUSEACTIVATE => MA_NOACTIVATE as LRESULT,
+        WM_SETCURSOR => {
+            let cursor = if on_keep(hwnd) { IDC_HAND } else { IDC_ARROW };
+            // SAFETY: a system cursor.
+            unsafe { SetCursor(LoadCursorW(std::ptr::null_mut(), cursor)) };
+            1
+        }
+        WM_LBUTTONUP if on_keep(hwnd) => {
+            hook::keep_as_typed();
             0
         }
         // SAFETY: default handling for everything else.
@@ -882,6 +956,7 @@ mod tests {
                         word: word.into(),
                         badge,
                         hint: "Tab".into(),
+                        keep: "ไม่ต้องแก้",
                         dpi,
                         dark,
                     };

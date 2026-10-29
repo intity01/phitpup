@@ -72,6 +72,21 @@ fn down(vk: u16) -> bool {
     unsafe { GetAsyncKeyState(vk.into()) < 0 }
 }
 
+/// The bubble's keep button was clicked: like Shift+Esc, the word stays as
+/// typed and is not suggested again. Runs on the worker thread.
+pub fn keep_as_typed() {
+    let Some(app) = APP.get() else { return };
+    let Some(s) = app.suggestion.lock().unwrap().take() else {
+        return;
+    };
+    DISMISSED.store(true, Ordering::Relaxed);
+    debug!("keep button: the word will not be suggested again");
+    if app.config.lock().unwrap().ignore(&s.word) {
+        post(app, WM_SAVE);
+    }
+    post(app, WM_BUBBLE);
+}
+
 /// Forgets what was typed and hides the bubble.
 pub fn reset(why: &str) {
     if let Some(app) = APP.get() {

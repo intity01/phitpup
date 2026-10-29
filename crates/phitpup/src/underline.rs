@@ -140,6 +140,11 @@ pub fn show(rects: &[RECT], dpi: u32, dark: bool) {
     });
 }
 
+/// A word is underlined now.
+pub fn visible() -> bool {
+    LINE.with_borrow(|l| l.as_ref().is_some_and(|l| l.shown.is_some()))
+}
+
 pub fn hide() {
     LINE.with_borrow_mut(|l| {
         if let Some(l) = l

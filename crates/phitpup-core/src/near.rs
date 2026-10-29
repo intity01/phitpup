@@ -1,14 +1,14 @@
-//! Thai words typed with a slip of the finger: a key next to the right one,
-//! two keys in the wrong order, one too many or one missing (ส้วสดี for
-//! สวัสดี). The fix offered is the common word ([`crate::model`]'s lexicon)
-//! that is closest on the keyboard.
+//! Words typed with a slip of the finger: a key next to the right one, two
+//! keys in the wrong order, one too many or one missing (ส้วสดี for สวัสดี,
+//! teh for the). The fix offered is the common word ([`crate::model`]'s
+//! lexicon) that is closest on the keyboard in use.
 //!
 //! Text that is still being typed is left alone: the end of the run may be
 //! the start of a word, and Thai runs several words together, so only the
 //! part after the last place the run splits into known words is looked at.
 
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 use crate::layouts::Layout;
 use crate::model::{Lang, Model};
@@ -27,14 +27,22 @@ const MARGIN: u32 = 20;
 /// The longest word in the lexicon is shorter than this, in characters.
 const MAX_WORD: usize = 24;
 
-/// Thai characters U+0E01..=U+0E4E, as 0..78.
-const THAI: usize = 78;
+/// Letters as small numbers: Thai U+0E01..=U+0E4E as 0..78; English a-z as
+/// 0..26 and the apostrophe as 26.
+const LETTERS: usize = 78;
 
-fn index(c: char) -> Option<u8> {
-    (c as u32)
-        .checked_sub(0x0E01)
-        .filter(|&i| (i as usize) < THAI)
-        .map(|i| i as u8)
+fn index(lang: Lang, c: char) -> Option<u8> {
+    match lang {
+        Lang::Thai => (c as u32)
+            .checked_sub(0x0E01)
+            .filter(|&i| (i as usize) < LETTERS)
+            .map(|i| i as u8),
+        Lang::English => match c {
+            'a'..='z' => Some(c as u8 - b'a'),
+            '\'' => Some(26),
+            _ => None,
+        },
+    }
 }
 
 /// One known word, ready for a quick comparison.
@@ -47,34 +55,51 @@ struct Entry {
     word: String,
 }
 
+/// A [`Near`] made for a language and a layout (by name).
+type Built = (Lang, String, &'static Near);
+
 pub struct Near {
+    lang: Lang,
     /// Word → cost (−log2 frequency, 1/10 bit).
     words: HashMap<String, u16>,
     list: Vec<Entry>,
     /// Sorted, to ask whether a word starts with what was typed.
     sorted: Vec<String>,
     /// Cost of typing the first character where the second was meant.
-    sub: Vec<[u8; THAI]>,
+    sub: Vec<[u8; LETTERS]>,
 }
 
 impl Near {
-    /// Built once from the embedded model, with Kedmanee key positions.
-    pub fn embedded() -> &'static Near {
-        static NEAR: OnceLock<Near> = OnceLock::new();
-        NEAR.get_or_init(|| {
-            Near::new(
-                Model::embedded().lang(Lang::Thai).lexicon(),
-                &Layout::kedmanee(),
-            )
-        })
+    /// The embedded model's words in `lang`, with the keys of `layout`;
+    /// built the first time each pair is asked for.
+    pub fn shared(lang: Lang, layout: &Layout) -> &'static Near {
+        static BUILT: OnceLock<Mutex<Vec<Built>>> = OnceLock::new();
+        let mut built = BUILT.get_or_init(Default::default).lock().unwrap();
+        if let Some(&(_, _, near)) = built
+            .iter()
+            .find(|(l, name, _)| *l == lang && name == layout.name())
+        {
+            return near;
+        }
+        let near: &'static Near = Box::leak(Box::new(Near::new(
+            lang,
+            Model::embedded().lang(lang).lexicon(),
+            layout,
+        )));
+        built.push((lang, layout.name().to_owned(), near));
+        near
     }
 
-    pub fn new<'a>(words: impl Iterator<Item = (&'a str, u16)>, layout: &Layout) -> Self {
+    pub fn new<'a>(
+        lang: Lang,
+        words: impl Iterator<Item = (&'a str, u16)>,
+        layout: &Layout,
+    ) -> Self {
         let words: HashMap<String, u16> = words.map(|(w, c)| (w.to_owned(), c)).collect();
         let list = words
             .iter()
             .filter_map(|(w, &cost)| {
-                let chars: Vec<u8> = w.chars().map(index).collect::<Option<_>>()?;
+                let chars: Vec<u8> = w.chars().map(|c| index(lang, c)).collect::<Option<_>>()?;
                 (chars.len() >= 3 && chars.len() <= MAX_WORD).then(|| Entry {
                     mask: mask(&chars),
                     chars,
@@ -85,15 +110,17 @@ impl Near {
             .collect();
         let mut sorted: Vec<String> = words.keys().cloned().collect();
         sorted.sort_unstable();
-        let mut keys = [None; THAI];
+        let mut keys = [None; LETTERS];
         for (sc, _, c) in layout.chars() {
-            if let (Some(i), Some((row, x))) = (index(c), position(sc)) {
+            // English words are kept in lowercase; A sits where a does.
+            let c = c.to_ascii_lowercase();
+            if let (Some(i), Some((row, x))) = (index(lang, c), position(sc)) {
                 keys[i as usize] = Some((row, x, sc));
             }
         }
-        let sub = (0..THAI)
+        let sub = (0..LETTERS)
             .map(|a| {
-                let mut row = [FULL as u8; THAI];
+                let mut row = [FULL as u8; LETTERS];
                 for (b, cost) in row.iter_mut().enumerate() {
                     *cost = match (keys[a], keys[b]) {
                         _ if a == b => 0,
@@ -113,6 +140,7 @@ impl Near {
             })
             .collect();
         Self {
+            lang,
             words,
             list,
             sorted,
@@ -128,10 +156,12 @@ impl Near {
     /// (how rare they are) plus, for a fix, the cost of the slips.
     pub fn fix(&self, run: &str) -> Option<(usize, String)> {
         let chars: Vec<char> = run.chars().collect();
-        if chars.len() < 3 || !chars.iter().all(|c| ('\u{0E01}'..='\u{0E4E}').contains(c)) {
+        // Capitals are names, acronyms and the like, not slips; English is
+        // compared in lowercase, so this also keeps the result's case.
+        if chars.len() < 3 || !chars.iter().all(|&c| index(self.lang, c).is_some()) {
             return None;
         }
-        // Chat elongation (ค่ะะ, นะคะะะ) is meant.
+        // Chat elongation (ค่ะะ, sooo) is meant.
         if chars[chars.len() - 1] == chars[chars.len() - 2] {
             return None;
         }
@@ -200,7 +230,10 @@ impl Near {
         if self.words.contains_key(&s) {
             return None;
         }
-        let typed: Vec<u8> = typed.iter().map(|&c| index(c)).collect::<Option<_>>()?;
+        let typed: Vec<u8> = typed
+            .iter()
+            .map(|&c| index(self.lang, c))
+            .collect::<Option<_>>()?;
         let tmask = mask(&typed);
         let limit = if typed.len() >= 5 { 2 * FULL } else { FULL };
         let mut found: Vec<(u32, &str)> = self
@@ -288,8 +321,12 @@ fn position(sc: u16) -> Option<(i32, f32)> {
 mod tests {
     use super::*;
 
+    fn thai() -> &'static Near {
+        Near::shared(Lang::Thai, &Layout::kedmanee())
+    }
+
     fn fix(run: &str) -> Option<String> {
-        Near::embedded().fix(run).map(|(_, w)| w)
+        thai().fix(run).map(|(_, w)| w)
     }
 
     #[test]
@@ -301,7 +338,7 @@ mod tests {
 
     #[test]
     fn fixes_only_the_end_of_a_run() {
-        let (n, w) = Near::embedded().fix("วันนี้ส้วสดี").unwrap();
+        let (n, w) = thai().fix("วันนี้ส้วสดี").unwrap();
         assert_eq!((n, w.as_str()), (6, "สวัสดี"));
     }
 
@@ -321,6 +358,16 @@ mod tests {
             assert_eq!(fix(run), None, "{run}");
         }
     }
+
+    #[test]
+    fn neighbours_follow_the_layout() {
+        // ั and ้ are next to each other on Kedmanee but not on Pattachote,
+        // so a Pattachote typist's ส้วสดี is a bigger slip.
+        let ked = Near::shared(Lang::Thai, &Layout::kedmanee());
+        let pat = Near::shared(Lang::Thai, &Layout::pattachote());
+        let [a, b] = ['\u{0E31}', '\u{0E49}'].map(|c| index(Lang::Thai, c).unwrap() as usize);
+        assert!(ked.sub[a][b] < pat.sub[a][b]);
+    }
 }
 
 #[cfg(test)]
@@ -330,7 +377,18 @@ mod quality {
     #[test]
     #[ignore]
     fn quality() {
-        let n = super::Near::embedded();
+        use crate::layouts::Layout;
+        use crate::model::Lang;
+        for (lang, layout) in [
+            (Lang::Thai, Layout::kedmanee()),
+            (Lang::English, Layout::us_qwerty()),
+        ] {
+            println!("== {lang:?}");
+            run(super::Near::shared(lang, &layout));
+        }
+    }
+
+    fn run(n: &super::Near) {
         let mut words: Vec<(&String, u16)> = n.words.iter().map(|(w, c)| (w, *c)).collect();
         words.sort_by_key(|x| x.1);
         let t = std::time::Instant::now();

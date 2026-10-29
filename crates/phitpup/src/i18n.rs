@@ -88,6 +88,7 @@ fn thai_for(en: &str) -> Option<&'static str> {
         "So it does not cover lists that open under the text, like search suggestions." => {
             "ไม่บังรายการที่เด้งใต้ช่องพิมพ์ เช่น คำค้นที่แนะนำ"
         }
+        "Leave it" => "ไม่ต้องแก้",
         "Start with Windows" => "เปิดพร้อม Windows",
         "Run PhitPup when you sign in." => "เปิดผิดปุ๊บเมื่อเข้าสู่ระบบ",
         "Turn off in full-screen windows" => "ปิดในหน้าต่างเต็มจอ",

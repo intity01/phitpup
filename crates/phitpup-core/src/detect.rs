@@ -6,6 +6,7 @@
 //! any Thai reading that breaks Thai spelling rules.
 
 use crate::model::{Lang, Model};
+use crate::near::Near;
 use crate::{Converter, Layout, thai};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -93,6 +94,9 @@ pub struct Verdict {
 pub struct Detector {
     to_th: Converter,
     to_en: Converter,
+    /// Kept for [`Detector::near`].
+    english: Layout,
+    thai: Layout,
     model: &'static Model,
     pub thresholds: Thresholds,
 }
@@ -106,9 +110,22 @@ impl Detector {
         Self {
             to_th: Converter::new(english, thai),
             to_en: Converter::new(thai, english),
+            english: english.clone(),
+            thai: thai.clone(),
             model,
             thresholds: Thresholds::default(),
         }
+    }
+
+    /// Slips of the finger in `lang`, judged on that language's keyboard.
+    pub fn near(&self, lang: Lang) -> &'static Near {
+        Near::shared(
+            lang,
+            match lang {
+                Lang::Thai => &self.thai,
+                Lang::English => &self.english,
+            },
+        )
     }
 
     /// Thai text goes to English; Latin text the Thai layout could have typed

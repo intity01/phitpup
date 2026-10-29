@@ -24,7 +24,7 @@
 //! [`auto`](Fixer::auto) are fixed whatever the detector thinks.
 
 use crate::model::Lang;
-use crate::{Detector, Direction, Thresholds, near, thai, typo};
+use crate::{Detector, Direction, Thresholds, thai, typo};
 
 /// Characters remembered before the caret. Older ones are forgotten.
 pub const MAX_CHARS: usize = 300;
@@ -51,7 +51,7 @@ pub enum Kind {
     Caps,
     /// The same word twice ([`typo::doubled`]); `word` holds both.
     Doubled,
-    /// A Thai word with a slip of the finger in it ([`near::Near`]).
+    /// A word with a slip of the finger in it ([`crate::near::Near`]).
     Slip,
 }
 
@@ -107,7 +107,7 @@ pub struct Fixer {
     /// Also offer [`typo`] fixes: Caps Lock slips (suggest and auto mode)
     /// and doubled words (suggest mode only).
     pub typos: bool,
-    /// Also offer [`near`] fixes (suggest mode only).
+    /// Also offer [`crate::near`] fixes (suggest mode only).
     pub slips: bool,
 }
 
@@ -199,13 +199,18 @@ impl Fixer {
                 kind,
             });
         }
-        if let Some((n, insert)) = near::Near::embedded().fix(&word).filter(|_| self.slips) {
+        let lang = if word.chars().any(thai::is_thai) {
+            Lang::Thai
+        } else {
+            Lang::English
+        };
+        if let Some((n, insert)) = detector.near(lang).fix(&word).filter(|_| self.slips) {
             return Some(Suggestion {
                 word: self.buf[self.buf.len() - n..].iter().collect(),
                 edit: Edit {
                     delete: n,
                     insert,
-                    switch_to: Lang::Thai,
+                    switch_to: lang,
                 },
                 kind: Kind::Slip,
             });
