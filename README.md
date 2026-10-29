@@ -19,8 +19,10 @@ It switches the keyboard layout for you, supports Kedmanee and Pattachote, and t
 password fields, password managers, Remote Desktop and full-screen windows. Click the tray icon for
 the settings window.
 
-**Private by design:** no networking code at all; what you type is kept in memory only for the word
-in progress.
+**Private by design:** the app has no networking code; what you type is kept in memory only for the
+word in progress. Only the separate `phitpup-update.exe`, which the installer adds, goes online, and
+only when you click **Check for updates**: it fetches the version number and, if you agree, the
+installer.
 
 ## Download
 
@@ -48,6 +50,7 @@ The installer is built with [Inno Setup](https://jrsoftware.org/isinfo.php) 6.5 
 |---|---|
 | `crates/phitpup-core` | Layouts, conversion, detector, fixer, settings, icon. No OS calls; builds for WASM. |
 | `crates/phitpup` | The Windows app: keyboard hook, injection, bubble, tray, settings window. |
+| `crates/phitpup-update` | `phitpup-update.exe`, the updater: the only networking code, run on request. |
 | `crates/phitpup-web` | The core for the website (wasm32, no bindings crate). |
 | `installer` | The Inno Setup script for `PhitPup-Setup.exe`. |
 | `site/` | The website (GitHub Pages). |

@@ -48,7 +48,7 @@ const EN = {
   "facts.apps": "Works almost everywhere: browsers, LINE, Discord, Word, Notepad",
   "facts.off": "Turns itself off in password fields, password managers, Remote Desktop and full-screen games",
   "privacy.title": "What you type never leaves your computer",
-  "privacy.p": "PhitPup has no networking code at all. It tells wrong-layout words apart with small statistics tables built into the program, remembers only the word you are typing, forgets it as soon as you click or switch windows, and all of its code is open to read.",
+  "privacy.p": "The program that sees your keys has no networking code at all. Only a separate updater goes online, and only when you click Check for updates, to ask for the newest version number and fetch the installer. PhitPup tells wrong-layout words apart with small statistics tables built into the program, remembers only the word you are typing, forgets it as soon as you click or switch windows, and all of its code is open to read.",
   "install.title": "Set up in a minute",
   "install.1.t": "Download the installer",
   "install.1.p": "PhitPup-Setup.exe installs for your account only, with no admin rights. PhitPup then shows up in the Start menu and can be removed from Windows Settings.",

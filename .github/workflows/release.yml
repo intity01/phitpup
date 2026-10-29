@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: rustup toolchain install  # the version in rust-toolchain.toml
       - run: cargo test --release --workspace
-      - run: cargo build --release -p phitpup
+      - run: cargo build --release -p phitpup -p phitpup-update
       - name: Package
         shell: pwsh
         run: |
@@ -38,7 +38,7 @@ jobs:
           if (-not (Test-Path $iscc)) {
             choco install innosetup -y --no-progress
           }
-          & $iscc /DSourceExe=..\dist\phitpup.exe /DOutputDir=..\dist installer\phitpup.iss
+          & $iscc /DSourceExe=..\dist\phitpup.exe /DUpdateExe=..\target\release\phitpup-update.exe /DOutputDir=..\dist installer\phitpup.iss
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $hash = (Get-FileHash dist/PhitPup-Setup.exe -Algorithm SHA256).Hash.ToLower()
           "$hash  PhitPup-Setup.exe" | Out-File dist/PhitPup-Setup.exe.sha256 -Encoding ascii -NoNewline

@@ -59,6 +59,8 @@ mod uia;
 #[cfg(windows)]
 mod underline;
 #[cfg(windows)]
+mod update;
+#[cfg(windows)]
 mod window;
 
 #[cfg(windows)]

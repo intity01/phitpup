@@ -16,6 +16,7 @@ pub mod icon;
 pub mod layouts;
 pub mod model;
 pub mod thai;
+pub mod update;
 
 pub use convert::Converter;
 pub use detect::{Detector, Direction, Thresholds, Verdict};

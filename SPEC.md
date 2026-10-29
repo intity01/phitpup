@@ -193,5 +193,17 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
    - Bubble: a paper slip with the fix in pen, a TH/EN stamp and the accept key. The underline
      is the pen colour.
 
+12. Installer and updating from the app (2026-10-29)
+   - `PhitPup-Setup.exe` (Inno Setup, `installer/phitpup.iss`) installs per user to
+     `%LOCALAPPDATA%\Programs\PhitPup` with no admin rights; `phitpup.exe` stays available as
+     a single file. Both exes carry version details (`icon::version_info`).
+   - The app still has no networking code. The installer adds `phitpup-update.exe`
+     (`crates/phitpup-update`, WinHTTP), which the About page runs only on a click:
+     `check` reads the website's `release.json`; `install <version>` downloads that release's
+     installer from GitHub, checks its size and SHA-256 against `release.json`, and runs it with
+     `/SILENT /UPDATE`. The installer asks the running copy to quit (`WM_APP + 12`), keeps the
+     start-with-Windows choice and starts PhitPup again.
+   - Without the helper (single-file copy) the button opens the latest release in the browser.
+
 ## Environment (checked 2026-10-28)
 rustc/cargo 1.96, rustup 1.29, Visual Studio Community 2026 (MSVC), git 2.54, gh 2.102, node 26.3.

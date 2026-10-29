@@ -57,7 +57,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     WS_CAPTION, WS_EX_TOOLWINDOW, WS_MINIMIZEBOX, WS_OVERLAPPED, WS_SYSMENU,
 };
 
-use crate::{APP, bubble, clipboard, context, fonts, settings, tray};
+use crate::{APP, bubble, clipboard, context, fonts, settings, tray, update};
 
 // Layout at 96 DPI.
 const W: f32 = 860.0;
@@ -966,7 +966,7 @@ fn sidebar(b: &mut Builder, page: Page) {
 
     b.text(
         R::new(28.0, H - 66.0, SIDEBAR - 40.0, 24.0),
-        "ไม่ต่อเน็ต ไม่จำที่พิมพ์",
+        "ไม่ส่ง ไม่จำที่พิมพ์",
         F::Pen,
         p.accent,
         LINE,
@@ -1446,10 +1446,10 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
         b.text(r, value, F::Strong, p.text, LINE | DT_RIGHT);
         y += 56.0;
     }
-    let caption = "Opens the download page in your browser.";
-    let (cy, _) = b.row(y, 68.0, 68.0, Some(G_UPDATE), "Updates", caption, None);
+    let (caption, label, accent) = updates(update::state());
+    let (cy, _) = b.row(y, 68.0, 68.0, Some(G_UPDATE), "Updates", &caption, None);
     let r = R::new(RIGHT - 20.0 - 170.0, cy - 16.0, 170.0, 32.0);
-    b.button(r, "Check for updates", None, false, Hit::Updates);
+    b.button(r, &label, None, accent, Hit::Updates);
     y += 72.0;
     let (cy, hovered) = b.row(
         y,
@@ -1469,11 +1469,55 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
         LEFT + 24.0,
         y,
         WIDTH - 24.0,
-        "Works offline and never connects to the internet. What you type is kept in memory only until you click or switch windows, and is never sent anywhere. The only things saved are your settings file, including the words you add, and the date of the last update reminder.",
+        "PhitPup works offline: the part that sees your keys has no networking code. Only when you click Check for updates does the separate phitpup-update.exe ask the website for the newest version number and, if you agree, download the installer. What you type is kept in memory only until you click or switch windows, and is never sent anywhere. The only things saved are your settings file, including the words you add, and the date of the last update reminder.",
         F::Caption,
         p.sub,
     );
     y
+}
+
+/// The Updates row's caption, button label and whether the button is the
+/// main action.
+fn updates(state: update::State) -> (String, String, bool) {
+    use update::State;
+    let mb = |bytes: u64| format!("{:.1} MB", bytes as f64 / 1_048_576.0);
+    match state {
+        State::Idle if update::helper().is_none() => (
+            "Opens the download page in your browser.".into(),
+            "Check for updates".into(),
+            false,
+        ),
+        State::Idle => (
+            "Checks for a new version and installs it for you.".into(),
+            "Check for updates".into(),
+            false,
+        ),
+        State::Checking => ("Checking\u{2026}".into(), "Checking\u{2026}".into(), false),
+        State::Current => (
+            "You have the newest version.".into(),
+            "Check again".into(),
+            false,
+        ),
+        State::Available(v, size) => (
+            format!("Version {v} is out ({}).", mb(size)),
+            format!("Install {v}"),
+            true,
+        ),
+        State::Downloading(done, total) => {
+            let pct = (done * 100).checked_div(total).unwrap_or(0);
+            (
+                format!("Downloading\u{2026} {pct}%"),
+                "Downloading\u{2026}".into(),
+                false,
+            )
+        }
+        State::Installing => (
+            "Installing. PhitPup will start again by itself.".into(),
+            "Installing\u{2026}".into(),
+            false,
+        ),
+        State::Failed(why) => (why, "Try again".into(), false),
+    }
 }
 
 fn shortcuts(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
@@ -1832,8 +1876,8 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
         Hit::Startup => settings::set_start_with_windows(!settings::starts_with_windows()),
         Hit::Fullscreen => edit(|c| c.off_in_fullscreen = !c.off_in_fullscreen),
         Hit::OpenFile => settings::open_file(),
-        // The browser does the checking: PhitPup has no networking code.
-        Hit::Updates => settings::open(settings::RELEASES),
+        // phitpup-update.exe does the checking: PhitPup has no networking code.
+        Hit::Updates => update::click(),
         Hit::Remind => edit(|c| c.remind_updates = !c.remind_updates),
         Hit::AddProgram => add_program(hwnd),
         Hit::Kind(i, off) => edit(|c| {
@@ -2283,6 +2327,16 @@ mod tests {
             learned_words: vec!["muj".into(), "ok".into()],
             ..Config::default()
         };
+        // PHITPUP_PREVIEW_UPDATE=available|downloading|failed shows that
+        // state on the About page.
+        match std::env::var("PHITPUP_PREVIEW_UPDATE").as_deref() {
+            Ok("available") => update::set(update::State::Available("0.4.0".into(), 2_507_332)),
+            Ok("downloading") => update::set(update::State::Downloading(1_100_000, 2_507_332)),
+            Ok("failed") => update::set(update::State::Failed(
+                "Could not connect. Check your internet connection.".into(),
+            )),
+            _ => {}
+        }
         for dark in [false, true] {
             for dpi in [96, 144] {
                 for (page, _, name) in PAGES {

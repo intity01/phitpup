@@ -42,6 +42,8 @@ const WM_OPEN_SETTINGS: u32 = WM_APP + 11;
 /// Sent by the installer and uninstaller (installer/phitpup.iss). Not
 /// WM_CLOSE: older versions would destroy the window and keep running.
 const WM_QUIT_REQUEST: u32 = WM_APP + 12;
+/// Redraw the settings window (it lives on the tray thread).
+const WM_REFRESH: u32 = WM_APP + 13;
 const CLASS: &str = "PhitPupTray";
 const RELOAD_TIMER: usize = 1;
 /// Checks now and then whether the update reminder is due.
@@ -166,6 +168,17 @@ pub fn open_settings_of_running_copy() -> bool {
     }
 }
 
+/// Redraws the settings window from any thread, e.g. as an update downloads.
+pub fn refresh_settings() {
+    // SAFETY: plain window lookup and post.
+    unsafe {
+        let hwnd = FindWindowW(wide(CLASS).as_ptr(), std::ptr::null());
+        if !hwnd.is_null() {
+            PostMessageW(hwnd, WM_REFRESH, 0, 0);
+        }
+    }
+}
+
 fn hwnd() -> HWND {
     TRAY.with_borrow(|t| t.as_ref().map_or(std::ptr::null_mut(), |t| t.hwnd))
 }
@@ -226,7 +239,8 @@ fn reminder_due(built: u64, now: u64, last: Option<u64>) -> bool {
 }
 
 /// Shows the update reminder if it is due. PhitPup cannot know whether a
-/// new version is out (it has no networking code), only how old it is.
+/// new version is out (it has no networking code; checking is up to the
+/// person, on the About page), only how old it is.
 fn remind_if_due() {
     let on = APP
         .get()
@@ -470,6 +484,10 @@ unsafe extern "system" fn window_proc(
                 WM_RBUTTONUP | WM_CONTEXTMENU => show_menu(hwnd),
                 _ => {}
             }
+            0
+        }
+        WM_REFRESH => {
+            window::refresh();
             0
         }
         WM_QUIT_REQUEST => {

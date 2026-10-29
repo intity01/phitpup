@@ -15,6 +15,14 @@ name = "phitpup-core"
 version = "0.3.1"
 
 [[package]]
+name = "phitpup-update"
+version = "0.3.1"
+dependencies = [
+ "phitpup-core",
+ "windows-sys",
+]
+
+[[package]]
 name = "phitpup-web"
 version = "0.3.1"
 dependencies = [

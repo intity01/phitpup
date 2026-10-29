@@ -1,0 +1,21 @@
+[package]
+name = "phitpup-update"
+description = "PhitPup's updater: the only part of PhitPup that connects to the internet, and only when asked"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+phitpup-core = { path = "../phitpup-core" }
+
+[build-dependencies]
+phitpup-core = { path = "../phitpup-core" }
+
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "0.59.0"
+features = [
+    "Win32_Foundation",
+    "Win32_Networking_WinHttp",
+    "Win32_Security_Cryptography",
+]

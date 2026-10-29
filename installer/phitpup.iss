@@ -2,12 +2,19 @@
 ; current user only, so it needs no administrator rights:
 ;
 ;   iscc installer\phitpup.iss
-;   iscc /DSourceExe=path\to\phitpup.exe /DOutputDir=dist installer\phitpup.iss
+;   iscc /DSourceExe=path\to\phitpup.exe /DUpdateExe=path\to\phitpup-update.exe
+;        /DOutputDir=dist installer\phitpup.iss
+;
+; Run with /UPDATE (phitpup-update.exe does, with /SILENT) it keeps the
+; person's start-with-Windows choice and starts PhitPup again at the end.
 ;
 ; The version comes from the exe's own version details (see build.rs).
 
 #ifndef SourceExe
   #define SourceExe "..\target\release\phitpup.exe"
+#endif
+#ifndef UpdateExe
+  #define UpdateExe "..\target\release\phitpup-update.exe"
 #endif
 #ifndef OutputDir
   #define OutputDir "..\target\installer"
@@ -71,6 +78,8 @@ Name: "desktopicon"; Description: "{cm:DesktopIcon}"; Flags: unchecked
 
 [Files]
 Source: "{#SourceExe}"; DestDir: "{app}"; DestName: "phitpup.exe"; Flags: ignoreversion
+; The only part that connects to the internet, and only when asked.
+Source: "{#UpdateExe}"; DestDir: "{app}"; DestName: "phitpup-update.exe"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"
 Source: "..\THIRD_PARTY.md"; DestDir: "{app}"
 ; The fonts are inside the exe; their licence travels with them.
@@ -82,16 +91,23 @@ Name: "{userdesktop}\PhitPup"; Filename: "{app}\phitpup.exe"; Tasks: desktopicon
 
 [Registry]
 ; The same value the app's own "Start with Windows" switch writes.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "PhitPup"; ValueData: """{app}\phitpup.exe"""; Tasks: startup
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "PhitPup"; ValueData: """{app}\phitpup.exe"""; Tasks: startup; Check: not IsUpdate
 
 [Run]
 Filename: "{app}\phitpup.exe"; Description: "{cm:Launch}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\phitpup.exe"; Flags: nowait; Check: IsUpdate
 
 [Code]
 const
   // WM_APP + 12, WM_QUIT_REQUEST in crates/phitpup/src/tray.rs.
   WM_QUIT_REQUEST = $800C;
   RunKey = 'Software\Microsoft\Windows\CurrentVersion\Run';
+
+// Started by phitpup-update.exe from the About page.
+function IsUpdate: Boolean;
+begin
+  Result := Pos('/UPDATE', Uppercase(GetCmdTail)) > 0;
+end;
 
 // Asks a running PhitPup to quit and waits a few seconds for it.
 procedure CloseRunningCopy;
