@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ความเป็นส่วนตัว · ผิดปุ๊บ PhitPup</title>
+<meta name="description" content="ผิดปุ๊บเก็บอะไร ไม่เก็บอะไร และต่ออินเทอร์เน็ตเมื่อไหร่">
+<meta name="theme-color" content="#D93A12">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="top">
+  <a class="brand" href="./">
+    <img src="logo.svg" alt="" width="32" height="32">
+    <span>PhitPup <small>ผิดปุ๊บ</small></span>
+  </a>
+  <nav>
+    <a href="./"><span data-lang="th">หน้าแรก</span><span data-lang="en">Home</span></a>
+    <a href="changes.html"><span data-lang="th">มีอะไรใหม่</span><span data-lang="en">What's new</span></a>
+  </nav>
+  <button class="lang" id="lang" type="button" aria-label="Switch language">EN</button>
+</header>
+
+<main class="doc">
+
+<section data-lang="th">
+  <h1>นโยบายความเป็นส่วนตัว</h1>
+  <p class="section-lead">ผิดปุ๊บ (PhitPup) โดย Intity01 · sukudone.team-dev · ใช้กับรุ่น 0.3.2 ขึ้นไป · ปรับปรุงล่าสุด 29 ตุลาคม 2026</p>
+
+  <h2>สรุป</h2>
+  <p>ผิดปุ๊บไม่ส่งสิ่งที่คุณพิมพ์ไปที่ไหนเลย ไม่มีบัญชีผู้ใช้ ไม่มีโฆษณา ไม่มีการเก็บสถิติการใช้งาน และเราไม่ได้รับข้อมูลใด ๆ ของคุณ</p>
+
+  <h2>สิ่งที่ผิดปุ๊บเห็นขณะทำงาน</h2>
+  <p>เพื่อรู้ว่าคุณพิมพ์ผิดภาษา ผิดปุ๊บต้องเห็นปุ่มที่คุณกด มันจำไว้แค่ข้อความก่อนเคอร์เซอร์ (ไม่เกิน 300 ตัวอักษร) ในหน่วยความจำ และลืมทันทีเมื่อคุณคลิก สลับหน้าต่าง หรือย้ายเคอร์เซอร์ ข้อความนี้ไม่ถูกบันทึกลงดิสก์และไม่ถูกส่งไปไหน ผิดปุ๊บไม่ทำงานเลยในช่องรหัสผ่าน โปรแกรมจัดการรหัสผ่าน หน้าต่างเข้าสู่ระบบของ Windows และ Remote Desktop</p>
+  <p>ตอนคุณสั่งแก้ข้อความที่เลือกไว้ ผิดปุ๊บคัดลอกข้อความนั้นผ่านคลิปบอร์ด แล้วคืนสิ่งที่อยู่ในคลิปบอร์ดเดิมให้ทันที</p>
+
+  <h2>สิ่งที่บันทึกในเครื่อง</h2>
+  <ul>
+    <li>ไฟล์ตั้งค่า <code>%APPDATA%\PhitPup\config.toml</code>: โหมด ปุ่มลัด โปรแกรมที่ให้ปิด และคำที่คุณเพิ่มหรือที่ผิดปุ๊บเรียนรู้จากการแก้ของคุณ</li>
+    <li>วันที่เตือนอัปเดตครั้งล่าสุด และเลขรุ่นที่เปิดล่าสุด (เพื่อบอกว่ามีอะไรใหม่หลังอัปเดต)</li>
+    <li>ถ้าเปิด "เปิดพร้อม Windows": ค่าใน Registry ที่ชี้ไปที่โปรแกรม</li>
+  </ul>
+  <p>ลบได้ทั้งหมดโดยถอนการติดตั้งแล้วลบโฟลเดอร์ <code>%APPDATA%\PhitPup</code></p>
+
+  <h2>การต่ออินเทอร์เน็ต</h2>
+  <p>ตัวโปรแกรม <code>phitpup.exe</code> ไม่มีโค้ดต่ออินเทอร์เน็ต มีแค่ตัวอัปเดต <code>phitpup-update.exe</code> ที่แยกไว้ ซึ่งทำงานเฉพาะตอนคุณกด "เช็กอัปเดต" มันขอไฟล์ <code>release.json</code> จาก intity01.github.io เพื่อดูเลขรุ่นล่าสุด และถ้าคุณกดติดตั้ง ก็โหลดตัวติดตั้งจาก github.com คำขอเหล่านี้ไม่มีข้อมูลของคุณ แต่ GitHub ในฐานะผู้ให้บริการเว็บจะเห็นที่อยู่ IP ของคุณ ตามนโยบายของ GitHub</p>
+
+  <h2>การแจ้งปัญหา</h2>
+  <p>ปุ่ม "แจ้งปัญหา" คัดลอกรุ่นของโปรแกรม รุ่นของ Windows แป้นพิมพ์ และการตั้งค่า (รายการคำบอกแค่จำนวน) ไปที่คลิปบอร์ด แล้วเปิดหน้า GitHub คุณเป็นคนวางและส่งเอง ผิดปุ๊บไม่ส่งอะไร</p>
+
+  <h2>เว็บไซต์นี้</h2>
+  <p>เว็บนี้อยู่บน GitHub Pages ไม่มีคุกกี้ ไม่มีตัวติดตาม ช่องทดลองพิมพ์ทำงานในเบราว์เซอร์ของคุณเท่านั้น ภาษาที่เลือกจำไว้ในเบราว์เซอร์ของคุณ</p>
+
+  <h2>ติดต่อ</h2>
+  <p>ถามหรือแจ้งเรื่องได้ที่ <a href="https://github.com/intity01/phitpup/issues">GitHub Issues</a></p>
+</section>
+
+<section data-lang="en">
+  <h1>Privacy policy</h1>
+  <p class="section-lead">PhitPup (ผิดปุ๊บ) by Intity01 · sukudone.team-dev · applies to version 0.3.2 and later · last updated 29 October 2026</p>
+
+  <h2>In short</h2>
+  <p>PhitPup never sends what you type anywhere. There are no accounts, no ads and no usage statistics, and we receive no data about you.</p>
+
+  <h2>What PhitPup sees while it runs</h2>
+  <p>To notice text typed in the wrong layout, PhitPup has to see the keys you press. It keeps only the text before the cursor (at most 300 characters) in memory and forgets it as soon as you click, switch windows or move the cursor. That text is never written to disk or sent anywhere. PhitPup does nothing at all in password fields, password managers, Windows sign-in prompts and Remote Desktop.</p>
+  <p>When you ask it to fix selected text, PhitPup copies that text through the clipboard and puts back what was on the clipboard right away.</p>
+
+  <h2>What is saved on your computer</h2>
+  <ul>
+    <li>The settings file <code>%APPDATA%\PhitPup\config.toml</code>: mode, shortcuts, programs to stay out of, and words you added or PhitPup learned from your corrections.</li>
+    <li>The date of the last update reminder, and the version that last ran (to show what's new after an update).</li>
+    <li>If "Start with Windows" is on: a registry value pointing at the program.</li>
+  </ul>
+  <p>Uninstall and delete the <code>%APPDATA%\PhitPup</code> folder to remove all of it.</p>
+
+  <h2>Internet connections</h2>
+  <p><code>phitpup.exe</code> has no networking code. Only the separate updater, <code>phitpup-update.exe</code>, goes online, and only when you click "Check for updates": it asks intity01.github.io for <code>release.json</code> to learn the newest version number and, if you click install, downloads the installer from github.com. These requests carry nothing about you, though GitHub, as the host, sees your IP address under GitHub's own policy.</p>
+
+  <h2>Reporting a problem</h2>
+  <p>"Report a problem" copies the program version, Windows version, keyboard layouts and settings (word lists as counts only) to the clipboard and opens GitHub. You paste and send it yourself; PhitPup sends nothing.</p>
+
+  <h2>This website</h2>
+  <p>This site is hosted on GitHub Pages and uses no cookies and no trackers. The try-it box runs in your browser only. The language you pick is remembered in your browser.</p>
+
+  <h2>Contact</h2>
+  <p>Questions and reports: <a href="https://github.com/intity01/phitpup/issues">GitHub Issues</a></p>
+</section>
+
+</main>
+
+<footer>
+  <img src="logo.svg" alt="" width="24" height="24">
+  <p><b>Intity01</b> · sukudone.team-dev · <a href="https://github.com/intity01/phitpup">GitHub</a></p>
+</footer>
+
+<script src="page.js"></script>
+</body>
+</html>

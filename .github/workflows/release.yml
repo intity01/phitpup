@@ -56,6 +56,8 @@ jobs:
           Download **PhitPup-Setup.exe** below and run it. It installs for your account only (no admin rights), adds PhitPup to the Start menu and can be removed from Windows Settings.
           Or download **phitpup.exe**, a single file that runs without installing.
 
+          What's new: https://intity01.github.io/phitpup/changes.html#$tag
+
           SHA-256:
           - PhitPup-Setup.exe: ``$setup``
           - phitpup.exe: ``$hash``

@@ -123,6 +123,17 @@ pub fn start(main_thread: u32, welcome: bool, problems: Vec<String>) {
             })
         });
         update_icon(NIM_ADD);
+        // Say once that an update happened, and link to what changed.
+        let version = env!("CARGO_PKG_VERSION");
+        let before = settings::last_version();
+        settings::set_last_version(version);
+        if !welcome && before.as_deref() != Some(version) {
+            balloon(
+                &t("PhitPup was updated to {v}").replace("{v}", version),
+                t("Click here to see what's new."),
+            );
+            BALLOON_LINK.set(Some(format!("{}#v{version}", settings::CHANGES)));
+        }
         if welcome {
             let (accept, hotkey) = APP.get().map_or_else(Default::default, |a| {
                 let c = a.config.lock().unwrap();
@@ -226,9 +237,8 @@ fn update_icon(action: u32) {
 }
 
 thread_local! {
-    /// The balloon showing is the update reminder: a click opens the
-    /// download page.
-    static UPDATE_BALLOON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Where a click on the balloon showing goes, if anywhere.
+    static BALLOON_LINK: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
 }
 
 /// Whether the update reminder should show: this build is old enough, and
@@ -261,11 +271,11 @@ fn remind_if_due() {
             .replace("{v}", env!("CARGO_PKG_VERSION"))
             .replace("{months}", &months.to_string()),
     );
-    UPDATE_BALLOON.set(true);
+    BALLOON_LINK.set(Some(settings::RELEASES.into()));
 }
 
 fn balloon(title: &str, text: &str) {
-    UPDATE_BALLOON.set(false);
+    BALLOON_LINK.set(None);
     let mut nid = notify_data();
     nid.uFlags = NIF_INFO;
     nid.dwInfoFlags = NIIF_INFO;
@@ -478,7 +488,11 @@ unsafe extern "system" fn window_proc(
         WM_TRAY => {
             match lparam as u32 {
                 WM_LBUTTONUP => window::open(),
-                NIN_BALLOONUSERCLICK if UPDATE_BALLOON.get() => settings::open(settings::RELEASES),
+                NIN_BALLOONUSERCLICK => {
+                    if let Some(link) = BALLOON_LINK.with_borrow(Clone::clone) {
+                        settings::open(&link);
+                    }
+                }
                 WM_RBUTTONUP | WM_CONTEXTMENU => show_menu(hwnd),
                 _ => {}
             }

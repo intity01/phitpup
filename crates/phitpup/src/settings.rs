@@ -41,6 +41,24 @@ pub fn set_last_reminder(secs: u64) {
     let _ = std::fs::write(reminded_path(), secs.to_string());
 }
 
+/// The page listing what changed in each version.
+pub const CHANGES: &str = "https://intity01.github.io/phitpup/changes.html";
+
+/// The version that ran last, kept next to the settings so an update can
+/// be announced once.
+fn last_version_path() -> PathBuf {
+    path().with_file_name("last-version")
+}
+
+pub fn last_version() -> Option<String> {
+    let v = std::fs::read_to_string(last_version_path()).ok()?;
+    Some(v.trim().to_string())
+}
+
+pub fn set_last_version(v: &str) {
+    let _ = std::fs::write(last_version_path(), v);
+}
+
 pub fn modified() -> Option<SystemTime> {
     std::fs::metadata(path()).and_then(|m| m.modified()).ok()
 }

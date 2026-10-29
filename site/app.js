@@ -74,6 +74,8 @@ const EN = {
   "faq.remove.a": "Open Windows Settings, go to Apps &gt; Installed apps, pick PhitPup and click Uninstall. If you use the single file, turn off Start with Windows, right-click the icon, choose Quit and delete phitpup.exe. Settings live in %APPDATA%\\PhitPup; delete that folder too.",
   "footer.made": "Made by",
   "footer.source": "Source code",
+  "footer.changes": "What's new",
+  "footer.privacy": "Privacy",
   "footer.license": "Free, not for sale",
   "status.fixed": "Fixed",
   "status.undone": "Put back",

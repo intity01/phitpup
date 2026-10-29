@@ -205,6 +205,8 @@ fn thai_for(en: &str) -> Option<&'static str> {
 
         // Tray
         "PhitPup is running" => "ผิดปุ๊บทำงานอยู่",
+        "PhitPup was updated to {v}" => "อัปเดตผิดปุ๊บเป็นรุ่น {v} แล้ว",
+        "Click here to see what's new." => "คลิกตรงนี้เพื่อดูว่ามีอะไรใหม่",
         "Typed in the wrong layout? Press {accept} on the suggestion, or {hotkey}.\nClick this icon for settings." => {
             "พิมพ์ผิดภาษา? กด {accept} ตอนป้ายขึ้น หรือกด {hotkey}\nคลิกไอคอนนี้เพื่อเปิดหน้าตั้งค่า"
         }
@@ -251,6 +253,7 @@ mod tests {
             "Install {v}",
             "Downloading\u{2026} {pct}%",
             "Version {v}",
+            "PhitPup was updated to {v}",
             "Typed in the wrong layout? Press {accept} on the suggestion, or {hotkey}.\nClick this icon for settings.",
             "You have version {v}, from about {months} months ago. Click here to open the download page.",
             "Some lines in the settings file could not be read, so their defaults are used:\n{problems}\n\n{file}",

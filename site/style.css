@@ -389,3 +389,16 @@ footer b { color: var(--text); }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
+
+/* The plain pages (changes.html, privacy.html) carry both languages. */
+html[lang="th"] [data-lang="en"],
+html[lang="en"] [data-lang="th"] { display: none; }
+.doc { max-width: 760px; }
+.doc h1 { font-size: clamp(2rem, 4vw, 2.6rem); margin: 0; }
+.doc h2 { font-size: 1.35rem; margin: 32px 0 8px; }
+.doc p, .doc li { color: var(--sub); }
+.doc ul { padding-left: 1.2em; }
+.doc li { margin: 6px 0; }
+.doc code { font-size: 0.9em; }
+section.release { padding: 24px 0 0; border-top: 1px solid var(--line); margin-top: 24px; }
+.release h2 { margin: 0 0 6px; font-family: var(--pen); color: var(--accent); }
