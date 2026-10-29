@@ -4,7 +4,7 @@ members = ["crates/phitpup-core", "crates/phitpup", "crates/phitpup-update", "cr
 default-members = ["crates/phitpup-core", "crates/phitpup", "crates/phitpup-update"]
 
 [workspace.package]
-version = "0.3.4"
+version = "0.3.5"
 edition = "2024"
 license = "PolyForm-Noncommercial-1.0.0"
 
