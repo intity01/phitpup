@@ -82,6 +82,7 @@ const G_FILE: char = '\u{E8A7}';
 const G_BULB: char = '\u{EA80}';
 const G_EDIT: char = '\u{E70F}';
 const G_UNDERLINE: char = '\u{E8DC}';
+const G_BELL: char = '\u{EA8F}';
 const G_UPDATE: char = '\u{E895}';
 const G_INFO: char = '\u{E946}';
 const G_PERSON: char = '\u{E77B}';
@@ -184,7 +185,6 @@ const PAGES: [(Page, char, &str); 5] = [
 /// Who makes PhitPup, for the About page.
 const AUTHOR: &str = "Intity01";
 const TEAM: &str = "sukudone.team-dev";
-const RELEASES: &str = "https://github.com/intity01/phitpup/releases/latest";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Which {
@@ -201,6 +201,8 @@ enum Hit {
     Startup,
     Fullscreen,
     OpenFile,
+    Remind,
+    DoubleShift,
     Underline,
     Updates,
     AddProgram,
@@ -260,6 +262,10 @@ enum F {
     ThaiCaption,
     Glyph,
     SmallGlyph,
+    /// Icons on the page tiles in the sidebar.
+    NavGlyph,
+    /// The ก on the Words tile.
+    NavThai,
 }
 
 const TEXT: &[&str] = &["Segoe UI Variable Text", "Segoe UI"];
@@ -270,7 +276,7 @@ const ICONS: &[&str] = &["Segoe Fluent Icons", "Segoe MDL2 Assets"];
 
 /// (size in px at 96 DPI, weight, faces to try in order) for each [`F`].
 /// Segoe UI Variable is what Windows 11 uses; Windows 10 has Segoe UI.
-const FONTS: [(i32, u32, &[&str]); 10] = [
+const FONTS: [(i32, u32, &[&str]); 12] = [
     (28, FW_SEMIBOLD, DISPLAY),
     (14, FW_NORMAL, TEXT),
     (14, FW_SEMIBOLD, TEXT),
@@ -281,6 +287,8 @@ const FONTS: [(i32, u32, &[&str]); 10] = [
     (13, FW_NORMAL, THAI),
     (16, FW_NORMAL, ICONS),
     (10, FW_NORMAL, ICONS),
+    (22, FW_NORMAL, ICONS),
+    (24, FW_NORMAL, THAI),
 ];
 
 struct Fonts([HFONT; FONTS.len()]);
@@ -905,7 +913,7 @@ fn build<'a>(win: &'a Win, c: &Config, dc: HDC) -> Builder<'a> {
         Page::Programs => programs_page(&mut b, c, top),
         Page::Words => words(&mut b, c, win, top),
         Page::Shortcuts => shortcuts(&mut b, c, win, top),
-        Page::About => about(&mut b, top),
+        Page::About => about(&mut b, c, top),
     };
     b.bottom = bottom + 32.0;
     sidebar(&mut b, win.page);
@@ -934,22 +942,48 @@ fn sidebar(b: &mut Builder, page: Page) {
         LINE,
     );
 
+    // Wide tiles, icon over label; the current page is tinted coral.
     for (i, (pg, glyph, label)) in PAGES.into_iter().enumerate() {
-        let r = R::new(12.0, 88.0 + i as f32 * 40.0, SIDEBAR - 24.0, 36.0);
+        let r = R::new(12.0, 84.0 + i as f32 * 70.0, SIDEBAR - 24.0, 64.0);
         let hovered = b.hit(r, Hit::Nav(pg));
-        if pg == page || hovered {
-            b.fill(r, 4.0, p.nav);
+        let ink = if pg == page {
+            b.fill(r, 8.0, mix(p.bg, p.accent, 0.13));
+            b.stroke(r, 8.0, mix(p.bg, p.accent, 0.30));
+            p.accent
+        } else {
+            if hovered {
+                b.fill(r, 8.0, p.nav);
+            }
+            p.text
+        };
+        let icon = R::new(r.x, r.y + 8.0, r.w, 28.0);
+        if pg == Page::Words {
+            // ก and a text cursor: typing, in Thai.
+            b.text(
+                R::new(icon.x - 5.0, icon.y, icon.w, icon.h),
+                "ก",
+                F::NavThai,
+                ink,
+                LINE | DT_CENTER,
+            );
+            let bar = R::new(r.x + r.w / 2.0 + 9.0, icon.y + 3.0, 2.0, 22.0);
+            b.fill(bar, 1.0, ink);
+            b.fill(R::new(bar.x - 3.0, bar.y, 8.0, 1.5), 0.75, ink);
+            b.fill(
+                R::new(bar.x - 3.0, bar.y + bar.h - 1.5, 8.0, 1.5),
+                0.75,
+                ink,
+            );
+        } else {
+            b.glyph(icon, glyph, F::NavGlyph, ink);
         }
-        if pg == page {
-            b.fill(R::new(r.x, r.y + 10.0, 3.0, 16.0), 1.5, p.accent);
-        }
-        b.glyph(R::new(r.x + 14.0, r.y, 20.0, r.h), glyph, F::Glyph, p.text);
+        let f = if pg == page { F::Strong } else { F::Body };
         b.text(
-            R::new(r.x + 46.0, r.y, r.w - 50.0, r.h),
+            R::new(r.x, r.y + 38.0, r.w, 20.0),
             label,
-            F::Body,
-            p.text,
-            LINE,
+            f,
+            ink,
+            LINE | DT_CENTER,
         );
     }
 
@@ -1059,7 +1093,7 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
         68.0,
         Some(G_UNDERLINE),
         "Underline the word instead of a bubble",
-        "Falls back to the bubble where an app cannot show it.",
+        "Apps that cannot show it get the bubble.",
         Some(Hit::Underline),
     );
     b.toggle(cy, c.underline, hovered);
@@ -1367,7 +1401,7 @@ fn chips(b: &mut Builder, mut y: f32, words: &[String], hit: fn(usize) -> Hit) -
     y + 40.0
 }
 
-fn about(b: &mut Builder, y: f32) -> f32 {
+fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
     let p = b.pal;
     let mut y = y + 8.0;
     b.shapes.push(Shape::Logo {
@@ -1418,6 +1452,17 @@ fn about(b: &mut Builder, y: f32) -> f32 {
     let r = R::new(RIGHT - 20.0 - 170.0, cy - 16.0, 170.0, 32.0);
     b.button(r, "Check for updates", None, false, Hit::Updates);
     y += 72.0;
+    let (cy, hovered) = b.row(
+        y,
+        68.0,
+        68.0,
+        Some(G_BELL),
+        "Remind me to check",
+        "Once this version is two months old.",
+        Some(Hit::Remind),
+    );
+    b.toggle(cy, c.remind_updates, hovered);
+    y += 72.0;
 
     y += 16.0;
     b.glyph(R::new(LEFT, y, 16.0, 20.0), G_LOCK, F::SmallGlyph, p.sub);
@@ -1425,7 +1470,7 @@ fn about(b: &mut Builder, y: f32) -> f32 {
         LEFT + 24.0,
         y,
         WIDTH - 24.0,
-        "Works offline and never connects to the internet. What you type is kept in memory          only until you click or switch windows, and is never sent anywhere. The only thing          saved is your settings file, including the words you add.",
+        "Works offline and never connects to the internet. What you type is kept in memory only until you click or switch windows, and is never sent anywhere. The only things saved are your settings file, including the words you add, and the date of the last update reminder.",
         F::Caption,
         p.sub,
     );
@@ -1483,6 +1528,18 @@ fn shortcuts(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
         }
         y += 72.0;
     }
+
+    let (cy, hovered) = b.row(
+        y,
+        68.0,
+        68.0,
+        Some(G_KEYBOARD),
+        "Also fix when I tap Shift twice",
+        "Two quick taps, nothing in between.",
+        Some(Hit::DoubleShift),
+    );
+    b.toggle(cy, c.double_shift, hovered);
+    y += 72.0;
 
     let fixed = [
         (
@@ -1735,11 +1792,13 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
         Hit::On => tray::toggle_pause(),
         Hit::Mode(mode) => edit(|c| c.mode = mode),
         Hit::Underline => edit(|c| c.underline = !c.underline),
+        Hit::DoubleShift => edit(|c| c.double_shift = !c.double_shift),
         Hit::Startup => settings::set_start_with_windows(!settings::starts_with_windows()),
         Hit::Fullscreen => edit(|c| c.off_in_fullscreen = !c.off_in_fullscreen),
         Hit::OpenFile => settings::open_file(),
         // The browser does the checking: PhitPup has no networking code.
-        Hit::Updates => settings::open(RELEASES),
+        Hit::Updates => settings::open(settings::RELEASES),
+        Hit::Remind => edit(|c| c.remind_updates = !c.remind_updates),
         Hit::AddProgram => add_program(hwnd),
         Hit::Kind(i, off) => edit(|c| {
             let mut list = programs(c);

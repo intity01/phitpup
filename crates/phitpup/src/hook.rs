@@ -27,11 +27,12 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetForegroundWindow, HC_ACTION, KBDLLHOOKSTRUCT, PostThreadMessageW,
-    SetWindowsHookExW, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_LBUTTONDOWN, WM_MBUTTONDOWN,
-    WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_XBUTTONDOWN,
+    SetWindowsHookExW, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN,
+    WM_MBUTTONDOWN, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_XBUTTONDOWN,
 };
 
 use phitpup_core::config::Mode;
+use phitpup_core::hotkey::DoubleTap;
 
 use crate::context::{self, Gate};
 use crate::{APP, App, WM_ACCEPT, WM_BUBBLE, WM_FIX, WM_SAVE, inject, layout};
@@ -44,6 +45,8 @@ static LAST_FOREGROUND: AtomicIsize = AtomicIsize::new(0);
 static DISMISSED: AtomicBool = AtomicBool::new(false);
 /// The gate at the last key, to log only its changes.
 static LAST_GATE: std::sync::Mutex<Gate> = std::sync::Mutex::new(Gate::On);
+/// For `double_shift`.
+static SHIFT_TAPS: std::sync::Mutex<DoubleTap> = std::sync::Mutex::new(DoubleTap::new());
 
 /// ToUnicodeEx: leave the keyboard state (dead keys) alone. Windows 10 1607+.
 const NO_STATE_CHANGE: u32 = 0x4;
@@ -153,6 +156,10 @@ unsafe extern "system" fn keyboard(code: i32, wparam: WPARAM, lparam: LPARAM) ->
         // SAFETY: for HC_ACTION, lparam points to a KBDLLHOOKSTRUCT.
         let k = unsafe { &*(lparam as *const KBDLLHOOKSTRUCT) };
         if k.dwExtraInfo != inject::TAG {
+            SHIFT_TAPS
+                .lock()
+                .unwrap()
+                .key_down(is_shift(k.vkCode), k.time);
             let swallow = key_down(k);
             if let Some(app) = APP.get() {
                 learn(app);
@@ -161,9 +168,42 @@ unsafe extern "system" fn keyboard(code: i32, wparam: WPARAM, lparam: LPARAM) ->
                 return 1;
             }
         }
+    } else if code == HC_ACTION as i32 && matches!(wparam as u32, WM_KEYUP | WM_SYSKEYUP) {
+        // SAFETY: for HC_ACTION, lparam points to a KBDLLHOOKSTRUCT.
+        let k = unsafe { &*(lparam as *const KBDLLHOOKSTRUCT) };
+        let tapped = k.dwExtraInfo != inject::TAG
+            && SHIFT_TAPS
+                .lock()
+                .unwrap()
+                .key_up(is_shift(k.vkCode), k.time);
+        if tapped {
+            double_shift();
+        }
     }
     // SAFETY: forwarding the unchanged arguments.
     unsafe { CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam) }
+}
+
+fn is_shift(vk: u32) -> bool {
+    matches!(vk as u16, VK_SHIFT | VK_LSHIFT | VK_RSHIFT)
+}
+
+/// Shift tapped twice: the same as the hotkey, if turned on. Unlike the
+/// hotkey, it never falls back to a plain Backspace.
+fn double_shift() {
+    let Some(app) = APP.get() else { return };
+    if !app.config.lock().unwrap().double_shift {
+        return;
+    }
+    // SAFETY: plain query.
+    let fg = unsafe { GetForegroundWindow() };
+    if matches!(context::gate(app, fg), Gate::Off(_)) {
+        return;
+    }
+    debug!("Shift tapped twice: fixing like the hotkey");
+    set_suggestion(app, None);
+    // SAFETY: posting to the worker thread's queue.
+    unsafe { PostThreadMessageW(app.worker, WM_FIX, 1, 0) };
 }
 
 /// Returns true to swallow the key.

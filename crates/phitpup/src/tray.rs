@@ -41,6 +41,16 @@ const WM_TRAY: u32 = WM_APP + 10;
 const WM_OPEN_SETTINGS: u32 = WM_APP + 11;
 const CLASS: &str = "PhitPupTray";
 const RELOAD_TIMER: usize = 1;
+/// Checks now and then whether the update reminder is due.
+const REMIND_TIMER: usize = 2;
+/// The balloon was clicked (`NIN_BALLOONUSERCLICK`).
+const NIN_BALLOONUSERCLICK: u32 = 0x0400 + 5;
+
+const DAY: u64 = 24 * 60 * 60;
+/// How old this version must be before the reminder shows.
+const REMIND_AFTER: u64 = 60 * DAY;
+/// How long to wait before showing it again.
+const REMIND_EVERY: u64 = 30 * DAY;
 
 const CMD_PAUSE: usize = 1;
 // The three modes need consecutive ids for CheckMenuRadioItem.
@@ -125,6 +135,10 @@ pub fn start(main_thread: u32, welcome: bool, problems: Vec<String>) {
         // SAFETY: our own window; standard message loop.
         unsafe {
             SetTimer(hwnd, RELOAD_TIMER, 2000, None);
+            SetTimer(hwnd, REMIND_TIMER, 6 * 60 * 60 * 1000, None);
+            if !welcome {
+                remind_if_due();
+            }
             let mut msg: MSG = std::mem::zeroed();
             while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
                 TranslateMessage(&msg); // typing in the settings window
@@ -194,7 +208,47 @@ fn update_icon(action: u32) {
     }
 }
 
+thread_local! {
+    /// The balloon showing is the update reminder: a click opens the
+    /// download page.
+    static UPDATE_BALLOON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether the update reminder should show: this build is old enough, and
+/// it has not shown recently. Times in Unix seconds.
+fn reminder_due(built: u64, now: u64, last: Option<u64>) -> bool {
+    built > 0
+        && now.saturating_sub(built) >= REMIND_AFTER
+        && last.is_none_or(|t| now.saturating_sub(t) >= REMIND_EVERY)
+}
+
+/// Shows the update reminder if it is due. PhitPup cannot know whether a
+/// new version is out (it has no networking code), only how old it is.
+fn remind_if_due() {
+    let on = APP
+        .get()
+        .is_some_and(|a| a.config.lock().unwrap().remind_updates);
+    let built: u64 = env!("PHITPUP_BUILT").parse().unwrap_or(0);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    if !on || !reminder_due(built, now, settings::last_reminder()) {
+        return;
+    }
+    settings::set_last_reminder(now);
+    let months = now.saturating_sub(built) / (30 * DAY);
+    balloon(
+        "A newer PhitPup may be out",
+        &format!(
+            "You have version {}, from about {months} months ago. Click here to open the download page.",
+            env!("CARGO_PKG_VERSION")
+        ),
+    );
+    UPDATE_BALLOON.set(true);
+}
+
 fn balloon(title: &str, text: &str) {
+    UPDATE_BALLOON.set(false);
     let mut nid = notify_data();
     nid.uFlags = NIF_INFO;
     nid.dwInfoFlags = NIIF_INFO;
@@ -409,9 +463,14 @@ unsafe extern "system" fn window_proc(
         WM_TRAY => {
             match lparam as u32 {
                 WM_LBUTTONUP => window::open(),
+                NIN_BALLOONUSERCLICK if UPDATE_BALLOON.get() => settings::open(settings::RELEASES),
                 WM_RBUTTONUP | WM_CONTEXTMENU => show_menu(hwnd),
                 _ => {}
             }
+            0
+        }
+        WM_TIMER if wparam == REMIND_TIMER => {
+            remind_if_due();
             0
         }
         WM_TIMER if wparam == RELOAD_TIMER => {
@@ -426,5 +485,21 @@ unsafe extern "system" fn window_proc(
         }
         // SAFETY: default handling for everything else.
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn update_reminder_timing() {
+        let built = 1_000 * DAY;
+        assert!(!reminder_due(built, built + 59 * DAY, None), "too new");
+        assert!(reminder_due(built, built + 61 * DAY, None));
+        let last = Some(built + 61 * DAY);
+        assert!(!reminder_due(built, built + 80 * DAY, last), "shown lately");
+        assert!(reminder_due(built, built + 92 * DAY, last));
+        assert!(!reminder_due(0, built, None), "unknown build time");
     }
 }

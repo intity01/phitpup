@@ -92,6 +92,60 @@ impl Hotkey {
     }
 }
 
+/// Spots Shift tapped twice in quick succession with no other key between,
+/// the optional second way to fix the last word. Feed it every key press
+/// and release with the hook's millisecond timestamps.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DoubleTap {
+    /// When Shift went down, while it is held cleanly.
+    pressed: Option<u32>,
+    /// When the previous clean tap ended.
+    last_tap: Option<u32>,
+}
+
+impl DoubleTap {
+    /// Longest press that still counts as a tap.
+    pub const TAP_MS: u32 = 250;
+    /// Longest gap between the two taps.
+    pub const GAP_MS: u32 = 400;
+
+    pub const fn new() -> Self {
+        Self {
+            pressed: None,
+            last_tap: None,
+        }
+    }
+
+    pub fn key_down(&mut self, shift: bool, ms: u32) {
+        if !shift {
+            *self = Self::new(); // typing a capital, a shortcut…
+        } else if self.pressed.is_none() {
+            self.pressed = Some(ms); // auto-repeat keeps the first time
+        }
+    }
+
+    /// True when this release completes a double tap.
+    pub fn key_up(&mut self, shift: bool, ms: u32) -> bool {
+        if !shift {
+            return false;
+        }
+        let Some(down) = self.pressed.take() else {
+            return false;
+        };
+        if ms.wrapping_sub(down) > Self::TAP_MS {
+            self.last_tap = None; // held, not tapped
+            return false;
+        }
+        match self.last_tap.take() {
+            Some(prev) if ms.wrapping_sub(prev) <= Self::GAP_MS => true,
+            _ => {
+                self.last_tap = Some(ms);
+                false
+            }
+        }
+    }
+}
+
 /// As the settings file writes it: `"shift+backspace"`.
 impl fmt::Display for Hotkey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -222,5 +276,30 @@ mod tests {
         assert!(Hotkey::FIX.problem().is_none());
         assert!(Hotkey::ACCEPT.problem().is_none());
         assert!(is_main_key(0x70) && !is_main_key(0x10));
+    }
+
+    #[test]
+    fn double_tap_of_shift() {
+        let tap = |t: &mut DoubleTap, at: u32| {
+            t.key_down(true, at);
+            t.key_up(true, at + 80)
+        };
+        let mut t = DoubleTap::new();
+        assert!(!tap(&mut t, 1000));
+        assert!(tap(&mut t, 1200), "second quick tap");
+        assert!(!tap(&mut t, 1400), "a third tap starts over");
+
+        // A capital letter in between, a held Shift, or a slow second tap.
+        let mut t = DoubleTap::new();
+        tap(&mut t, 0);
+        t.key_down(false, 100);
+        assert!(!tap(&mut t, 150));
+        let mut t = DoubleTap::new();
+        tap(&mut t, 0);
+        t.key_down(true, 150);
+        assert!(!t.key_up(true, 700));
+        let mut t = DoubleTap::new();
+        tap(&mut t, 0);
+        assert!(!tap(&mut t, 600));
     }
 }

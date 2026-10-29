@@ -48,6 +48,10 @@ pub struct Config {
     /// Show suggestions as a wavy line under the word instead of a bubble,
     /// in apps that say where the word is.
     pub underline: bool,
+    /// Tapping Shift twice also fixes the last word.
+    pub double_shift: bool,
+    /// A tray reminder to look for a new version once this one is old.
+    pub remind_updates: bool,
     /// Fixes the last word.
     pub hotkey: Hotkey,
     /// Accepts the suggestion.
@@ -65,6 +69,8 @@ impl Default for Config {
             learned_words: Vec::new(),
             learn: true,
             underline: false,
+            double_shift: false,
+            remind_updates: true,
             hotkey: Hotkey::FIX,
             accept_key: Hotkey::ACCEPT,
         }
@@ -112,6 +118,13 @@ learned_words = []
 # space, enter, insert, f1-f24, a-z.
 hotkey = "shift+backspace"
 accept_key = "tab"
+
+# Tapping Shift twice quickly also fixes the last word, like hotkey.
+double_shift = false
+
+# Once this version is two months old, a tray note now and then suggests
+# looking for a newer one. PhitPup never checks online itself.
+remind_updates = true
 "#;
 
 impl Config {
@@ -146,6 +159,8 @@ impl Config {
                 "learned_words" => list(value).map(|w| c.learned_words = w),
                 "learn" => boolean(value).map(|b| c.learn = b),
                 "underline" => boolean(value).map(|b| c.underline = b),
+                "double_shift" => boolean(value).map(|b| c.double_shift = b),
+                "remind_updates" => boolean(value).map(|b| c.remind_updates = b),
                 "hotkey" => shortcut(value).map(|k| c.hotkey = k),
                 "accept_key" => shortcut(value).map(|k| c.accept_key = k),
                 _ => {
@@ -182,6 +197,8 @@ impl Config {
         t = set(&t, "learn", &self.learn.to_string());
         t = set(&t, "learned_words", &array(&self.learned_words));
         t = set(&t, "hotkey", &quoted(&self.hotkey.to_string()));
+        t = set(&t, "double_shift", &self.double_shift.to_string());
+        t = set(&t, "remind_updates", &self.remind_updates.to_string());
         set(&t, "accept_key", &quoted(&self.accept_key.to_string()))
     }
 }
@@ -346,6 +363,8 @@ accept_key = \"shift+backspace\"",
             learned_words: vec!["muj".into()],
             learn: false,
             underline: true,
+            double_shift: true,
+            remind_updates: false,
             hotkey: Hotkey::parse("ctrl+backslash").unwrap(),
             accept_key: Hotkey::ACCEPT,
         };

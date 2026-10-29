@@ -20,6 +20,27 @@ pub fn path() -> PathBuf {
     base.join("PhitPup").join("config.toml")
 }
 
+/// The page with the newest version.
+pub const RELEASES: &str = "https://github.com/intity01/phitpup/releases/latest";
+
+/// Remembers when the update reminder last showed, next to the settings.
+fn reminded_path() -> PathBuf {
+    path().with_file_name("update-reminder")
+}
+
+/// When the update reminder last showed, in Unix seconds.
+pub fn last_reminder() -> Option<u64> {
+    std::fs::read_to_string(reminded_path())
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+}
+
+pub fn set_last_reminder(secs: u64) {
+    let _ = std::fs::write(reminded_path(), secs.to_string());
+}
+
 pub fn modified() -> Option<SystemTime> {
     std::fs::metadata(path()).and_then(|m| m.modified()).ok()
 }

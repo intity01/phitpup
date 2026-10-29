@@ -275,7 +275,7 @@ mod app {
                         TranslateMessage(&msg);
                         DispatchMessageW(&msg);
                     }
-                    WM_FIX => fix(owner),
+                    WM_FIX => fix(owner, msg.wParam == 1),
                     WM_BUBBLE => bubble::schedule(),
                     WM_ACCEPT => accept(),
                     WM_SAVE => settings::save(&APP.get().unwrap().config.lock().unwrap().clone()),
@@ -285,7 +285,8 @@ mod app {
         }
     }
 
-    fn fix(owner: HWND) {
+    /// `tapped`: asked for by tapping Shift twice, not by the hotkey.
+    fn fix(owner: HWND, tapped: bool) {
         let app = APP.get().unwrap();
         if layout::foreground_is_elevated() {
             debug!(
@@ -308,7 +309,8 @@ mod app {
             None => {
                 debug!("hotkey: nothing typed since the caret moved; trying the selection");
                 // Nothing to fix: Shift+Backspace behaves like Backspace.
-                if !convert_selection(owner) && app.config.lock().unwrap().hotkey.vk == VK_BACK {
+                let backspace = app.config.lock().unwrap().hotkey.vk == VK_BACK && !tapped;
+                if !convert_selection(owner) && backspace {
                     debug!("hotkey: no selection either; sent a plain Backspace");
                     inject::backspace();
                 }
