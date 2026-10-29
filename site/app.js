@@ -1,6 +1,6 @@
-// PhitPup website: language switch, release info, the hero demo and the
-// "try it" box. The try-it box runs PhitPup's own core (phitpup.wasm) in the
-// browser; nothing typed here leaves the page.
+// PhitPup website: language switch, release info and the "try it" box. The
+// try-it box runs PhitPup's own core (phitpup.wasm) in the browser; nothing
+// typed here leaves the page. The hero animates in CSS.
 
 "use strict";
 
@@ -13,16 +13,46 @@ const SETUP = `${RELEASES}/latest/download/PhitPup-Setup.exe`;
 
 // Thai is written in the HTML; English lives here.
 const EN = {
+  "nav.what": "What it fixes",
+  "nav.keys": "Keys",
   "nav.try": "Try it",
-  "nav.how": "How it works",
   "nav.install": "Install",
   "nav.faq": "FAQ",
-  "hero.eyebrow": "For Windows 10 and 11",
-  "hero.title": "Typed in the wrong layout?<br>Fixed in a <em>blink</em>.",
-  "hero.lead": "Forgot to switch to Thai and got <code>l;ylfu</code>? PhitPup sees you meant <b>สวัสดี</b> and fixes it on the spot. No deleting, no retyping.",
-  "hero.download": "Download free",
+  "hero.eyebrow": "A red pen for your keyboard",
+  "hero.title": "Right keys, wrong language?<br>Fixed in a <em>blink</em>.",
+  "hero.note": "Same keys,<br>other language →",
+  "bubble.leave": "Leave it",
+  "hero.lead": "Forgot to switch layouts, slipped into <s>teh</s>, or left Caps Lock on? PhitPup sees what you meant to type. One <kbd>Tab</kbd> and it is right.",
+  "hero.download": "Download for Windows",
   "hero.try": "Try it in the browser",
-  "hero.meta": "Easy install, no admin rights needed · about 2.5 MB · free, not for sale",
+  "hero.meta": "Windows 10 and 11 · installs without admin rights · free, not for sale",
+  "what.title": "What it fixes",
+  "what.lead": "PhitPup looks at the word you are typing and offers the right one in a small bubble by the caret. The label on the bubble says what kind of mistake it is.",
+  "what.layout.t": "Wrong layout",
+  "what.layout.p": "Thai typed on the English layout, or the other way round. Fixes it and switches your keyboard too, so you can keep typing.",
+  "badge.slip": "Spell",
+  "what.slip.t": "Finger slips",
+  "what.new": "New",
+  "what.slip.p": "A neighbouring key, two letters swapped, one letter missing or extra, in Thai and English. Only ever suggested, never fixed on its own.",
+  "what.order.t": "Thai marks in the wrong order",
+  "what.order.p": "Looks right but search can't find it: two เ instead of แ, or ํ and า instead of ำ.",
+  "what.caps.t": "Caps Lock and doubled words",
+  "what.caps.p": "Caps Lock left on, giving hELLO, or the the typed twice.",
+  "keys.title": "Three keys to know",
+  "keys.note": "That's all",
+  "keys.tab.t": "Take the suggestion",
+  "keys.tab.p": "The bubble shows up when a word looks wrong. Press Tab if it is right; otherwise keep typing and it goes away.",
+  "keys.undo.t": "Fix it yourself, or undo",
+  "keys.undo.p": "Fixes the last word at once; press again to put it back. Select text and press it to fix all of it. Works in every mode.",
+  "keys.leave.t": "On the bubble: Leave it",
+  "keys.leave.p": "Shop names, people's names, slang. One click and that word is not flagged again (or press <kbd>Shift</kbd> <kbd>Esc</kbd>).",
+  "decide.title": "You decide",
+  "decide.p": "By default every fix goes through the bubble for you to choose. For a word you meant, click <b>Leave it</b> once and PhitPup remembers. You can also have it fix on Space, or only when you press the hotkey.",
+  "decide.place": "Bubble covering a search list? Show it above the line, or switch to a wavy underline, in the settings.",
+  "decide.label": "Message to a shop",
+  "decide.text": "Ordering from ช้อปปี้<span class=\"caret\"></span>",
+  "decide.done": "✓ Got it, won't flag this again",
+  "decide.note": "Shop names are fine too",
   "try.title": "Try it",
   "try.lead": "Type Thai while your keyboard is still on English (or the other way round). It all runs in your browser; nothing is sent anywhere.",
   "try.layout": "Thai layout",
@@ -36,19 +66,11 @@ const EN = {
   "hint.suggest": "A bubble shows up as you type. <kbd>Tab</kbd> accepts it, <kbd>Esc</kbd> hides it · <kbd>Shift</kbd>+<kbd>Backspace</kbd> fixes the last word or the selection.",
   "hint.auto": "Press <kbd>Space</kbd> and a word PhitPup is sure about is fixed for you · <kbd>Shift</kbd>+<kbd>Backspace</kbd> right after puts it back.",
   "hint.manual": "Nothing pops up. <kbd>Shift</kbd>+<kbd>Backspace</kbd> fixes the last word; press again to reach further back. Select text first to fix all of it.",
-  "modes.title": "Choose how much help you want",
-  "modes.suggest.t": "Suggest as you type",
-  "modes.suggest.p": "A small bubble appears under the caret when a word looks like the wrong layout. Tab if it is right, otherwise just keep typing. This is the default.",
-  "modes.auto.t": "Fix automatically",
-  "modes.auto.p": "Press Space and the wrong word is fixed for you, but only when PhitPup is very sure. If it got it wrong, Shift+Backspace right away brings your word back.",
-  "modes.manual.t": "On the hotkey",
-  "modes.manual.p": "Fixes the last word; press again to go back one word at a time. Select text and press it to fix the whole selection. Works in every mode.",
-  "facts.switch": "Switches your keyboard layout too, so you can keep typing",
-  "facts.layouts": "Kedmanee and Pattachote Thai layouts",
-  "facts.apps": "Works almost everywhere: browsers, LINE, Discord, Word, Notepad",
-  "facts.off": "Turns itself off in password fields, password managers, Remote Desktop and full-screen games",
-  "privacy.title": "What you type never leaves your computer",
-  "privacy.p": "The program that sees your keys has no networking code at all. Only a separate updater goes online, and only when you click Check for updates, to ask for the newest version number and fetch the installer. PhitPup tells wrong-layout words apart with small statistics tables built into the program, remembers only the word you are typing, forgets it as soon as you click or switch windows, and all of its code is open to read.",
+  "try.only": "This box tries layout fixes only. Spelling and Leave it are in the app.",
+  "privacy.title": "What you type<br>stays on your computer",
+  "privacy.note": "Not sent, not kept, not remembered",
+  "privacy.p": "The program that sees your keys has no networking code at all. It remembers only the word you are typing and forgets it as soon as you click or switch windows. The updater is a separate file and goes online only when you click Check for updates.",
+  "privacy.off": "Turns itself off in password fields, password managers, Remote Desktop and full-screen games. All the code is open to read. <a href=\"privacy.html\">Read the privacy policy</a>",
   "install.title": "Set up in a minute",
   "install.1.t": "Download the installer",
   "install.1.p": "PhitPup-Setup.exe installs for your account only, with no admin rights. PhitPup then shows up in the Start menu and can be removed from Windows Settings.",
@@ -58,14 +80,14 @@ const EN = {
   "install.2.t": "Run the installer",
   "install.2.p": "If a blue \"Windows protected your PC\" window appears, click <b>More info</b>, then <b>Run anyway</b>. PhitPup does not have a paid code-signing certificate yet. Then click Next until it is done.",
   "install.3.t": "Start typing",
-  "install.3.p": "The orange p icon sits next to the clock. Click it to open the settings, pick a mode and make PhitPup start with Windows.",
+  "install.3.p": "The orange p icon sits next to the clock. Click it to open the settings, pick a mode and make PhitPup start with Windows. New versions install from inside the app.",
   "faq.title": "Questions",
   "faq.av.q": "Why does my antivirus warn about it?",
   "faq.av.a": "To know what you typed, PhitPup has to see the keys you press, and to fix a word it has to type for you. Keyloggers use the same Windows features, so some antivirus programs flag anything that does this. All the code is open, and you can check that your file is exactly the one GitHub built by comparing the SHA-256 above.",
   "faq.smart.q": "SmartScreen says the publisher is unknown. Is it safe?",
   "faq.smart.a": "Windows shows this for every program without a paid code-signing certificate. Every release is built by GitHub Actions from the public source code, with a SHA-256 you can check.",
   "faq.wrong.q": "What if it changes a word I meant?",
-  "faq.wrong.a": "Press Shift+Backspace right away to get your word back. If a word keeps getting flagged, such as an acronym, press Shift+Esc while the bubble shows it and it will not be suggested again. You can also add words on the Words page.",
+  "faq.wrong.a": "Press Shift+Backspace right away to get your word back. If a word keeps getting flagged, such as a shop name or an acronym, click Leave it on the bubble or press Shift+Esc and it will not be flagged again. You can also add words on the Words page.",
   "faq.games.q": "Will it get in the way of games?",
   "faq.games.a": "No. PhitPup turns itself off in full-screen windows, and you can add any program where it should do nothing on the Programs page.",
   "faq.mac.q": "Is there a macOS or phone version?",
@@ -167,36 +189,6 @@ fetch("release.json", { cache: "no-cache" })
     showRelease();
   })
   .catch(() => {});
-
-// ---------------------------------------------------------------- hero demo
-
-(function demo() {
-  const text = document.getElementById("demo-text");
-  const bubble = document.getElementById("demo-bubble");
-  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const typed = "l;ylfu";
-  const fixed = "สวัสดี";
-  if (reduced) {
-    text.textContent = fixed;
-    return;
-  }
-  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  (async () => {
-    for (;;) {
-      text.textContent = "";
-      for (const c of typed) {
-        text.textContent += c;
-        await wait(140 + Math.random() * 90);
-      }
-      await wait(250);
-      bubble.classList.add("show");
-      await wait(1300);
-      bubble.classList.remove("show");
-      text.textContent = fixed;
-      await wait(2600);
-    }
-  })();
-})();
 
 // ---------------------------------------------------------------- try it
 

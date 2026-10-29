@@ -17,8 +17,9 @@
     <span>PhitPup <small>ผิดปุ๊บ</small></span>
   </a>
   <nav>
+    <a href="#what" data-i18n="nav.what">แก้อะไรได้</a>
+    <a href="#keys" data-i18n="nav.keys">ปุ่มที่ต้องรู้</a>
     <a href="#try" data-i18n="nav.try">ลองเลย</a>
-    <a href="#modes" data-i18n="nav.how">ใช้งานยังไง</a>
     <a href="#install" data-i18n="nav.install">ติดตั้ง</a>
     <a href="#faq" data-i18n="nav.faq">คำถาม</a>
   </nav>
@@ -28,31 +29,122 @@
 <main>
 
 <section class="hero">
-  <div class="hero-text">
-    <p class="eyebrow" data-i18n="hero.eyebrow">สำหรับ Windows 10 และ 11</p>
-    <h1 data-i18n="hero.title">พิมพ์ผิดภาษา?<br>แก้ได้ใน<em>ปุ๊บ</em>เดียว</h1>
-    <p class="lead" data-i18n="hero.lead">ลืมกดเปลี่ยนภาษาจนได้ <code>l;ylfu</code> ใช่ไหม ผิดปุ๊บดูออกว่าคุณตั้งใจพิมพ์ <b>สวัสดี</b> แล้วแก้ให้ทันที ไม่ต้องลบพิมพ์ใหม่</p>
-    <div class="cta">
-      <a class="button primary" id="download" href="#install">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 20h16"/></svg>
-        <span data-i18n="hero.download">ดาวน์โหลดฟรี</span>
-      </a>
-      <a class="button" href="#try" data-i18n="hero.try">ลองในเว็บก่อน</a>
+  <p class="eyebrow" data-i18n="hero.eyebrow">ครูปากกาแดงประจำคีย์บอร์ดของคุณ</p>
+  <h1 data-i18n="hero.title">ปุ่มเดิม ภาษาผิด<br>แก้ให้ใน<em>ปุ๊บ</em>เดียว</h1>
+
+  <div class="stage" aria-hidden="true">
+    <p class="side-note" data-i18n="hero.note">ปุ่มเดียวกัน<br>คนละภาษา →</p>
+    <div class="caps">
+      <div class="cap" style="--i: 0"><span class="en">L</span><span class="th">ส</span></div>
+      <div class="cap" style="--i: 1"><span class="en">;</span><span class="th">ว</span></div>
+      <div class="cap" style="--i: 2"><span class="en">Y</span><span class="th">ั</span></div>
+      <div class="cap" style="--i: 3"><span class="en">L</span><span class="th">ส</span></div>
+      <div class="cap" style="--i: 4"><span class="en">F</span><span class="th">ด</span></div>
+      <div class="cap" style="--i: 5"><span class="en">U</span><span class="th">ี</span></div>
     </div>
-    <p class="meta" id="meta" data-i18n="hero.meta">ติดตั้งง่าย ไม่ต้องใช้สิทธิ์ admin · ประมาณ 2.5 MB · ใช้ฟรี ห้ามขาย</p>
+    <div class="screen">
+      <div class="line">
+        <span class="typed">l;ylfu<span class="caret"></span></span>
+        <span class="meant">สวัสดี<span class="caret"></span></span>
+      </div>
+      <div class="bubble hero-bubble"><span class="badge">TH</span><span>สวัสดี</span><span class="key">Tab</span><span class="leave" data-i18n="bubble.leave">ไม่ต้องแก้</span></div>
+    </div>
   </div>
 
-  <div class="demo" aria-hidden="true">
-    <div class="window">
-      <div class="window-bar"><i></i><i></i><i></i></div>
-      <div class="window-body">
-        <p class="chat other">พรุ่งนี้ว่างไหม</p>
-        <p class="chat me"><span id="demo-text"></span><span class="caret"></span></p>
-        <div class="bubble" id="demo-bubble">
-          <span class="badge">TH</span><span id="demo-fix">สวัสดี</span><span class="key">Tab</span>
-        </div>
+  <p class="lead" data-i18n="hero.lead">ลืมเปลี่ยนภาษา นิ้วพลาดเป็น <s>ส้วสดี</s> หรือลืมปิด Caps Lock ผิดปุ๊บเห็นทันทีว่าคุณตั้งใจพิมพ์อะไร กด <kbd>Tab</kbd> ครั้งเดียวก็ถูก</p>
+  <div class="cta">
+    <a class="button primary" id="download" href="#install">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 20h16"/></svg>
+      <span data-i18n="hero.download">ดาวน์โหลดสำหรับ Windows</span>
+    </a>
+    <a class="button" href="#try" data-i18n="hero.try">ลองในเว็บก่อน</a>
+  </div>
+  <p class="meta" id="meta" data-i18n="hero.meta">Windows 10 และ 11 · ติดตั้งโดยไม่ต้องใช้สิทธิ์ admin · ใช้ฟรี ห้ามขาย</p>
+</section>
+
+<section class="what" id="what">
+  <h2 data-i18n="what.title">แก้อะไรได้บ้าง</h2>
+  <p class="section-lead" data-i18n="what.lead">ผิดปุ๊บดูคำที่คุณกำลังพิมพ์ทีละคำ แล้วเสนอคำที่ถูกในฟองเล็ก ๆ ข้างเคอร์เซอร์ ป้ายบนฟองบอกว่าผิดแบบไหน</p>
+  <div class="fixes">
+    <article class="fix" style="--d: 0s">
+      <div class="fix-head"><span class="badge">TH</span><span class="badge">EN</span><h3 data-i18n="what.layout.t">ลืมเปลี่ยนภาษา</h3></div>
+      <p data-i18n="what.layout.p">พิมพ์ไทยตอนแป้นยังเป็นอังกฤษ หรือกลับกัน แก้แล้วสลับแป้นให้ด้วย พิมพ์ต่อได้เลย</p>
+      <div class="scene" aria-hidden="true">
+        <span class="wrong">้ำสสน<span class="caret"></span></span>
+        <span class="right">hello<span class="caret"></span></span>
+        <div class="bubble"><span class="badge">EN</span><span>hello</span><span class="key">Tab</span></div>
       </div>
+    </article>
+    <article class="fix" style="--d: 1.2s">
+      <div class="fix-head"><span class="badge" data-i18n="badge.slip">สะกด</span><h3 data-i18n="what.slip.t">นิ้วพลาด</h3><span class="new" data-i18n="what.new">ใหม่</span></div>
+      <p data-i18n="what.slip.p">กดโดนปุ่มข้าง ๆ กดสลับกัน ขาดหรือเกินไปหนึ่งตัว ทั้งไทยและอังกฤษ เสนอให้เท่านั้น ไม่แก้เอง</p>
+      <div class="scene" aria-hidden="true">
+        <span class="wrong">ส้วสดี<span class="caret"></span></span>
+        <span class="right">สวัสดี<span class="caret"></span></span>
+        <div class="bubble"><span class="badge" data-i18n="badge.slip">สะกด</span><span>สวัสดี</span><span class="key">Tab</span></div>
+        <span class="pen-note">teh → the</span>
+      </div>
+    </article>
+    <article class="fix" style="--d: 2.4s">
+      <div class="fix-head"><span class="badge" data-i18n="badge.slip">สะกด</span><h3 data-i18n="what.order.t">สระ วรรณยุกต์สลับลำดับ</h3></div>
+      <p data-i18n="what.order.p">หน้าตาเหมือนถูก แต่ค้นหาไม่เจอ เช่น เ สองตัวแทน แ หรือ ํ กับ า แทน ำ</p>
+      <div class="scene" aria-hidden="true">
+        <span class="wrong">คุณเเม่<span class="caret"></span></span>
+        <span class="right">คุณแม่<span class="caret"></span></span>
+        <div class="bubble"><span class="badge" data-i18n="badge.slip">สะกด</span><span>แม่</span><span class="key">Tab</span></div>
+      </div>
+    </article>
+    <article class="fix" style="--d: 3.6s">
+      <div class="fix-head"><span class="badge">Aa</span><span class="badge">×2</span><h3 data-i18n="what.caps.t">Caps Lock และคำซ้ำ</h3></div>
+      <p data-i18n="what.caps.p">ลืมปิด Caps Lock จนได้ hELLO หรือพิมพ์ the the ซ้ำสองหน</p>
+      <div class="scene" aria-hidden="true">
+        <span class="wrong">say hELLO<span class="caret"></span></span>
+        <span class="right">say Hello<span class="caret"></span></span>
+        <div class="bubble"><span class="badge">Aa</span><span>Hello</span><span class="key">Tab</span></div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section class="keys" id="keys">
+  <div class="title-row">
+    <h2 data-i18n="keys.title">สามปุ่มที่ต้องรู้</h2>
+    <p class="pen-note" data-i18n="keys.note">จำแค่นี้พอ</p>
+  </div>
+  <div class="three">
+    <article class="panel">
+      <div class="keyrow"><span class="cap word" style="--w: 124px">Tab</span></div>
+      <h3 data-i18n="keys.tab.t">รับคำที่เสนอ</h3>
+      <p data-i18n="keys.tab.p">ฟองขึ้นเมื่อคำดูผิด ใช่ก็กด ไม่ใช่ก็พิมพ์ต่อ ฟองหายไปเอง</p>
+    </article>
+    <article class="panel">
+      <div class="keyrow"><span class="cap word" style="--w: 92px">Shift</span><span class="plus">+</span><span class="cap word" style="--w: 136px">Backspace</span></div>
+      <h3 data-i18n="keys.undo.t">แก้เองหรือย้อนกลับ</h3>
+      <p data-i18n="keys.undo.p">แก้คำล่าสุดทันที กดซ้ำเพื่อคืนคำเดิม เลือกข้อความแล้วกดก็ได้ ใช้ได้ทุกโหมด</p>
+    </article>
+    <article class="panel">
+      <div class="keyrow"><div class="bubble still"><span class="badge" data-i18n="badge.slip">สะกด</span><span>ช้อปปิ้ง</span><span class="leave on" data-i18n="bubble.leave">ไม่ต้องแก้</span></div></div>
+      <h3 data-i18n="keys.leave.t">ปุ่มบนฟอง: ไม่ต้องแก้</h3>
+      <p data-i18n="keys.leave.p">ชื่อร้าน ชื่อคน คำสแลง คลิกครั้งเดียว คำนั้นไม่ถูกทักอีก (หรือกด <kbd>Shift</kbd> <kbd>Esc</kbd>)</p>
+    </article>
+  </div>
+</section>
+
+<section class="decide">
+  <div>
+    <h2 data-i18n="decide.title">คุณเป็นคนตัดสิน</h2>
+    <p data-i18n="decide.p">ค่าเริ่มต้นคือแนะนำ ทุกคำผ่านฟองให้คุณเลือก คำที่ตั้งใจพิมพ์ กด <b>ไม่ต้องแก้</b> ครั้งเดียว ผิดปุ๊บจำไว้ จะให้แก้เองเมื่อกด Space หรือเฉพาะตอนกดปุ่มลัดก็ได้</p>
+    <p class="small" data-i18n="decide.place">ฟองบังรายการคำค้น? ตั้งให้ขึ้นเหนือบรรทัด หรือเปลี่ยนเป็นเส้นหยักใต้คำได้ในหน้าตั้งค่า</p>
+  </div>
+  <div class="sheet" aria-hidden="true">
+    <p class="sheet-label" data-i18n="decide.label">ข้อความถึงร้านค้า</p>
+    <p class="sheet-text" data-i18n="decide.text">สั่งของจาก ช้อปปี้<span class="caret"></span></p>
+    <div class="sheet-play">
+      <div class="bubble"><span class="badge" data-i18n="badge.slip">สะกด</span><span>ช้อปปิ้ง</span><span class="key">Tab</span><span class="leave" data-i18n="bubble.leave">ไม่ต้องแก้</span></div>
+      <svg class="hand" width="26" height="30" viewBox="0 0 26 30"><path d="M3 2v20l5.5-5 3.5 8 3.5-1.5-3.5-8H19L3 2Z"/></svg>
+      <p class="done" data-i18n="decide.done">✓ จำแล้ว คำนี้ไม่ทักอีก</p>
     </div>
+    <p class="margin-note" data-i18n="decide.note">ชื่อร้านก็ไม่ต้องแก้</p>
   </div>
 </section>
 
@@ -89,48 +181,21 @@
       <button type="button" data-sample="hello l;ylfu">hello l;ylfu</button>
     </div>
     <p class="status" id="status" role="status"></p>
+    <p class="small" data-i18n="try.only">ช่องนี้ลองได้เฉพาะการแก้ภาษา การสะกดและปุ่มไม่ต้องแก้มีในตัวโปรแกรม</p>
   </div>
-</section>
-
-<section class="modes" id="modes">
-  <h2 data-i18n="modes.title">เลือกได้ว่าจะให้ช่วยแค่ไหน</h2>
-  <div class="cards">
-    <article class="card">
-      <div class="card-keys"><kbd>Tab</kbd></div>
-      <h3 data-i18n="modes.suggest.t">แนะนำขณะพิมพ์</h3>
-      <p data-i18n="modes.suggest.p">bubble เล็ก ๆ ขึ้นใต้เคอร์เซอร์เมื่อคำที่พิมพ์ดูผิดภาษา กด Tab ถ้าใช่ ไม่ใช่ก็พิมพ์ต่อไปเลย เป็นค่าเริ่มต้น</p>
-    </article>
-    <article class="card">
-      <div class="card-keys"><kbd>Space</kbd></div>
-      <h3 data-i18n="modes.auto.t">แก้อัตโนมัติ</h3>
-      <p data-i18n="modes.auto.p">กด Space แล้วคำที่ผิดจะถูกแก้ให้เอง แต่เฉพาะคำที่มั่นใจมาก ถ้าแก้ผิด กด Shift+Backspace ทันทีเพื่อคืนคำเดิม</p>
-    </article>
-    <article class="card">
-      <div class="card-keys"><kbd>Shift</kbd><kbd>Backspace</kbd></div>
-      <h3 data-i18n="modes.manual.t">เมื่อกดปุ่มลัด</h3>
-      <p data-i18n="modes.manual.p">แก้คำล่าสุด กดซ้ำเพื่อย้อนไปทีละคำ หรือเลือกข้อความแล้วกดเพื่อแก้ทั้งก้อน ใช้ได้ทุกโหมด</p>
-    </article>
-  </div>
-  <ul class="facts">
-    <li data-i18n="facts.switch">แก้แล้วสลับภาษาของคีย์บอร์ดให้ด้วย พิมพ์ต่อได้เลย</li>
-    <li data-i18n="facts.layouts">รองรับแป้นเกษมณีและปัตตะโชติ</li>
-    <li data-i18n="facts.apps">ใช้ได้ในเกือบทุกโปรแกรม: เบราว์เซอร์, LINE, Discord, Word, Notepad</li>
-    <li data-i18n="facts.off">ปิดตัวเองในช่องรหัสผ่าน, โปรแกรมจัดการรหัสผ่าน, Remote Desktop และเกมเต็มจอ</li>
-  </ul>
 </section>
 
 <section class="privacy">
-  <div class="privacy-icon" aria-hidden="true">
-    <svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg>
-  </div>
   <div>
-    <h2 data-i18n="privacy.title">สิ่งที่คุณพิมพ์ ไม่ออกจากเครื่อง</h2>
-    <p data-i18n="privacy.p">ตัวโปรแกรมที่เห็นปุ่มที่คุณกดไม่มีโค้ดต่ออินเทอร์เน็ตเลยแม้แต่บรรทัดเดียว จะมีแค่ตัวอัปเดตแยกต่างหากที่ต่อเน็ต และต่อเฉพาะตอนคุณกด "Check for updates" เพื่อถามเลขรุ่นล่าสุดและโหลดตัวติดตั้ง การตัดสินว่าคำไหนผิดภาษาทำด้วยตารางสถิติขนาดเล็กที่อยู่ในตัวโปรแกรม จำข้อความไว้แค่คำที่กำลังพิมพ์ ลืมทันทีเมื่อคลิกหรือสลับหน้าต่าง และโค้ดทั้งหมดเปิดให้ตรวจได้</p>
+    <h2 data-i18n="privacy.title">สิ่งที่คุณพิมพ์<br>อยู่ในเครื่องคุณ</h2>
+    <p class="pen-note" data-i18n="privacy.note">ไม่ส่ง ไม่เก็บ ไม่จำ</p>
   </div>
+  <p data-i18n="privacy.p">ตัวโปรแกรมที่เห็นปุ่มที่คุณกดไม่มีโค้ดต่ออินเทอร์เน็ตเลยแม้แต่บรรทัดเดียว จำแค่คำที่กำลังพิมพ์ ลืมทันทีเมื่อคลิกหรือสลับหน้าต่าง ตัวอัปเดตแยกเป็นอีกไฟล์ และต่อเน็ตเฉพาะตอนคุณกด Check for updates</p>
+  <p data-i18n="privacy.off">ปิดตัวเองในช่องรหัสผ่าน โปรแกรมจัดการรหัสผ่าน Remote Desktop และเกมเต็มจอ โค้ดทั้งหมดเปิดให้ตรวจ <a href="privacy.html">อ่านนโยบายความเป็นส่วนตัว</a></p>
 </section>
 
 <section class="install" id="install">
-  <h2 data-i18n="install.title">ติดตั้งใน 1 นาที</h2>
+  <h2 data-i18n="install.title">ติดตั้งในหนึ่งนาที</h2>
   <ol class="steps">
     <li>
       <h3 data-i18n="install.1.t">ดาวน์โหลดตัวติดตั้ง</h3>
@@ -145,7 +210,7 @@
     </li>
     <li>
       <h3 data-i18n="install.3.t">เริ่มพิมพ์</h3>
-      <p data-i18n="install.3.p">ไอคอน p สีส้มจะอยู่ข้างนาฬิกา คลิกเพื่อเปิดหน้าตั้งค่า เลือกโหมด และเปิดให้ทำงานพร้อม Windows</p>
+      <p data-i18n="install.3.p">ไอคอน p สีส้มจะอยู่ข้างนาฬิกา คลิกเพื่อเปิดหน้าตั้งค่า เลือกโหมด และเปิดให้ทำงานพร้อม Windows อัปเดตรุ่นใหม่ได้จากในแอป</p>
     </li>
   </ol>
 </section>
@@ -162,7 +227,7 @@
   </details>
   <details>
     <summary data-i18n="faq.wrong.q">ถ้ามันแก้คำที่ฉันตั้งใจพิมพ์?</summary>
-    <p data-i18n="faq.wrong.a">กด Shift+Backspace ทันทีเพื่อคืนคำเดิม ถ้าคำไหนถูกเตือนบ่อย เช่น ตัวย่อ ให้กด Shift+Esc ตอนที่ bubble ขึ้น คำนั้นจะไม่ถูกเตือนอีก หรือเพิ่มเองในหน้า Words</p>
+    <p data-i18n="faq.wrong.a">กด Shift+Backspace ทันทีเพื่อคืนคำเดิม ถ้าคำไหนถูกทักบ่อย เช่น ชื่อร้านหรือตัวย่อ ให้คลิก ไม่ต้องแก้ บนฟอง หรือกด Shift+Esc คำนั้นจะไม่ถูกทักอีก หรือเพิ่มเองในหน้า Words</p>
   </details>
   <details>
     <summary data-i18n="faq.games.q">เล่นเกมอยู่จะกวนไหม?</summary>

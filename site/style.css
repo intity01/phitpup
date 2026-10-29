@@ -20,6 +20,12 @@
   --key: #fffdf8;
   --key-line: #cfc6ba;
   --shadow: 0 6px 18px rgb(60 40 20 / 10%);
+  --cap-top: #fffdf8;
+  --cap-bottom: #f1e9dd;
+  --cap-edge: #d4c8b8;
+  --cap-faint: #b3aaa0;
+  --band: #d93a12;
+  --band-soft: #ffe1d4;
   --radius: 6px;
   --font: "IBM Plex Sans Thai", "Leelawadee UI", system-ui, -apple-system, sans-serif;
   --serif: "Noto Serif Thai", Georgia, "Times New Roman", serif;
@@ -42,6 +48,12 @@
     --key: #2a2622;
     --key-line: #4a443e;
     --shadow: 0 6px 18px rgb(0 0 0 / 35%);
+    --cap-top: #3a342e;
+    --cap-bottom: #2c2723;
+    --cap-edge: #151210;
+    --cap-faint: #7d746b;
+    --band: #8f2a10;
+    --band-soft: #ffc9b3;
     color-scheme: dark;
   }
 }
@@ -143,52 +155,102 @@ nav a:hover { color: var(--text); text-decoration: none; }
 }
 .button.small { padding: 8px 16px; font-size: 0.95rem; }
 
-/* Hero */
+/* Hero: the keys you pressed, and what you meant by them */
 
 .hero {
-  display: grid;
-  grid-template-columns: 1.05fr 1fr;
-  gap: 56px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  padding-top: 56px;
+  text-align: center;
+  padding-top: 48px;
 }
 
-.eyebrow { margin: 0 0 14px; color: var(--accent); font: 600 1.05rem var(--pen); }
+.eyebrow { margin: 0 0 10px; color: var(--accent); font: 600 1.15rem var(--pen); transform: rotate(-2deg); }
 
-h1 { font-size: clamp(2.4rem, 5.4vw, 3.6rem); }
+h1 { font-size: clamp(2.3rem, 5.4vw, 3.6rem); text-wrap: balance; }
 h1 em { font: 600 1.05em var(--pen); font-style: normal; color: var(--accent); }
 
-.lead { font-size: 1.15rem; color: var(--sub); margin: 20px 0 28px; max-width: 520px; }
-/* The wrong word struck through, the right one in pen. */
-.lead code { background: none; padding: 0; color: var(--sub); text-decoration: line-through 2px var(--accent); }
-.lead b { font: 600 1.15em var(--pen); color: var(--accent); }
+.lead { font-size: 1.15rem; color: var(--sub); margin: 8px 0 26px; max-width: 36em; }
+/* The wrong word struck through in pen. */
+.lead s { text-decoration: line-through 2.5px var(--accent); color: var(--text); }
 
-.cta { display: flex; gap: 12px; flex-wrap: wrap; }
+.cta { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 .meta { color: var(--sub); font-size: 0.88rem; margin-top: 16px; }
 
-.demo { display: flex; justify-content: center; }
+.stage { position: relative; margin: 36px 0 20px; display: flex; flex-direction: column; align-items: center; }
+.side-note {
+  position: absolute;
+  right: calc(100% + 28px);
+  top: 24px;
+  width: 9em;
+  margin: 0;
+  text-align: right;
+  font: 600 1.05rem/1.4 var(--pen);
+  color: var(--accent);
+  transform: rotate(-4deg);
+}
 
-.window {
-  width: min(440px, 100%);
+.caps { display: flex; gap: 14px; justify-content: center; }
+
+.cap {
+  position: relative;
+  flex: none;
+  width: 84px;
+  height: 84px;
+  border-radius: 12px;
+  background: linear-gradient(var(--cap-top), var(--cap-bottom));
+  border: 1px solid var(--line);
+  box-shadow: 0 6px 0 var(--cap-edge), 0 12px 20px rgb(60 40 20 / 14%);
+}
+.cap .en { position: absolute; left: 12px; top: 8px; font: 700 1.35rem var(--mono); color: var(--text); }
+.cap .th { position: absolute; right: 12px; bottom: 4px; font: 700 1.85rem var(--font); color: var(--cap-faint); }
+.caps .cap { animation: press 9s calc(var(--i) * 0.12s) infinite; }
+.caps .cap .en { animation: en-off 9s calc(var(--i) * 0.12s) infinite; }
+.caps .cap .th { animation: th-on 9s calc(var(--i) * 0.12s) infinite; }
+
+/* A key with one word on it (Tab, Shift, Backspace). */
+.cap.word {
+  display: inline-grid;
+  place-items: center;
+  width: var(--w);
+  height: 64px;
+  font: 700 1rem var(--mono);
+  color: var(--text);
+}
+
+.screen { position: relative; margin-top: 34px; width: min(560px, 100%); height: 122px; }
+.line {
+  position: relative;
+  width: 280px;
+  max-width: 100%;
+  height: 64px;
+  margin: 0 auto;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 6px;
-  box-shadow: var(--shadow);
-  overflow: hidden;
-  transform: rotate(-1.5deg);
+  border-radius: 10px;
 }
-.window-bar { display: flex; gap: 6px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
-.window-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
-.window-body { position: relative; padding: 24px 20px 70px; min-height: 220px; }
+.line span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.line .typed { font: 600 1.7rem var(--mono); animation: typed 9s infinite; }
+.line .meant { font: 600 1.8rem var(--font); opacity: 0; animation: meant 9s infinite; }
+.line .caret { display: none; }
+.line > span::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin-left: 2px;
+  background: var(--text);
+  animation: blink 1s steps(1) infinite;
+}
 
-.chat { margin: 0 0 12px; padding: 10px 14px; border-radius: 12px; width: fit-content; max-width: 80%; font-size: 1.05rem; }
-.chat.other { background: var(--surface-2); border-bottom-left-radius: 4px; }
-.chat.me { margin-left: auto; background: var(--accent-soft); border-bottom-right-radius: 4px; min-height: 1.65em; min-width: 3em; }
+.hero-bubble { left: 50%; top: 76px; transform: translateX(-50%); opacity: 0; animation: hero-bubble 9s infinite; }
+.hero-bubble .key { animation: tab-press 9s infinite; }
+
 .caret { display: inline-block; width: 2px; height: 1.1em; background: var(--text); vertical-align: -0.15em; margin-left: 1px; animation: blink 1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 
+/* The bubble, as the app draws it. */
 .bubble {
-  position: absolute;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -202,11 +264,16 @@ h1 em { font: 600 1.05em var(--pen); font-style: normal; color: var(--accent); }
   white-space: nowrap;
   transition: opacity 0.15s ease, transform 0.15s ease;
 }
-.bubble .badge { font: 600 0.7rem/1 var(--font); color: var(--bg); background: var(--accent); padding: 4px 6px; border-radius: 999px; }
-.bubble .key { font: 500 0.75rem/1 var(--font); color: var(--sub); border: 1px solid var(--key-line); padding: 4px 7px; border-radius: 4px; }
+.bubble .key, .bubble .leave { font: 500 0.75rem/1 var(--font); color: var(--sub); border: 1px solid var(--key-line); padding: 4px 7px; border-radius: 4px; }
+.bubble .leave.on { color: var(--accent); border-color: var(--accent); }
 
-#demo-bubble { right: 20px; top: 150px; opacity: 0; transform: translateY(6px); }
-#demo-bubble.show { opacity: 1; transform: none; }
+@keyframes press { 0%, 52% { transform: none; } 55% { transform: translateY(5px); box-shadow: 0 1px 0 var(--cap-edge); } 58%, 100% { transform: none; } }
+@keyframes en-off { 0%, 52% { color: var(--text); } 58%, 94% { color: var(--cap-faint); } 100% { color: var(--text); } }
+@keyframes th-on { 0%, 52% { color: var(--cap-faint); } 58%, 94% { color: var(--accent); } 100% { color: var(--cap-faint); } }
+@keyframes typed { 0%, 54% { opacity: 1; } 58%, 100% { opacity: 0; } }
+@keyframes meant { 0%, 54% { opacity: 0; } 58%, 95% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes hero-bubble { 0%, 16% { opacity: 0; transform: translate(-50%, 8px); } 22%, 53% { opacity: 1; transform: translate(-50%, 0); } 57%, 100% { opacity: 0; transform: translate(-50%, 0); } }
+@keyframes tab-press { 0%, 46%, 55%, 100% { background: none; color: var(--sub); border-color: var(--key-line); } 48%, 53% { background: var(--accent); color: var(--bg); border-color: var(--accent); } }
 
 /* Try it */
 
@@ -264,6 +331,7 @@ textarea {
 }
 textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .mirror { position: absolute; inset: 0; visibility: hidden; pointer-events: none; overflow: hidden; }
+.bubble.live, .hero-bubble { position: absolute; }
 .bubble.live { z-index: 2; pointer-events: none; }
 .bubble[hidden] { display: none; }
 
@@ -283,38 +351,94 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent
 
 .status { min-height: 1.4em; margin: 8px 0 0; color: var(--accent); font: 600 1rem var(--pen); }
 
-/* Modes */
+/* What it fixes: each card plays its own fix */
 
-.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 28px; }
-.card { border-top: 1px solid var(--line); padding: 22px 0 0; }
-.card-keys { display: flex; gap: 6px; margin-bottom: 18px; }
-.card-keys kbd { font-size: 0.95rem; padding: 0.2em 0.7em; }
-.card p { color: var(--sub); margin: 8px 0 0; font-size: 0.97rem; }
+.fixes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.fix, .panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 24px;
+}
+.fix p, .panel p { margin: 0; color: var(--sub); font-size: 0.97rem; }
+.fix-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fix-head h3 { margin-left: 4px; }
+.badge { font: 600 0.72rem/1 var(--font); color: var(--bg); background: var(--accent); padding: 5px 8px; border-radius: 999px; }
+.new { font-size: 0.75rem; font-weight: 600; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 8px; }
 
-.facts { list-style: none; padding: 0; margin: 28px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; }
-.facts li { position: relative; padding-left: 26px; color: var(--sub); }
-.facts li::before { content: "✓"; position: absolute; left: 0; top: 0; color: var(--accent); font-weight: 700; }
+.scene { position: relative; height: 96px; margin-top: 4px; background: var(--bg); border-radius: 8px; }
+.scene .wrong, .scene .right { position: absolute; left: 18px; top: 14px; font-size: 1.1rem; }
+.scene .wrong { animation: wrong 6s var(--d) infinite; }
+.scene .right { opacity: 0; animation: right 6s var(--d) infinite; }
+.scene .bubble { position: absolute; left: 18px; top: 48px; padding: 4px 8px; font-size: 1.05rem; opacity: 0; animation: fix-bubble 6s var(--d) infinite; }
+.scene .pen-note { position: absolute; right: 16px; top: 14px; }
 
-/* Privacy */
+.pen-note { margin: 0; font: 600 1.05rem var(--pen); color: var(--accent); transform: rotate(-2deg); }
+
+@keyframes wrong { 0%, 58% { opacity: 1; } 62%, 100% { opacity: 0; } }
+@keyframes right { 0%, 58% { opacity: 0; } 62%, 94% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes fix-bubble { 0%, 16% { opacity: 0; transform: translateY(6px); } 24%, 58% { opacity: 1; transform: none; } 62%, 100% { opacity: 0; } }
+
+/* The three keys */
+
+.title-row { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; margin-bottom: 24px; }
+.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.keyrow { display: flex; align-items: center; gap: 10px; min-height: 76px; }
+.keyrow .plus { color: var(--cap-faint); font-size: 1.2rem; }
+.bubble.still { font-size: 1.05rem; }
+
+/* You decide: the bubble, the pointer and "Leave it" */
+
+.decide { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: center; }
+.decide p { color: var(--sub); margin: 14px 0 0; }
+.decide p b { color: var(--text); }
+.small { font-size: 0.9rem; color: var(--sub); }
+
+.sheet { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 32px 28px 20px; }
+.sheet-label { margin: 0 0 4px !important; font-size: 0.82rem; }
+.sheet-text { margin: 0 !important; font-size: 1.25rem; color: var(--text) !important; }
+.sheet-play { position: relative; height: 96px; }
+.sheet-play .bubble { position: absolute; left: 60px; top: 12px; opacity: 0; animation: leave-bubble 7s infinite; }
+.sheet-play .leave { animation: leave-press 7s infinite; }
+.hand { position: absolute; left: 300px; top: 34px; animation: hand 7s infinite; }
+.hand path { fill: var(--text); stroke: var(--surface); stroke-width: 1.5; stroke-linejoin: round; }
+.done { position: absolute; left: 60px; top: 22px; font: 600 1.1rem var(--pen) !important; color: var(--accent) !important; opacity: 0; animation: done 7s infinite; transform: rotate(-2deg); }
+.margin-note {
+  position: absolute;
+  right: 20px;
+  top: -14px;
+  margin: 0 !important;
+  padding: 0 8px;
+  background: var(--bg);
+  font: 600 1rem var(--pen);
+  color: var(--accent) !important;
+  transform: rotate(3deg);
+}
+
+@keyframes leave-bubble { 0%, 10% { opacity: 0; transform: translateY(6px); } 18%, 56% { opacity: 1; transform: none; } 62%, 100% { opacity: 0; } }
+@keyframes hand { 0%, 22% { transform: translate(120px, 70px); opacity: 0; } 30% { opacity: 1; } 44%, 56% { transform: none; opacity: 1; } 64%, 100% { transform: none; opacity: 0; } }
+@keyframes leave-press { 0%, 49%, 60%, 100% { background: none; color: var(--sub); border-color: var(--key-line); } 50%, 56% { background: var(--accent); color: var(--bg); border-color: var(--accent); } }
+@keyframes done { 0%, 62% { opacity: 0; } 68%, 94% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Privacy: a band in red pen */
 
 .privacy {
-  display: flex;
-  gap: 28px;
-  align-items: flex-start;
-  margin-top: 72px;
-  padding: 32px 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-.privacy p { color: var(--sub); max-width: 720px; margin: 10px 0 0; }
-.privacy-icon {
-  flex: none;
-  width: 56px;
-  height: 56px;
   display: grid;
-  place-items: center;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
+  margin-top: 80px;
+  padding: 48px 40px;
+  border-radius: 12px;
+  background: var(--band);
+  color: #fff;
 }
-.privacy-icon svg { width: 44px; height: 44px; fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.privacy h2 { font-size: clamp(1.5rem, 2.6vw, 1.9rem); }
+.privacy p { margin: 0; line-height: 1.7; }
+.privacy .pen-note { margin-top: 8px; color: var(--band-soft); transform: none; }
+.privacy a { color: #fff; font-weight: 600; text-decoration: underline; }
 
 /* Install */
 
@@ -378,16 +502,32 @@ footer b { color: var(--text); }
 @media (max-width: 860px) {
   nav { display: none; }
   .lang { margin-left: auto; }
-  .hero { grid-template-columns: 1fr; gap: 40px; padding-top: 32px; }
-  .cards, .steps { grid-template-columns: 1fr; }
-  .facts { grid-template-columns: 1fr; }
-  .privacy { flex-direction: column; padding: 24px; }
+  .hero { padding-top: 28px; }
+  .side-note { display: none; }
+  .caps { gap: 7px; }
+  .cap { width: 46px; height: 46px; border-radius: 8px; box-shadow: 0 4px 0 var(--cap-edge); }
+  .cap .en { font-size: 0.8rem; left: 6px; top: 3px; }
+  .cap .th { font-size: 1.05rem; right: 6px; bottom: 0; }
+  .cap.word { height: 52px; font-size: 0.9rem; }
+  .keyrow .cap.word { width: auto; padding: 0 14px; }
+  .fixes, .three, .decide, .steps, .privacy { grid-template-columns: minmax(0, 1fr); }
+  .decide { gap: 32px; }
+  .privacy { padding: 32px 24px; }
+  .hand { display: none; }
+  .sheet-play .bubble { left: 0; }
+  .done { left: 0; }
   main, .top, footer { padding: 0 16px; }
   footer { padding-bottom: 32px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+  /* Show the end of each story instead of playing it. */
+  .caps .cap .th { color: var(--accent); }
+  .line .typed, .scene .wrong { opacity: 0; }
+  .line .meant, .scene .right, .hero-bubble, .scene .bubble, .sheet-play .bubble { opacity: 1; }
+  .scene .bubble { top: 48px; }
+  .hand, .done { display: none; }
 }
 
 /* The plain pages (changes.html, privacy.html) carry both languages. */
