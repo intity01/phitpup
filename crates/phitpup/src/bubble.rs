@@ -1,6 +1,6 @@
-//! The suggestion bubble: a small card under the caret with the fixed word,
-//! a TH/EN badge (in the logo's coral) for the layout it switches to, and a
-//! hint for the accept key (Tab unless the settings say otherwise).
+//! The suggestion bubble: a slip of paper under the caret with the fixed
+//! word handwritten in red pen, a small TH/EN stamp for the layout it
+//! switches to, and the accept key (Tab unless the settings say otherwise).
 //!
 //! It is drawn here, pixel by pixel, into a premultiplied 32-bit bitmap
 //! (anti-aliased corners, soft shadow, hairline border, grayscale text from
@@ -28,7 +28,7 @@ use windows_sys::Win32::Foundation::{
 use windows_sys::Win32::Graphics::Gdi::{
     AC_SRC_ALPHA, AC_SRC_OVER, ANTIALIASED_QUALITY, BI_RGB, BITMAPINFO, BITMAPINFOHEADER,
     BLENDFUNCTION, ClientToScreen, CreateCompatibleDC, CreateDIBSection, CreateFontW,
-    DEFAULT_CHARSET, DIB_RGB_COLORS, DeleteDC, DeleteObject, FW_NORMAL, FW_SEMIBOLD, GdiFlush,
+    DEFAULT_CHARSET, DIB_RGB_COLORS, DeleteDC, DeleteObject, FW_SEMIBOLD, GdiFlush,
     GetMonitorInfoW, GetTextExtentPoint32W, HBITMAP, HDC, HFONT, MONITOR_DEFAULTTONEAREST,
     MONITORINFO, MonitorFromPoint, SelectObject, SetBkMode, SetTextColor, TRANSPARENT, TextOutW,
 };
@@ -43,7 +43,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 
-use crate::{APP, uia, underline};
+use crate::{APP, fonts, uia, underline};
 
 /// Waits for the suggestion to settle before acting on it.
 const SETTLE: usize = 1;
@@ -65,10 +65,10 @@ const SLIDE_PX: f32 = 6.0;
 
 // Layout at 96 DPI.
 const SHADOW: f32 = 16.0;
-const RADIUS: f32 = 8.0;
+const RADIUS: f32 = 4.0;
 const PAD_X: f32 = 10.0;
 const GAP: f32 = 8.0;
-const WORD_PT: i32 = 12;
+const WORD_PT: i32 = 14;
 const SMALL_PT: i32 = 8;
 
 type Rgb = [f32; 3];
@@ -93,26 +93,27 @@ struct Palette {
     shadow: f32,
 }
 
+// Paper and a red pen, as in the settings window.
 const DARK: Palette = Palette {
-    card: hex(0x2C2C2C),
-    text: hex(0xFFFFFF),
-    hint: hex(0xC8C8C8),
-    key: hex(0x3D3D3D),
-    accent: hex(0xFF6B3D),
-    on_accent: hex(0xFFFFFF),
-    border: (hex(0xFFFFFF), 0.10),
+    card: hex(0x2A2622),
+    text: hex(0xFF7A52),
+    hint: hex(0xB3AAA0),
+    key: hex(0x35302B),
+    accent: hex(0xFF7A52),
+    on_accent: hex(0x1E1B18),
+    border: (hex(0xFFFFFF), 0.12),
     shadow: 0.42,
 };
 
 const LIGHT: Palette = Palette {
-    card: hex(0xFBFBFB),
-    text: hex(0x1B1B1B),
-    hint: hex(0x5C5C5C),
-    key: hex(0xEBEBEB),
-    accent: hex(0xE8461E),
+    card: hex(0xFFFDF8),
+    text: hex(0xD93A12),
+    hint: hex(0x6A625A),
+    key: hex(0xF3ECE1),
+    accent: hex(0xD93A12),
     on_accent: hex(0xFFFFFF),
-    border: (hex(0x000000), 0.10),
-    shadow: 0.20,
+    border: (hex(0x5A4A3A), 0.18),
+    shadow: 0.18,
 };
 
 /// Whether apps should use the dark theme (Settings → Personalization →
@@ -553,8 +554,8 @@ pub(crate) unsafe fn dib(dc: HDC, w: i32, h: i32) -> (HBITMAP, *mut u32) {
     }
 }
 
-fn font(pt: i32, weight: u32, dpi: u32) -> HFONT {
-    let face: Vec<u16> = wide("Leelawadee UI").into_iter().chain([0]).collect();
+fn font(face: &str, pt: i32, weight: u32, dpi: u32) -> HFONT {
+    let face: Vec<u16> = wide(face).into_iter().chain([0]).collect();
     // SAFETY: plain font creation; the face name is NUL-terminated.
     unsafe {
         CreateFontW(
@@ -635,8 +636,9 @@ fn render(look: &Look) -> Image {
     // the mask DIB holds w*h pixels and is read only after GdiFlush.
     unsafe {
         let dc = CreateCompatibleDC(std::ptr::null_mut());
-        let big = font(WORD_PT, FW_NORMAL, look.dpi);
-        let small = font(SMALL_PT, FW_SEMIBOLD, look.dpi);
+        fonts::load();
+        let big = font(fonts::PEN, WORD_PT, FW_SEMIBOLD, look.dpi);
+        let small = font(fonts::SANS_MEDIUM, SMALL_PT, 500, look.dpi);
         let measure = |f: HFONT, t: &[u16]| {
             let mut size = SIZE { cx: 0, cy: 0 };
             SelectObject(dc, f);

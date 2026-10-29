@@ -7,9 +7,11 @@
 //! changes from the tray menu or the file show up here too.
 //!
 //! Like the bubble it is drawn by hand: shapes are anti-aliased per pixel
-//! into a bitmap, then GDI adds ClearType text on top. Colours follow
-//! Windows 11 Settings in the light or dark app theme, with the logo's coral
-//! as the accent. It lives on the tray thread.
+//! into a bitmap, then GDI adds ClearType text on top. The look is a red pen
+//! on paper, as a teacher corrects homework: cream paper (or dark paper in
+//! the dark app theme), hairlines instead of cards, the current page and
+//! choices circled in pen, ticks for switches, Mali for the handwriting
+//! (see [`fonts`](crate::fonts)). It lives on the tray thread.
 
 use std::cell::RefCell;
 
@@ -21,7 +23,8 @@ use windows_sys::Win32::Graphics::Dwm::{
     DWMWA_CAPTION_COLOR, DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute,
 };
 use windows_sys::Win32::Graphics::Gdi::{
-    ANTIALIASED_QUALITY, GdiFlush, GetTextFaceW, GetTextMetricsW, HBITMAP, HGDIOBJ, TEXTMETRICW,
+    ANTIALIASED_QUALITY, FW_BOLD, GdiFlush, GetTextFaceW, GetTextMetricsW, HBITMAP, HGDIOBJ,
+    TEXTMETRICW,
 };
 use windows_sys::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BeginPaint, BitBlt, CLEARTYPE_QUALITY, ClientToScreen,
@@ -54,7 +57,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     WS_CAPTION, WS_EX_TOOLWINDOW, WS_MINIMIZEBOX, WS_OVERLAPPED, WS_SYSMENU,
 };
 
-use crate::{APP, bubble, clipboard, context, settings, tray};
+use crate::{APP, bubble, clipboard, context, fonts, settings, tray};
 
 // Layout at 96 DPI.
 const W: f32 = 860.0;
@@ -104,65 +107,57 @@ const fn hex(v: u32) -> Rgb {
     ]
 }
 
-/// Close to Windows 11 Settings, with the logo's coral as the accent.
+/// Paper and a red pen.
 struct Palette {
     bg: Rgb,
-    card: Rgb,
     card_hover: Rgb,
     border: Rgb,
     text: Rgb,
     sub: Rgb,
     faint: Rgb,
     nav: Rgb,
-    control: Rgb,
     control_hover: Rgb,
     control_border: Rgb,
     accent: Rgb,
-    accent_hover: Rgb,
-    on_accent: Rgb,
     key: Rgb,
     key_border: Rgb,
     error: Rgb,
+    /// The notebook's margin line beside the page list.
+    margin: Rgb,
 }
 
 const LIGHT: Palette = Palette {
-    bg: hex(0xF3F3F3),
-    card: hex(0xFBFBFB),
-    card_hover: hex(0xF6F6F6),
-    border: hex(0xE5E5E5),
-    text: hex(0x1B1B1B),
-    sub: hex(0x5F5F5F),
-    faint: hex(0x8F8F8F),
-    nav: hex(0xEAEAEA),
-    control: hex(0xFEFEFE),
-    control_hover: hex(0xF5F5F5),
-    control_border: hex(0xDADADA),
-    accent: hex(0xE8461E),
-    accent_hover: hex(0xD23B16),
-    on_accent: hex(0xFFFFFF),
-    key: hex(0xFFFFFF),
-    key_border: hex(0xD0D0D0),
-    error: hex(0xC42B1C),
+    bg: hex(0xFBF7F0),
+    card_hover: hex(0xF5EFE5),
+    border: hex(0xE6DED2),
+    text: hex(0x221F1C),
+    sub: hex(0x6A625A),
+    faint: hex(0x8C847B),
+    nav: hex(0xF3ECE1),
+    control_hover: hex(0xF5EFE5),
+    control_border: hex(0xCFC6BA),
+    accent: hex(0xD93A12),
+    key: hex(0xFFFDF8),
+    key_border: hex(0xCFC6BA),
+    error: hex(0xB3261E),
+    margin: hex(0xEDC6B8),
 };
 
 const DARK: Palette = Palette {
-    bg: hex(0x202020),
-    card: hex(0x2B2B2B),
-    card_hover: hex(0x323232),
-    border: hex(0x1D1D1D),
-    text: hex(0xFFFFFF),
-    sub: hex(0xCFCFCF),
-    faint: hex(0x9A9A9A),
-    nav: hex(0x2D2D2D),
-    control: hex(0x373737),
-    control_hover: hex(0x3E3E3E),
-    control_border: hex(0x303030),
-    accent: hex(0xFF6B3D),
-    accent_hover: hex(0xFF845D),
-    on_accent: hex(0x1A0A05),
-    key: hex(0x373737),
-    key_border: hex(0x4A4A4A),
-    error: hex(0xFF99A4),
+    bg: hex(0x1E1B18),
+    card_hover: hex(0x2F2A26),
+    border: hex(0x3A3530),
+    text: hex(0xF3EEE7),
+    sub: hex(0xB3AAA0),
+    faint: hex(0x8C847B),
+    nav: hex(0x2A2622),
+    control_hover: hex(0x332E29),
+    control_border: hex(0x4A443E),
+    accent: hex(0xFF7A52),
+    key: hex(0x2A2622),
+    key_border: hex(0x4A443E),
+    error: hex(0xFF8A80),
+    margin: hex(0x4A2A1E),
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -257,44 +252,42 @@ enum F {
     Caption,
     Brand,
     Key,
-    /// Leelawadee UI, for Thai and for words the user typed.
+    /// For Thai and for words the user typed.
     Word,
-    ThaiCaption,
-    Glyph,
     SmallGlyph,
-    /// Icons on the page tiles in the sidebar.
-    NavGlyph,
-    /// The ก on the Words tile.
-    NavThai,
+    /// The red pen's handwriting.
+    Pen,
+    PenBig,
 }
 
-const TEXT: &[&str] = &["Segoe UI Variable Text", "Segoe UI"];
-const DISPLAY: &[&str] = &["Segoe UI Variable Display", "Segoe UI"];
-const SMALL: &[&str] = &["Segoe UI Variable Small", "Segoe UI"];
-const THAI: &[&str] = &["Leelawadee UI"];
+const SANS: &[&str] = &[fonts::SANS, "Leelawadee UI"];
+const MEDIUM: &[&str] = &[fonts::SANS_MEDIUM, "Leelawadee UI"];
+const PEN: &[&str] = &[fonts::PEN, "Segoe Print"];
+const SERIF: &[&str] = &[fonts::SERIF, "Times New Roman"];
+const SERIF_THAI: &[&str] = &[fonts::SERIF_THAI, "Leelawadee UI"];
 const ICONS: &[&str] = &["Segoe Fluent Icons", "Segoe MDL2 Assets"];
+const FW_MEDIUM: u32 = 500;
 
 /// (size in px at 96 DPI, weight, faces to try in order) for each [`F`].
-/// Segoe UI Variable is what Windows 11 uses; Windows 10 has Segoe UI.
-const FONTS: [(i32, u32, &[&str]); 12] = [
-    (28, FW_SEMIBOLD, DISPLAY),
-    (14, FW_NORMAL, TEXT),
-    (14, FW_SEMIBOLD, TEXT),
-    (12, FW_NORMAL, SMALL),
-    (18, FW_SEMIBOLD, DISPLAY),
-    (12, FW_SEMIBOLD, SMALL),
-    (15, FW_NORMAL, THAI),
-    (13, FW_NORMAL, THAI),
-    (16, FW_NORMAL, ICONS),
+/// The first faces are bundled ([`fonts`]); the others are fallbacks.
+const FONTS: [(i32, u32, &[&str]); 10] = [
+    (30, FW_BOLD, SERIF),
+    (14, FW_NORMAL, SANS),
+    (14, FW_MEDIUM, MEDIUM),
+    (12, FW_NORMAL, SANS),
+    (26, FW_BOLD, SERIF_THAI),
+    (12, FW_MEDIUM, MEDIUM),
+    (15, FW_NORMAL, SANS),
     (10, FW_NORMAL, ICONS),
-    (22, FW_NORMAL, ICONS),
-    (24, FW_NORMAL, THAI),
+    (16, FW_SEMIBOLD, PEN),
+    (22, FW_SEMIBOLD, PEN),
 ];
 
 struct Fonts([HFONT; FONTS.len()]);
 
 impl Fonts {
     fn new(dpi: u32) -> Self {
+        fonts::load();
         // SAFETY: a memory DC only used to check which face GDI picked.
         let dc = unsafe { CreateCompatibleDC(std::ptr::null_mut()) };
         let fonts = Fonts(FONTS.map(|(px, weight, faces)| {
@@ -623,6 +616,43 @@ enum Shape {
         r: R,
         tone: Tone,
     },
+    /// A pen stroke through `pts`, `width` wide.
+    Pen {
+        pts: Vec<(f32, f32)>,
+        width: f32,
+        c: Rgb,
+    },
+}
+
+/// A loose hand-drawn loop around `r`, as a pen circles a word: a little
+/// more than one turn, starting top left, not quite closing on itself.
+fn pen_loop(r: R) -> Vec<(f32, f32)> {
+    let (cx, cy) = (r.x + r.w / 2.0, r.y + r.h / 2.0);
+    let (rx, ry) = (r.w / 2.0 + 14.0, r.h / 2.0 + 5.0);
+    let start = -2.3f32;
+    let turn = std::f32::consts::TAU + 0.6;
+    let n = 64;
+    (0..=n)
+        .map(|i| {
+            let k = i as f32 / n as f32;
+            let t = start + turn * k;
+            let wobble = 1.0 + 0.035 * (3.0 * t).sin();
+            let drift = ry * 0.14 * k; // the second pass runs a little lower
+            (
+                cx + rx * wobble * t.cos(),
+                cy + ry * wobble * t.sin() + drift,
+            )
+        })
+        .collect()
+}
+
+/// A tick `size` wide whose long stroke overshoots the top, at (x, y).
+fn pen_tick(x: f32, y: f32, size: f32) -> Vec<(f32, f32)> {
+    vec![
+        (x, y + 0.45 * size),
+        (x + 0.35 * size, y + 0.85 * size),
+        (x + 1.05 * size, y - 0.2 * size),
+    ]
 }
 
 struct Text {
@@ -721,10 +751,24 @@ impl Builder<'_> {
         h
     }
 
+    fn pen(&mut self, pts: Vec<(f32, f32)>, width: f32, c: Rgb) {
+        self.shapes.push(Shape::Pen { pts, width, c });
+    }
+
+    /// Circles `r` in pen.
+    fn circle(&mut self, r: R) {
+        let c = self.pal.accent;
+        self.pen(pen_loop(r), 1.8, c);
+    }
+
+    /// A ruled line under `r`, the paper's version of a card; a soft
+    /// highlight while hovered.
     fn card(&mut self, r: R, hovered: bool) {
         let p = self.pal;
-        self.fill(r, 6.0, if hovered { p.card_hover } else { p.card });
-        self.stroke(r, 6.0, p.border);
+        if hovered {
+            self.fill(r.inset(1.0), 6.0, p.card_hover);
+        }
+        self.fill(R::new(r.x, r.y + r.h - 1.0, r.w, 1.0), 0.0, p.border);
     }
 
     /// A settings card `h` high with an icon, a title and a caption centred
@@ -746,33 +790,21 @@ impl Builder<'_> {
         let hovered = hit.is_some_and(|hit| self.hit(r, hit));
         self.card(r, hovered);
         let cy = y + head / 2.0;
-        if let Some(g) = glyph {
-            self.glyph(
-                R::new(LEFT + 18.0, cy - 12.0, 24.0, 24.0),
-                g,
-                F::Glyph,
-                p.text,
-            );
-        }
-        let tw = WIDTH - 56.0 - 260.0;
+        let _ = glyph; // paper has no icons
+        let x = LEFT + 8.0;
+        let tw = WIDTH - 8.0 - 220.0;
         if caption.is_empty() {
-            self.text(
-                R::new(LEFT + 56.0, cy - 10.0, tw, 20.0),
-                title,
-                F::Body,
-                p.text,
-                LINE,
-            );
+            self.text(R::new(x, cy - 10.0, tw, 20.0), title, F::Body, p.text, LINE);
         } else {
             self.text(
-                R::new(LEFT + 56.0, cy - 19.0, tw, 20.0),
+                R::new(x, cy - 19.0, tw, 20.0),
                 title,
-                F::Body,
+                F::Strong,
                 p.text,
                 LINE,
             );
             self.text(
-                R::new(LEFT + 56.0, cy + 1.0, tw, 18.0),
+                R::new(x, cy + 1.0, tw, 18.0),
                 caption,
                 F::Caption,
                 p.sub,
@@ -782,32 +814,30 @@ impl Builder<'_> {
         (cy, hovered)
     }
 
+    /// A box on the right, ticked in pen when on.
     fn toggle(&mut self, cy: f32, on: bool, hovered: bool) {
         let p = self.pal;
-        let r = R::new(RIGHT - 20.0 - 40.0, cy - 10.0, 40.0, 20.0);
-        let knob = if hovered { 14.0 } else { 12.0 };
-        if on {
-            self.fill(r, 10.0, if hovered { p.accent_hover } else { p.accent });
-            let k = R::new(r.x + r.w - 10.0 - knob / 2.0, cy - knob / 2.0, knob, knob);
-            self.fill(k, knob / 2.0, p.on_accent);
-        } else {
-            self.stroke(r, 10.0, p.sub);
-            let k = R::new(r.x + 10.0 - knob / 2.0, cy - knob / 2.0, knob, knob);
-            self.fill(k, knob / 2.0, p.sub);
+        let r = R::new(RIGHT - 16.0 - 22.0, cy - 11.0, 22.0, 22.0);
+        if hovered {
+            self.fill(r, 3.0, p.card_hover);
         }
-        let label = if on { "On" } else { "Off" };
-        let lr = R::new(r.x - 12.0 - 60.0, cy - 10.0, 60.0, 20.0);
-        self.text(lr, label, F::Body, p.text, LINE | DT_RIGHT);
+        self.stroke(r, 3.0, p.text);
+        self.stroke(r.inset(0.5), 2.5, p.text);
+        if on {
+            let c = p.accent;
+            self.pen(pen_tick(r.x + 2.0, r.y + 1.0, 22.0), 2.6, c);
+        }
     }
 
     fn button(&mut self, r: R, label: &str, glyph: Option<char>, accent: bool, hit: Hit) {
         let p = self.pal;
         let hovered = self.hit(r, hit);
+        // The main action is ink on paper; others are drawn outlines.
         let (fill, ink, f) = match (accent, hovered) {
-            (true, false) => (p.accent, p.on_accent, F::Strong),
-            (true, true) => (p.accent_hover, p.on_accent, F::Strong),
-            (false, false) => (p.control, p.text, F::Body),
-            (false, true) => (p.control_hover, p.text, F::Body),
+            (true, false) => (p.text, p.bg, F::Strong),
+            (true, true) => (mix(p.text, p.accent, 0.35), p.bg, F::Strong),
+            (false, false) => (p.bg, p.text, F::Strong),
+            (false, true) => (p.control_hover, p.text, F::Strong),
         };
         self.fill(r, 4.0, fill);
         if !accent {
@@ -821,25 +851,6 @@ impl Builder<'_> {
                 self.text(R::new(x + 22.0, r.y, tw + 4.0, r.h), label, f, ink, LINE);
             }
             None => self.text(r, label, f, ink, LINE | DT_CENTER),
-        }
-    }
-
-    fn radio(&mut self, cx: f32, cy: f32, on: bool, hovered: bool) {
-        let p = self.pal;
-        let r = R::new(cx - 10.0, cy - 10.0, 20.0, 20.0);
-        if on {
-            self.fill(r, 10.0, if hovered { p.accent_hover } else { p.accent });
-            let d = if hovered { 10.0 } else { 8.0 };
-            self.fill(
-                R::new(cx - d / 2.0, cy - d / 2.0, d, d),
-                d / 2.0,
-                p.on_accent,
-            );
-        } else {
-            if hovered {
-                self.fill(r, 10.0, p.control_hover);
-            }
-            self.stroke(r, 10.0, p.sub);
         }
     }
 
@@ -857,12 +868,6 @@ impl Builder<'_> {
             let r = R::new(x, cy - 14.0, w, 28.0);
             self.fill(r, 4.0, p.key);
             self.stroke(r, 4.0, p.key_border);
-            // A thicker bottom edge, like a key.
-            self.fill(
-                R::new(r.x + 2.0, r.y + r.h - 2.0, r.w - 4.0, 1.0),
-                0.5,
-                p.key_border,
-            );
             let ink = if muted { p.sub } else { p.text };
             self.text(r, cap, F::Key, ink, LINE | DT_CENTER);
             x += w + 6.0;
@@ -872,7 +877,7 @@ impl Builder<'_> {
 
     fn title(&mut self, y: f32, s: &str) -> f32 {
         self.text(
-            R::new(LEFT, y, WIDTH, 40.0),
+            R::new(LEFT + 8.0, y, WIDTH, 40.0),
             s,
             F::Title,
             self.pal.text,
@@ -922,84 +927,56 @@ fn build<'a>(win: &'a Win, c: &Config, dc: HDC) -> Builder<'a> {
 
 fn sidebar(b: &mut Builder, page: Page) {
     let p = b.pal;
-    let tone = if paused() { Tone::Paused } else { Tone::Active };
-    b.shapes.push(Shape::Logo {
-        r: R::new(24.0, 22.0, 34.0, 34.0),
-        tone,
-    });
+    // The notebook's margin line.
+    b.fill(R::new(SIDEBAR - 2.0, 0.0, 2.0, H), 0.0, p.margin);
     b.text(
-        R::new(68.0, 20.0, 150.0, 22.0),
-        "PhitPup",
+        R::new(28.0, 22.0, SIDEBAR - 40.0, 36.0),
+        "ผิดปุ๊บ",
         F::Brand,
         p.text,
         LINE,
     );
+    let name = if paused() {
+        "PhitPup · paused"
+    } else {
+        "PhitPup"
+    };
     b.text(
-        R::new(68.0, 41.0, 150.0, 18.0),
-        "ผิดปุ๊บ",
-        F::ThaiCaption,
+        R::new(28.0, 58.0, SIDEBAR - 40.0, 18.0),
+        name,
+        F::Caption,
         p.sub,
         LINE,
     );
 
-    // Wide tiles, icon over label; the current page is tinted coral.
-    for (i, (pg, glyph, label)) in PAGES.into_iter().enumerate() {
-        let r = R::new(12.0, 84.0 + i as f32 * 70.0, SIDEBAR - 24.0, 64.0);
+    for (i, (pg, _, label)) in PAGES.into_iter().enumerate() {
+        let r = R::new(16.0, 104.0 + i as f32 * 46.0, SIDEBAR - 40.0, 38.0);
         let hovered = b.hit(r, Hit::Nav(pg));
-        let ink = if pg == page {
-            b.fill(r, 8.0, mix(p.bg, p.accent, 0.13));
-            b.stroke(r, 8.0, mix(p.bg, p.accent, 0.30));
-            p.accent
-        } else {
-            if hovered {
-                b.fill(r, 8.0, p.nav);
-            }
-            p.text
-        };
-        let icon = R::new(r.x, r.y + 8.0, r.w, 28.0);
-        if pg == Page::Words {
-            // ก and a text cursor: typing, in Thai.
-            b.text(
-                R::new(icon.x - 5.0, icon.y, icon.w, icon.h),
-                "ก",
-                F::NavThai,
-                ink,
-                LINE | DT_CENTER,
-            );
-            let bar = R::new(r.x + r.w / 2.0 + 9.0, icon.y + 3.0, 2.0, 22.0);
-            b.fill(bar, 1.0, ink);
-            b.fill(R::new(bar.x - 3.0, bar.y, 8.0, 1.5), 0.75, ink);
-            b.fill(
-                R::new(bar.x - 3.0, bar.y + bar.h - 1.5, 8.0, 1.5),
-                0.75,
-                ink,
-            );
-        } else {
-            b.glyph(icon, glyph, F::NavGlyph, ink);
+        if hovered && pg != page {
+            b.fill(r, 6.0, p.nav);
         }
-        let f = if pg == page { F::Strong } else { F::Body };
-        b.text(
-            R::new(r.x, r.y + 38.0, r.w, 20.0),
-            label,
-            f,
-            ink,
-            LINE | DT_CENTER,
-        );
+        let x = r.x + 16.0;
+        let ink = if pg == page { p.accent } else { p.text };
+        b.text(R::new(x, r.y, r.w - 16.0, r.h), label, F::Strong, ink, LINE);
+        if pg == page {
+            let tw = b.width(F::Strong, label);
+            b.circle(R::new(x, r.y + 9.0, tw, 20.0));
+        }
     }
 
+    b.text(
+        R::new(28.0, H - 66.0, SIDEBAR - 40.0, 24.0),
+        "ไม่ต่อเน็ต ไม่จำที่พิมพ์",
+        F::Pen,
+        p.accent,
+        LINE,
+    );
     let version = format!("Version {}", env!("CARGO_PKG_VERSION"));
     b.text(
-        R::new(24.0, H - 58.0, SIDEBAR - 36.0, 18.0),
+        R::new(28.0, H - 40.0, SIDEBAR - 40.0, 18.0),
         &version,
         F::Caption,
         p.sub,
-        LINE,
-    );
-    b.text(
-        R::new(24.0, H - 38.0, SIDEBAR - 36.0, 18.0),
-        "Nothing leaves your computer.",
-        F::Caption,
-        p.faint,
         LINE,
     );
 }
@@ -1015,11 +992,6 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
         "Paused. Every key passes through untouched."
     };
     let (cy, hovered) = b.row(y, 68.0, 68.0, None, "PhitPup is on", caption, Some(Hit::On));
-    let tone = if on { Tone::Active } else { Tone::Paused };
-    b.shapes.push(Shape::Logo {
-        r: R::new(LEFT + 18.0, cy - 12.0, 24.0, 24.0),
-        tone,
-    });
     b.toggle(cy, on, hovered);
     y += 72.0;
 
@@ -1056,29 +1028,25 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
         "The hotkey always works.",
         None,
     );
-    b.fill(
-        R::new(LEFT + 1.0, y + 68.0, WIDTH - 2.0, 1.0),
-        0.0,
-        p.border,
-    );
     for (i, (mode, title, caption)) in options.iter().enumerate() {
-        let r = R::new(LEFT + 1.0, y + 72.0 + i as f32 * 56.0, WIDTH - 2.0, 54.0);
+        let r = R::new(LEFT + 1.0, y + 66.0 + i as f32 * 56.0, WIDTH - 2.0, 54.0);
         let hovered = b.hit(r, Hit::Mode(*mode));
         if hovered {
-            b.fill(r.inset(2.0), 4.0, p.card_hover);
+            b.fill(r.inset(2.0), 6.0, p.card_hover);
         }
         let cy = r.y + r.h / 2.0;
-        b.radio(LEFT + 66.0, cy, c.mode == *mode, hovered);
-        let tw = WIDTH - 120.0;
+        let chosen = c.mode == *mode;
+        let x = LEFT + 40.0;
+        let tw = WIDTH - 60.0;
+        let ink = if chosen { p.accent } else { p.text };
+        b.text(R::new(x, cy - 19.0, tw, 20.0), title, F::Strong, ink, LINE);
+        if chosen {
+            let w = b.width(F::Strong, title);
+            b.circle(R::new(x, cy - 18.0, w, 18.0));
+        }
+        let x = LEFT + 40.0;
         b.text(
-            R::new(LEFT + 90.0, cy - 19.0, tw, 20.0),
-            title,
-            F::Body,
-            p.text,
-            LINE,
-        );
-        b.text(
-            R::new(LEFT + 90.0, cy + 1.0, tw, 18.0),
+            R::new(x, cy + 3.0, tw, 18.0),
             caption,
             F::Caption,
             p.sub,
@@ -1192,9 +1160,7 @@ fn programs_page(b: &mut Builder, c: &Config, y: f32) -> f32 {
         }
         b.glyph(x, G_CLOSE, F::SmallGlyph, p.sub);
 
-        let seg = R::new(x.x - 12.0 - 200.0, cy - 16.0, 200.0, 32.0);
-        b.fill(seg, 4.0, p.control);
-        b.stroke(seg, 4.0, p.control_border);
+        let seg = R::new(x.x - 16.0 - 200.0, cy - 16.0, 200.0, 32.0);
         for (j, (label, kind)) in [("Off", true), ("No bubble", false)]
             .into_iter()
             .enumerate()
@@ -1202,17 +1168,15 @@ fn programs_page(b: &mut Builder, c: &Config, y: f32) -> f32 {
             let half = R::new(seg.x + j as f32 * 100.0, seg.y, 100.0, 32.0);
             let hovered = b.hit(half, Hit::Kind(i, kind));
             let chosen = *off == kind;
-            if chosen {
-                b.fill(half.inset(3.0), 3.0, p.accent);
-            } else if hovered {
-                b.fill(half.inset(3.0), 3.0, p.control_hover);
+            if hovered && !chosen {
+                b.fill(half.inset(3.0), 6.0, p.card_hover);
             }
-            let (ink, f) = if chosen {
-                (p.on_accent, F::Strong)
-            } else {
-                (p.text, F::Body)
-            };
-            b.text(half, label, f, ink, LINE | DT_CENTER);
+            let ink = if chosen { p.accent } else { p.sub };
+            b.text(half, label, F::Strong, ink, LINE | DT_CENTER);
+            if chosen {
+                let w = b.width(F::Strong, label);
+                b.circle(R::new(half.x + (half.w - w) / 2.0, half.y + 7.0, w, 18.0));
+            }
         }
         y += 68.0;
     }
@@ -1272,14 +1236,10 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
     let hovered = b.hit(field, Hit::Input);
     b.input = Some(field);
     let focused = win.focus;
-    let fill = match (focused, win.dark) {
-        (true, true) => hex(0x1F1F1F),
-        (true, false) => hex(0xFFFFFF),
-        _ if hovered => p.control_hover,
-        _ => p.control,
-    };
-    b.fill(field, 4.0, fill);
-    b.stroke(field, 4.0, p.control_border);
+    // A line to write on, not a box.
+    if hovered || focused {
+        b.fill(field, 4.0, p.card_hover);
+    }
     if focused {
         b.fill(
             R::new(field.x + 1.0, field.y + field.h - 2.0, field.w - 2.0, 2.0),
@@ -1295,7 +1255,7 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
     }
     let tx = field.x + 12.0;
     if win.draft.is_empty() {
-        let hint = "A word to never suggest, e.g. gdp";
+        let hint = "A word to leave alone, e.g. gdp";
         b.text(
             R::new(tx, field.y, field.w - 24.0, field.h),
             hint,
@@ -1338,7 +1298,7 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
     y += 12.0;
 
     let n = c.ignore_words.len();
-    y = b.section(y, &format!("Never suggest ({n})"));
+    y = b.section(y, &format!("Leave alone ({n})"));
     y = if n == 0 {
         b.para(
             LEFT,
@@ -1349,7 +1309,7 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
             p.faint,
         ) + y
     } else {
-        chips(b, y, &c.ignore_words, Hit::RemoveWord)
+        chips(b, y, &c.ignore_words, Hit::RemoveWord, false)
     };
     y += 20.0;
 
@@ -1360,7 +1320,7 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
             format!("Words you convert with {hotkey} and then keep typing after show up here.");
         b.para(LEFT, y, WIDTH, &hint, F::Caption, p.faint) + y
     } else {
-        chips(b, y, &c.learned_words, Hit::RemoveLearned)
+        chips(b, y + 22.0, &c.learned_words, Hit::RemoveLearned, true)
     };
     if !c.ignore_words.is_empty() || !c.learned_words.is_empty() {
         y += 8.0;
@@ -1376,29 +1336,68 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
     y
 }
 
-/// Words as removable chips, wrapping across the page; returns the y below
-/// them.
-fn chips(b: &mut Builder, mut y: f32, words: &[String], hit: fn(usize) -> Hit) -> f32 {
+/// What PhitPup turns `word` into, for the Always fix list.
+fn fix_of(word: &str) -> Option<String> {
+    let fallback;
+    let d = match APP.get() {
+        Some(app) => &app.detector,
+        None => {
+            // The window preview runs without the app.
+            use phitpup_core::{Detector, Layout};
+            fallback = Detector::new(&Layout::us_qwerty(), &Layout::kedmanee());
+            &fallback
+        }
+    };
+    Some(d.convert(word, d.direction(word)?))
+}
+
+/// Words on the page, each with a ruled line and an x to remove it,
+/// wrapping across the page; returns the y below them. With `fixes`, each
+/// word is struck through with its fix written above in pen.
+fn chips(b: &mut Builder, mut y: f32, words: &[String], hit: fn(usize) -> Hit, fixes: bool) -> f32 {
     let p = b.pal;
-    let mut x = LEFT;
+    let step = if fixes { 58.0 } else { 40.0 };
+    let mut x = LEFT + 8.0;
     for (i, word) in words.iter().enumerate() {
-        let w = (b.width(F::Word, word) + 14.0 + 30.0).min(WIDTH);
-        if x + w > RIGHT && x > LEFT {
-            x = LEFT;
-            y += 40.0;
+        let w = (b.width(F::Word, word) + 30.0).min(WIDTH);
+        if x + w > RIGHT && x > LEFT + 8.0 {
+            x = LEFT + 8.0;
+            y += step;
         }
         let r = R::new(x, y, w, 32.0);
         let hovered = b.hit(r, hit(i));
-        b.fill(r, 16.0, if hovered { p.card_hover } else { p.card });
-        b.stroke(r, 16.0, p.border);
-        let text = R::new(x + 14.0, y, w - 44.0, 32.0);
-        b.text(text, word, F::Word, p.text, LINE);
-        let ink = if hovered { p.error } else { p.sub };
-        let close = R::new(x + w - 28.0, y, 16.0, 32.0);
-        b.glyph(close, G_CLOSE, F::SmallGlyph, ink);
-        x += w + 8.0;
+        if hovered {
+            b.fill(r, 6.0, p.card_hover);
+        }
+        b.fill(R::new(x, y + 30.0, w, 1.0), 0.0, p.control_border);
+        let tw = w - 24.0;
+        let text = R::new(x + 4.0, y, tw, 32.0);
+        if fixes {
+            b.text(text, word, F::Word, p.sub, LINE);
+            let ww = b.width(F::Word, word).min(tw);
+            b.pen(
+                vec![(x + 2.0, y + 17.0), (x + 6.0 + ww, y + 15.5)],
+                1.6,
+                p.accent,
+            );
+            if let Some(fix) = fix_of(word) {
+                let above = R::new(x + 6.0, y - 28.0, w + 40.0, 30.0);
+                b.text(above, &fix, F::Pen, p.accent, LINE);
+            }
+        } else {
+            b.text(text, word, F::Word, p.text, LINE);
+        }
+        let ink = if hovered { p.accent } else { p.faint };
+        b.text(
+            R::new(x + w - 18.0, y, 16.0, 32.0),
+            "×",
+            F::Pen,
+            ink,
+            LINE | DT_CENTER,
+        );
+        x += w + 18.0;
     }
-    y + 40.0
+    y + step
 }
 
 fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
@@ -1417,10 +1416,10 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
         LINE,
     );
     b.text(
-        R::new(x, y + 40.0, WIDTH - 84.0, 22.0),
-        "ผิดปุ๊บ",
-        F::Word,
-        p.sub,
+        R::new(x, y + 38.0, WIDTH - 84.0, 28.0),
+        "ผิดปุ๊บ แก้ปั๊บ",
+        F::PenBig,
+        p.accent,
         LINE,
     );
     y += 88.0;
@@ -1428,7 +1427,7 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
         LEFT,
         y,
         WIDTH,
-        "Fixes text typed in the wrong keyboard layout, Thai ⇄ English.",
+        "Fixes text typed in the wrong keyboard layout, Thai and English.",
         F::Body,
         p.text,
     );
@@ -1638,6 +1637,39 @@ fn paint_box(px: &mut [u32], w: i32, h: i32, r: R, rad: f32, c: Rgb, band: Optio
     }
 }
 
+/// Paints a round-ended line through `pts`, in device pixels.
+fn paint_pen(px: &mut [u32], w: i32, h: i32, pts: &[(f32, f32)], width: f32, c: Rgb) {
+    let half = width / 2.0;
+    for seg in pts.windows(2) {
+        let ((ax, ay), (bx, by)) = (seg[0], seg[1]);
+        let x0 = ((ax.min(bx) - half - 1.0).floor() as i32).max(0);
+        let x1 = ((ax.max(bx) + half + 1.0).ceil() as i32).min(w);
+        let y0 = ((ay.min(by) - half - 1.0).floor() as i32).max(0);
+        let y1 = ((ay.max(by) + half + 1.0).ceil() as i32).min(h);
+        let (dx, dy) = (bx - ax, by - ay);
+        let len2 = (dx * dx + dy * dy).max(1e-6);
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let (px_, py) = (x as f32 + 0.5, y as f32 + 0.5);
+                let t = (((px_ - ax) * dx + (py - ay) * dy) / len2).clamp(0.0, 1.0);
+                let (qx, qy) = (ax + t * dx - px_, ay + t * dy - py);
+                let cov = coverage((qx * qx + qy * qy).sqrt() - half);
+                if cov > 0.0 {
+                    let i = (y * w + x) as usize;
+                    // Overlapping segments must not darken the joints: keep
+                    // the strongest coverage so far by mixing towards it only.
+                    let old = unpack(px[i]);
+                    let target = mix(old, c, cov);
+                    let closer = |o: f32, t: f32, c: f32| (c - t).abs() < (c - o).abs();
+                    if closer(old[0], target[0], c[0]) || closer(old[1], target[1], c[1]) {
+                        px[i] = pack(target);
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn paint_logo(px: &mut [u32], w: i32, h: i32, r: R, tone: Tone) {
     let size = r.w.round().max(8.0) as u32;
     let rgba = icon::render(size, tone);
@@ -1717,6 +1749,10 @@ fn draw(win: &mut Win, c: &Config, mem: HDC, px: &mut [u32], w: i32, h: i32) {
             Shape::Logo { r, tone } => {
                 let r = R::new(r.x * s, r.y * s, r.w * s, r.h * s);
                 paint_logo(px, w, h, r, tone);
+            }
+            Shape::Pen { ref pts, width, c } => {
+                let pts: Vec<(f32, f32)> = pts.iter().map(|&(x, y)| (x * s, y * s)).collect();
+                paint_pen(px, w, h, &pts, width * s, c);
             }
         }
     }
@@ -2244,7 +2280,7 @@ mod tests {
             ignore_words: ["gdp", "mvp", "lcd", "แหก", "rust", "phitpup"]
                 .map(String::from)
                 .to_vec(),
-            learned_words: vec!["muj".into(), "mew".into()],
+            learned_words: vec!["muj".into(), "ok".into()],
             ..Config::default()
         };
         for dark in [false, true] {

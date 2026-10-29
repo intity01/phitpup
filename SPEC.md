@@ -181,6 +181,17 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
      at most every 30 days; clicking it opens the latest release. The build time comes from
      `build.rs`; the last reminder date is kept in `%APPDATA%\PhitPup\update-reminder`. Still
      no networking code.
+11. Red pen design (2026-10-29), chosen from three directions on the design canvas
+   - One look for the app, the bubble and the website: a teacher's red pen on paper. Cream paper
+     #FBF7F0 (dark #1E1B18), pen #D93A12 (dark #FF7A52), hairlines instead of cards.
+   - Fonts bundled from `assets/fonts` (SIL OFL, licences beside them): IBM Plex Sans Thai
+     Regular and Medium for text, Mali SemiBold for the handwriting, Noto Serif Thai Bold for
+     Thai headings, Georgia (with Windows) for Latin ones. Loaded for the process only with
+     `AddFontMemResourceEx` (`fonts.rs`); the Pages workflow copies them to `site/fonts`.
+   - Settings: the current page and choices are circled in pen (`pen_loop`), switches are boxes
+     ticked in pen, learned words are struck through with their fix written above.
+   - Bubble: a paper slip with the fix in pen, a TH/EN stamp and the accept key. The underline
+     is the pen colour.
 
 ## Environment (checked 2026-10-28)
 rustc/cargo 1.96, rustup 1.29, Visual Studio Community 2026 (MSVC), git 2.54, gh 2.102, node 26.3.

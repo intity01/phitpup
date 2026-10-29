@@ -43,6 +43,8 @@ mod clipboard;
 #[cfg(windows)]
 mod context;
 #[cfg(windows)]
+mod fonts;
+#[cfg(windows)]
 mod hook;
 #[cfg(windows)]
 mod inject;

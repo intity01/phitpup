@@ -160,7 +160,7 @@ struct Image {
     px: Vec<u32>,
 }
 
-/// A wave just under the bottom of each rectangle, in the logo's coral.
+/// A wave just under the bottom of each rectangle, in the red pen.
 fn render(rects: &[RECT], scale: f32, dark: bool) -> Image {
     let amp = AMPLITUDE * scale;
     let len = WAVELENGTH * scale;
@@ -172,9 +172,9 @@ fn render(rects: &[RECT], scale: f32, dark: bool) -> Image {
     let bottom = rects.iter().map(|r| r.bottom).max().unwrap_or(0) + band;
     let (w, h) = ((right - left).max(1), (bottom - top).max(1));
     let [r, g, b] = if dark {
-        [0xFF, 0x6B, 0x3D]
+        [0xFF, 0x7A, 0x52]
     } else {
-        [0xE8, 0x46, 0x1E]
+        [0xD9, 0x3A, 0x12]
     };
     let mut px = vec![0u32; (w * h) as usize];
     let k = std::f32::consts::TAU / len;
