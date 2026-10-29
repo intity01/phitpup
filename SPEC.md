@@ -157,6 +157,14 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
      deploy to Pages).
    - The repository slug lives in `site/index.html` (`data-repo`); currently `intity01/phitpup`.
    - Still open: code signing, AV false-positive submissions, version-info resource.
+8. Learning from corrections (2026-10-29)
+   - Undoing a fix right away (hotkey or Shift+Backspace) adds the word to `ignore_words`.
+   - Converting one word with the hotkey and then typing on adds it to `learned_words`; those
+     are suggested (and fixed in auto mode) whatever the detector thinks. Reaching back a second
+     word or erasing the fix teaches nothing. Words need 2+ characters.
+   - `learn = true` turns it on (default); the Words page has the switch and both lists.
+   - About page: "Check for updates" opens the latest release in the browser. The app itself
+     still has no networking code.
 
 ## Environment (checked 2026-10-28)
 rustc/cargo 1.96, rustup 1.29, Visual Studio Community 2026 (MSVC), git 2.54, gh 2.102, node 26.3.

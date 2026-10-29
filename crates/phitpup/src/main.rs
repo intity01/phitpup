@@ -290,6 +290,7 @@ mod app {
             );
         }
         let edit = app.fixer.lock().unwrap().hotkey(&app.detector);
+        hook::learn(app); // an undo right after a fix
         match edit {
             Some(e) => {
                 debug!(

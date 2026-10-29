@@ -10,6 +10,9 @@
 //! a word the detector is sure about is swallowed and the worker types the
 //! fixed word and the space instead.
 //!
+//! After every key it keeps what the fixer learned from the user's
+//! corrections (see [`learn`]).
+//!
 //! Where [`context::gate`] says PhitPup is off (password fields and the
 //! like), keys pass untouched and nothing is remembered.
 
@@ -77,6 +80,36 @@ pub fn reset(why: &str) {
         drop(fixer);
         DISMISSED.store(false, Ordering::Relaxed);
         set_suggestion(app, None);
+        learn(app);
+    }
+}
+
+/// Keeps what the fixer learned from the user's corrections, if learning is
+/// on: an undone fix means leave that word alone; a hotkey fix the user kept
+/// means fix that word without asking next time. Saved by the worker.
+pub fn learn(app: &App) {
+    let (learned, rejected) = {
+        let mut f = app.fixer.lock().unwrap();
+        (f.take_learned(), f.take_rejected())
+    };
+    if learned.is_none() && rejected.is_none() {
+        return;
+    }
+    let mut c = app.config.lock().unwrap();
+    if !c.learn {
+        return;
+    }
+    let mut changed = false;
+    if let Some(word) = rejected {
+        debug!("a fix was undone: that word will be left alone");
+        changed |= c.ignore(&word);
+    }
+    if let Some(word) = learned {
+        debug!("a hotkey fix was kept: that word will be fixed without asking");
+        changed |= c.learn_word(&word);
+    }
+    if changed {
+        post(app, WM_SAVE);
     }
 }
 
@@ -99,15 +132,16 @@ fn refresh(app: &App, quiet: bool) {
     if quiet || app.mode() == Mode::Manual {
         return;
     }
+    let (ignored, learned) = {
+        let c = app.config.lock().unwrap();
+        (c.ignore_words.clone(), c.learned_words.clone())
+    };
     let s = app
         .fixer
         .lock()
         .unwrap()
-        .suggestion(&app.detector)
-        .filter(|s| {
-            let word = s.word.to_lowercase();
-            !app.config.lock().unwrap().ignore_words.contains(&word)
-        });
+        .suggestion(&app.detector, &learned)
+        .filter(|s| !ignored.contains(&s.word.to_lowercase()));
     if s.is_none() {
         DISMISSED.store(false, Ordering::Relaxed);
     }
@@ -118,8 +152,14 @@ unsafe extern "system" fn keyboard(code: i32, wparam: WPARAM, lparam: LPARAM) ->
     if code == HC_ACTION as i32 && matches!(wparam as u32, WM_KEYDOWN | WM_SYSKEYDOWN) {
         // SAFETY: for HC_ACTION, lparam points to a KBDLLHOOKSTRUCT.
         let k = unsafe { &*(lparam as *const KBDLLHOOKSTRUCT) };
-        if k.dwExtraInfo != inject::TAG && key_down(k) {
-            return 1; // swallow
+        if k.dwExtraInfo != inject::TAG {
+            let swallow = key_down(k);
+            if let Some(app) = APP.get() {
+                learn(app);
+            }
+            if swallow {
+                return 1;
+            }
         }
     }
     // SAFETY: forwarding the unchanged arguments.
@@ -177,10 +217,7 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
                 DISMISSED.store(true, Ordering::Relaxed);
                 if shift {
                     debug!("Shift+Esc: the word will not be suggested again");
-                    let mut c = app.config.lock().unwrap();
-                    let word = s.word.to_lowercase();
-                    if phitpup_core::config::storable(&word) && !c.ignore_words.contains(&word) {
-                        c.ignore_words.push(word);
+                    if app.config.lock().unwrap().ignore(&s.word) {
                         post(app, WM_SAVE);
                     }
                 } else {
@@ -199,9 +236,15 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
 
     if vk == VK_SPACE && !ctrl && !alt && !win && !quiet && app.mode() == Mode::Auto {
         let edit = {
-            let ignored = app.config.lock().unwrap().ignore_words.clone();
+            let (ignored, learned) = {
+                let c = app.config.lock().unwrap();
+                (c.ignore_words.clone(), c.learned_words.clone())
+            };
             let skip = |w: &str| ignored.contains(&w.to_lowercase());
-            app.fixer.lock().unwrap().auto(&app.detector, " ", skip)
+            app.fixer
+                .lock()
+                .unwrap()
+                .auto(&app.detector, " ", skip, &learned)
         };
         set_suggestion(app, None);
         DISMISSED.store(false, Ordering::Relaxed);

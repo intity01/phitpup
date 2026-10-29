@@ -81,6 +81,7 @@ const G_FULLSCREEN: char = '\u{E740}';
 const G_FILE: char = '\u{E8A7}';
 const G_BULB: char = '\u{EA80}';
 const G_EDIT: char = '\u{E70F}';
+const G_UPDATE: char = '\u{E895}';
 const G_INFO: char = '\u{E946}';
 const G_PERSON: char = '\u{E77B}';
 const G_PEOPLE: char = '\u{E716}';
@@ -182,6 +183,7 @@ const PAGES: [(Page, char, &str); 5] = [
 /// Who makes PhitPup, for the About page.
 const AUTHOR: &str = "Intity01";
 const TEAM: &str = "sukudone.team-dev";
+const RELEASES: &str = "https://github.com/intity01/phitpup/releases/latest";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Which {
@@ -198,6 +200,7 @@ enum Hit {
     Startup,
     Fullscreen,
     OpenFile,
+    Updates,
     AddProgram,
     /// Program `i` of [`programs`]: off (true) or no bubble (false).
     Kind(usize, bool),
@@ -205,6 +208,8 @@ enum Hit {
     Input,
     AddWord,
     RemoveWord(usize),
+    RemoveLearned(usize),
+    Learn,
     Change(Which),
     ResetKeys,
 }
@@ -1195,12 +1200,25 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
         LEFT,
         y,
         WIDTH,
-        "The bubble never offers to fix these words: acronyms, names, slang. Add them as you \
-         type them. Shortcut: press Shift+Esc while the bubble shows a word.",
+        "Words PhitPup should leave alone, and words it should always fix. Add them as you \
+         type them.",
         F::Body,
         p.sub,
     );
     y += 16.0;
+
+    let hotkey = c.hotkey.label();
+    let (cy, hovered) = b.row(
+        y,
+        68.0,
+        68.0,
+        Some(G_BULB),
+        "Learn from my corrections",
+        "Remembers the fixes you undo or keep.",
+        Some(Hit::Learn),
+    );
+    b.toggle(cy, c.learn, hovered);
+    y += 84.0;
 
     let field = R::new(LEFT, y, WIDTH - 108.0, 36.0);
     let hovered = b.hit(field, Hit::Input);
@@ -1229,7 +1247,7 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
     }
     let tx = field.x + 12.0;
     if win.draft.is_empty() {
-        let hint = "Type a word, e.g. gdp";
+        let hint = "A word to never suggest, e.g. gdp";
         b.text(
             R::new(tx, field.y, field.w - 24.0, field.h),
             hint,
@@ -1272,41 +1290,32 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
     y += 12.0;
 
     let n = c.ignore_words.len();
-    let heading = match n {
-        0 => "No words yet".to_string(),
-        1 => "1 word".to_string(),
-        _ => format!("{n} words"),
+    y = b.section(y, &format!("Never suggest ({n})"));
+    y = if n == 0 {
+        b.para(
+            LEFT,
+            y,
+            WIDTH,
+            "Press Shift+Esc while the bubble shows a word, or type it above.",
+            F::Caption,
+            p.faint,
+        ) + y
+    } else {
+        chips(b, y, &c.ignore_words, Hit::RemoveWord)
     };
-    y = b.section(y, &heading);
-    let mut x = LEFT;
-    for (i, word) in c.ignore_words.iter().enumerate() {
-        let w = (b.width(F::Word, word) + 14.0 + 30.0).min(WIDTH);
-        if x + w > RIGHT && x > LEFT {
-            x = LEFT;
-            y += 40.0;
-        }
-        let r = R::new(x, y, w, 32.0);
-        let hovered = b.hit(r, Hit::RemoveWord(i));
-        b.fill(r, 16.0, if hovered { p.card_hover } else { p.card });
-        b.stroke(r, 16.0, p.border);
-        b.text(
-            R::new(x + 14.0, y, w - 44.0, 32.0),
-            word,
-            F::Word,
-            p.text,
-            LINE,
-        );
-        let ink = if hovered { p.error } else { p.sub };
-        b.glyph(
-            R::new(x + w - 28.0, y, 16.0, 32.0),
-            G_CLOSE,
-            F::SmallGlyph,
-            ink,
-        );
-        x += w + 8.0;
-    }
-    if n > 0 {
-        y += 40.0;
+    y += 20.0;
+
+    let n = c.learned_words.len();
+    y = b.section(y, &format!("Always fix ({n})"));
+    y = if n == 0 {
+        let hint =
+            format!("Words you convert with {hotkey} and then keep typing after show up here.");
+        b.para(LEFT, y, WIDTH, &hint, F::Caption, p.faint) + y
+    } else {
+        chips(b, y, &c.learned_words, Hit::RemoveLearned)
+    };
+    if !c.ignore_words.is_empty() || !c.learned_words.is_empty() {
+        y += 8.0;
         b.text(
             R::new(LEFT, y, WIDTH, 18.0),
             "Click a word to remove it.",
@@ -1317,6 +1326,31 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
         y += 18.0;
     }
     y
+}
+
+/// Words as removable chips, wrapping across the page; returns the y below
+/// them.
+fn chips(b: &mut Builder, mut y: f32, words: &[String], hit: fn(usize) -> Hit) -> f32 {
+    let p = b.pal;
+    let mut x = LEFT;
+    for (i, word) in words.iter().enumerate() {
+        let w = (b.width(F::Word, word) + 14.0 + 30.0).min(WIDTH);
+        if x + w > RIGHT && x > LEFT {
+            x = LEFT;
+            y += 40.0;
+        }
+        let r = R::new(x, y, w, 32.0);
+        let hovered = b.hit(r, hit(i));
+        b.fill(r, 16.0, if hovered { p.card_hover } else { p.card });
+        b.stroke(r, 16.0, p.border);
+        let text = R::new(x + 14.0, y, w - 44.0, 32.0);
+        b.text(text, word, F::Word, p.text, LINE);
+        let ink = if hovered { p.error } else { p.sub };
+        let close = R::new(x + w - 28.0, y, 16.0, 32.0);
+        b.glyph(close, G_CLOSE, F::SmallGlyph, ink);
+        x += w + 8.0;
+    }
+    y + 40.0
 }
 
 fn about(b: &mut Builder, y: f32) -> f32 {
@@ -1365,6 +1399,11 @@ fn about(b: &mut Builder, y: f32) -> f32 {
         b.text(r, value, F::Strong, p.text, LINE | DT_RIGHT);
         y += 56.0;
     }
+    let caption = "Opens the download page in your browser.";
+    let (cy, _) = b.row(y, 68.0, 68.0, Some(G_UPDATE), "Updates", caption, None);
+    let r = R::new(RIGHT - 20.0 - 170.0, cy - 16.0, 170.0, 32.0);
+    b.button(r, "Check for updates", None, false, Hit::Updates);
+    y += 72.0;
 
     y += 16.0;
     b.glyph(R::new(LEFT, y, 16.0, 20.0), G_LOCK, F::SmallGlyph, p.sub);
@@ -1684,6 +1723,8 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
         Hit::Startup => settings::set_start_with_windows(!settings::starts_with_windows()),
         Hit::Fullscreen => edit(|c| c.off_in_fullscreen = !c.off_in_fullscreen),
         Hit::OpenFile => settings::open_file(),
+        // The browser does the checking: PhitPup has no networking code.
+        Hit::Updates => settings::open(RELEASES),
         Hit::AddProgram => add_program(hwnd),
         Hit::Kind(i, off) => edit(|c| {
             let mut list = programs(c);
@@ -1701,6 +1742,12 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
         }),
         Hit::Input => {}
         Hit::AddWord => add_word(),
+        Hit::Learn => edit(|c| c.learn = !c.learn),
+        Hit::RemoveLearned(i) => edit(|c| {
+            if i < c.learned_words.len() {
+                c.learned_words.remove(i);
+            }
+        }),
         Hit::RemoveWord(i) => edit(|c| {
             if i < c.ignore_words.len() {
                 c.ignore_words.remove(i);
@@ -1751,7 +1798,9 @@ fn add_word() {
             });
         }
         None => {
-            edit(|c| c.ignore_words.push(word));
+            edit(|c| {
+                c.ignore(&word);
+            });
             with(|w| w.note = None);
         }
     }
@@ -2121,6 +2170,7 @@ mod tests {
             ignore_words: ["gdp", "mvp", "lcd", "แหก", "rust", "phitpup"]
                 .map(String::from)
                 .to_vec(),
+            learned_words: vec!["muj".into(), "mew".into()],
             ..Config::default()
         };
         for dark in [false, true] {

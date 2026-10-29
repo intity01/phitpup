@@ -39,6 +39,12 @@ pub struct Config {
     pub quiet_apps: Vec<String>,
     /// Words (as typed) the bubble never suggests fixing, lowercased.
     pub ignore_words: Vec<String>,
+    /// Words (as typed) fixed without asking: the user converted them with
+    /// the hotkey and kept the result.
+    pub learned_words: Vec<String>,
+    /// Learn from corrections: an undone fix adds the word to
+    /// `ignore_words`, a kept hotkey fix to `learned_words`.
+    pub learn: bool,
     /// Fixes the last word.
     pub hotkey: Hotkey,
     /// Accepts the suggestion.
@@ -53,6 +59,8 @@ impl Default for Config {
             off_apps: Vec::new(),
             quiet_apps: Vec::new(),
             ignore_words: Vec::new(),
+            learned_words: Vec::new(),
+            learn: true,
             hotkey: Hotkey::FIX,
             accept_key: Hotkey::ACCEPT,
         }
@@ -85,6 +93,12 @@ quiet_apps = []
 # Words the bubble never offers to fix, as you type them, e.g. ["gdp"].
 # Shift+Esc on the bubble adds the word it shows.
 ignore_words = []
+
+# Learn from corrections: undoing a fix right away adds the word to
+# ignore_words; converting a word with the hotkey and keeping it adds it to
+# learned_words, which are then fixed without asking.
+learn = true
+learned_words = []
 
 # Shortcuts: modifiers ctrl, shift, alt, then a key such as backspace, tab,
 # space, enter, insert, f1-f24, a-z.
@@ -121,6 +135,8 @@ impl Config {
                 "off_apps" => list(value).map(|a| c.off_apps = a),
                 "quiet_apps" => list(value).map(|a| c.quiet_apps = a),
                 "ignore_words" => list(value).map(|w| c.ignore_words = w),
+                "learned_words" => list(value).map(|w| c.learned_words = w),
+                "learn" => boolean(value).map(|b| c.learn = b),
                 "hotkey" => shortcut(value).map(|k| c.hotkey = k),
                 "accept_key" => shortcut(value).map(|k| c.accept_key = k),
                 _ => {
@@ -153,8 +169,36 @@ impl Config {
         t = set(&t, "off_apps", &array(&self.off_apps));
         t = set(&t, "quiet_apps", &array(&self.quiet_apps));
         t = set(&t, "ignore_words", &array(&self.ignore_words));
+        t = set(&t, "learn", &self.learn.to_string());
+        t = set(&t, "learned_words", &array(&self.learned_words));
         t = set(&t, "hotkey", &quoted(&self.hotkey.to_string()));
         set(&t, "accept_key", &quoted(&self.accept_key.to_string()))
+    }
+}
+
+impl Config {
+    /// Leave `word` alone from now on (it moves out of the learned words).
+    /// False if it was already there or cannot be stored.
+    pub fn ignore(&mut self, word: &str) -> bool {
+        let word = word.to_lowercase();
+        self.learned_words.retain(|w| *w != word);
+        if !storable(&word) || self.ignore_words.contains(&word) {
+            return false;
+        }
+        self.ignore_words.push(word);
+        true
+    }
+
+    /// Fix `word` without asking from now on (it moves out of the ignored
+    /// words). False if it was already there or cannot be stored.
+    pub fn learn_word(&mut self, word: &str) -> bool {
+        let word = word.to_lowercase();
+        self.ignore_words.retain(|w| *w != word);
+        if !storable(&word) || word.chars().count() < 2 || self.learned_words.contains(&word) {
+            return false;
+        }
+        self.learned_words.push(word);
+        true
     }
 }
 
@@ -289,6 +333,8 @@ accept_key = \"shift+backspace\"",
             off_apps: vec!["game.exe".into()],
             quiet_apps: vec!["notes.exe".into(), "x # y.exe".into()],
             ignore_words: vec!["gdp".into()],
+            learned_words: vec!["muj".into()],
+            learn: false,
             hotkey: Hotkey::parse("ctrl+backslash").unwrap(),
             accept_key: Hotkey::ACCEPT,
         };

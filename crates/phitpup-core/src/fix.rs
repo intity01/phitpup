@@ -14,6 +14,14 @@
 //! In auto mode a space after a word goes to [`Fixer::auto`] instead of
 //! [`Fixer::typed`]. Either way, Shift+Backspace right after puts the word
 //! back as it was typed.
+//!
+//! The fixer also notices lessons for the front end to keep:
+//! [`take_rejected`](Fixer::take_rejected) is a word whose fix was undone
+//! right away (leave it alone from now on), and
+//! [`take_learned`](Fixer::take_learned) a word the user converted with the
+//! hotkey and kept (fix it without asking next time). Words in the
+//! `learned` list passed to [`suggestion`](Fixer::suggestion) and
+//! [`auto`](Fixer::auto) are fixed whatever the detector thinks.
 
 use crate::model::Lang;
 use crate::{Detector, Direction, Thresholds};
@@ -63,6 +71,10 @@ pub struct Fixer {
     buf: Vec<char>,
     session: Option<Session>,
     undo: Option<Undo>,
+    /// Converted with the hotkey; learned once the user moves on with it.
+    pending: Option<String>,
+    learned: Option<String>,
+    rejected: Option<String>,
 }
 
 impl Fixer {
@@ -71,6 +83,7 @@ impl Fixer {
     }
 
     pub fn typed(&mut self, text: &str) {
+        self.keep_pending();
         self.session = None;
         self.undo = None;
         self.buf.extend(text.chars());
@@ -80,6 +93,7 @@ impl Fixer {
     }
 
     pub fn backspace(&mut self) {
+        self.pending = None; // erasing the fix is not keeping it
         self.session = None;
         self.undo = None;
         self.buf.pop();
@@ -87,9 +101,28 @@ impl Fixer {
 
     /// The caret moved somewhere we cannot follow.
     pub fn reset(&mut self) {
+        self.keep_pending();
         self.buf.clear();
         self.session = None;
         self.undo = None;
+    }
+
+    fn keep_pending(&mut self) {
+        if let Some(word) = self.pending.take() {
+            self.learned = Some(word);
+        }
+    }
+
+    /// A word converted with the hotkey and kept: fix it by itself next
+    /// time. Lowercase, as typed (before the fix).
+    pub fn take_learned(&mut self) -> Option<String> {
+        self.learned.take()
+    }
+
+    /// A word whose fix was undone right after it was made: leave it alone
+    /// from now on. Lowercase, as typed (before the fix).
+    pub fn take_rejected(&mut self) -> Option<String> {
+        self.rejected.take()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -103,18 +136,18 @@ impl Fixer {
     /// The word right before the caret, if the detector (at its own
     /// thresholds) says it was typed with the wrong layout. Nothing while the
     /// caret sits after whitespace: the word is finished.
-    pub fn suggestion(&self, detector: &Detector) -> Option<Suggestion> {
+    pub fn suggestion(&self, detector: &Detector, learned: &[String]) -> Option<Suggestion> {
         if self.buf.last().is_none_or(|c| c.is_whitespace()) {
             return None;
         }
         let start = word_start(&self.buf, 1)?;
         let word: String = self.buf[start..].iter().collect();
-        let v = detector.judge(&word).filter(|v| v.flip)?;
+        let (direction, converted) = judge(detector, &word, detector.thresholds, learned)?;
         Some(Suggestion {
             edit: Edit {
                 delete: self.buf.len() - start,
-                insert: v.converted,
-                switch_to: target(v.direction),
+                insert: converted,
+                switch_to: target(direction),
             },
             word,
         })
@@ -155,6 +188,7 @@ impl Fixer {
         detector: &Detector,
         sep: &str,
         skip: impl Fn(&str) -> bool,
+        learned: &[String],
     ) -> Option<Edit> {
         let fix = (|| {
             if self.buf.last().is_none_or(|c| c.is_whitespace()) {
@@ -165,19 +199,17 @@ impl Fixer {
             if skip(&word) {
                 return None;
             }
-            let v = detector
-                .judge_with(&word, Thresholds::AUTO)
-                .filter(|v| v.flip)?;
-            Some((start, v))
+            Some((start, judge(detector, &word, Thresholds::AUTO, learned)?))
         })();
-        let Some((start, v)) = fix else {
+        let Some((start, (direction, converted))) = fix else {
             self.typed(sep);
             return None;
         };
-        let switch_to = target(v.direction);
+        self.keep_pending();
+        let switch_to = target(direction);
         let edit = Edit {
             delete: self.buf.len() - start,
-            insert: v.converted + sep,
+            insert: converted + sep,
             switch_to,
         };
         let mut original = std::mem::take(&mut self.buf);
@@ -202,6 +234,8 @@ impl Fixer {
     /// The edit for one hotkey press, or `None` if there is no word to fix.
     pub fn hotkey(&mut self, detector: &Detector) -> Option<Edit> {
         if let Some(u) = self.undo.take() {
+            let word: String = u.original[u.start..].iter().collect();
+            self.rejected = Some(word.trim_end().to_lowercase());
             let edit = Edit {
                 delete: self.buf.len() - u.start,
                 insert: u.original[u.start..].iter().collect(),
@@ -220,6 +254,7 @@ impl Fixer {
                 insert,
                 switch_to: target(direction),
             };
+            self.pending = Some(tail.trim_end().to_lowercase());
             let original = std::mem::take(&mut self.buf);
             self.buf = original[..start]
                 .iter()
@@ -235,6 +270,7 @@ impl Fixer {
             return Some(edit);
         };
 
+        self.pending = None; // more than one word, or undone: nothing to learn
         let words = s.words + 1;
         match word_start(&s.original, words).filter(|_| words <= MAX_WORDS) {
             Some(start) => {
@@ -268,6 +304,22 @@ impl Fixer {
             }
         }
     }
+}
+
+/// The fix for `word`: always for a learned word, otherwise when the
+/// detector says so at `thresholds`.
+fn judge(
+    detector: &Detector,
+    word: &str,
+    thresholds: Thresholds,
+    learned: &[String],
+) -> Option<(Direction, String)> {
+    if learned.contains(&word.to_lowercase()) {
+        let d = detector.direction(word)?;
+        return Some((d, detector.convert(word, d)));
+    }
+    let v = detector.judge_with(word, thresholds).filter(|v| v.flip)?;
+    Some((v.direction, v.converted))
 }
 
 fn target(direction: Direction) -> Lang {
@@ -379,7 +431,7 @@ mod tests {
         let mut f = Fixer::new();
         let mut screen = String::from("hello l;ylfu");
         f.typed(&screen);
-        let e = f.auto(&d, " ", |_| false).unwrap();
+        let e = f.auto(&d, " ", |_| false, &[]).unwrap();
         assert_eq!(e.delete, 6);
         assert_eq!(e.switch_to, Lang::Thai);
         apply(&mut screen, &e);
@@ -404,12 +456,16 @@ mod tests {
         ] {
             let mut f = Fixer::new();
             f.typed(typed);
-            assert_eq!(f.auto(&d, " ", |w| w == skip), None, "{typed}");
+            assert_eq!(f.auto(&d, " ", |w| w == skip, &[]), None, "{typed}");
             assert_eq!(f.text(), format!("{typed} "), "the space is recorded");
         }
         let mut f = Fixer::new();
         f.typed("l;ylfu ");
-        assert_eq!(f.auto(&d, " ", |_| false), None, "after a space: no word");
+        assert_eq!(
+            f.auto(&d, " ", |_| false, &[]),
+            None,
+            "after a space: no word"
+        );
     }
 
     #[test]
@@ -417,10 +473,74 @@ mod tests {
         let d = det();
         let mut f = Fixer::new();
         f.typed("l;ylfu");
-        f.auto(&d, " ", |_| false).unwrap();
+        f.auto(&d, " ", |_| false, &[]).unwrap();
         f.typed("ok");
         // The hotkey now fixes the new word instead of undoing.
         assert_eq!(f.hotkey(&d).unwrap().insert, "นา");
+    }
+
+    #[test]
+    fn undoing_a_fix_rejects_the_word() {
+        let d = det();
+        let mut f = Fixer::new();
+        f.typed("l;ylfu");
+        f.auto(&d, " ", |_| false, &[]).unwrap();
+        f.hotkey(&d).unwrap();
+        assert_eq!(f.take_rejected().as_deref(), Some("l;ylfu"));
+        assert_eq!(f.take_rejected(), None);
+        assert_eq!(f.take_learned(), None, "undo is not something to learn");
+
+        let mut f = Fixer::new();
+        f.typed("l;ylfu");
+        let s = f.suggestion(&d, &[]).unwrap();
+        f.accept(&s).unwrap();
+        f.hotkey(&d).unwrap();
+        assert_eq!(f.take_rejected().as_deref(), Some("l;ylfu"));
+    }
+
+    #[test]
+    fn a_kept_hotkey_fix_is_learned() {
+        let d = det();
+        let mut f = Fixer::new();
+        f.typed("Muj");
+        f.hotkey(&d).unwrap();
+        assert_eq!(f.take_learned(), None, "not until the user moves on");
+        f.typed(" ");
+        assert_eq!(f.take_learned().as_deref(), Some("muj"));
+
+        // Reaching a second word back, or erasing the fix, teaches nothing.
+        let mut f = Fixer::new();
+        f.typed("ok muj");
+        f.hotkey(&d).unwrap();
+        f.hotkey(&d).unwrap();
+        f.typed(" ");
+        assert_eq!(f.take_learned(), None);
+        let mut f = Fixer::new();
+        f.typed("muj");
+        f.hotkey(&d).unwrap();
+        f.backspace();
+        f.reset();
+        assert_eq!(f.take_learned(), None);
+    }
+
+    impl Fixer {
+        /// What auto mode would do, without changing this fixer.
+        fn clone_text_auto(&self, d: &Detector, learned: &[String]) -> Option<Edit> {
+            let mut f = Fixer::new();
+            f.typed(&self.text());
+            f.auto(d, " ", |_| false, learned)
+        }
+    }
+
+    #[test]
+    fn learned_words_are_fixed_without_asking() {
+        let d = det();
+        let learned = vec!["ok".to_string()];
+        let mut f = Fixer::new();
+        f.typed("ok");
+        assert_eq!(f.suggestion(&d, &learned).unwrap().edit.insert, "นา");
+        assert_eq!(f.clone_text_auto(&d, &[]), None, "too short for auto mode");
+        assert_eq!(f.auto(&d, " ", |_| false, &learned).unwrap().insert, "นา ");
     }
 
     #[test]
@@ -463,9 +583,9 @@ mod tests {
         let d = det();
         let mut f = Fixer::new();
         f.typed("hello l");
-        assert_eq!(f.suggestion(&d), None, "too early to tell");
+        assert_eq!(f.suggestion(&d, &[]), None, "too early to tell");
         f.typed(";ylfu");
-        let s = f.suggestion(&d).unwrap();
+        let s = f.suggestion(&d, &[]).unwrap();
         assert_eq!(s.word, "l;ylfu");
         assert_eq!(
             s.edit,
@@ -484,10 +604,10 @@ mod tests {
         let d = det();
         let mut f = Fixer::new();
         f.typed("hello");
-        assert_eq!(f.suggestion(&d), None);
+        assert_eq!(f.suggestion(&d, &[]), None);
         f.reset();
         f.typed("l;ylfu ");
-        assert_eq!(f.suggestion(&d), None);
+        assert_eq!(f.suggestion(&d, &[]), None);
     }
 
     #[test]
@@ -495,7 +615,7 @@ mod tests {
         let d = det();
         let mut f = Fixer::new();
         f.typed("l;ylfu");
-        let s = f.suggestion(&d).unwrap();
+        let s = f.suggestion(&d, &[]).unwrap();
         f.typed("x");
         assert_eq!(f.accept(&s), None);
         f.backspace();
@@ -510,7 +630,7 @@ mod tests {
         let mut f = Fixer::new();
         let mut screen = String::from("hello l;ylfu");
         f.typed(&screen);
-        let s = f.suggestion(&d).unwrap();
+        let s = f.suggestion(&d, &[]).unwrap();
         apply(&mut screen, &f.accept(&s).unwrap());
         assert_eq!(screen, "hello สวัสดี");
 

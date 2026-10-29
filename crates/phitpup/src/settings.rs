@@ -76,6 +76,21 @@ pub fn changed_on_disk() -> Option<(Config, Vec<String>)> {
     Some(load())
 }
 
+/// Opens `target` (a web address or a file) with its default program.
+pub fn open(target: &str) {
+    // SAFETY: NUL-terminated strings.
+    unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            wide("open").as_ptr(),
+            wide(target).as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+}
+
 /// Opens the settings file in Notepad, creating it first if needed.
 pub fn open_file() {
     load();
