@@ -4,7 +4,7 @@ members = ["crates/phitpup-core", "crates/phitpup", "crates/phitpup-web", "xtask
 default-members = ["crates/phitpup-core", "crates/phitpup"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 license = "MIT"
 
