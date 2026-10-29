@@ -19,6 +19,7 @@ use phitpup_core::config::{self, Config, Mode};
 use phitpup_core::hotkey::{self, Hotkey, VK_ESCAPE};
 use phitpup_core::icon::{self, Tone};
 use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+use windows_sys::Win32::Globalization::{SCRIPT_ITEM, SCRIPT_LOGATTR, ScriptBreak, ScriptItemize};
 use windows_sys::Win32::Graphics::Dwm::{
     DWMWA_CAPTION_COLOR, DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute,
 };
@@ -57,6 +58,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     WS_CAPTION, WS_EX_TOOLWINDOW, WS_MINIMIZEBOX, WS_OVERLAPPED, WS_SYSMENU,
 };
 
+use crate::i18n::{t, thai};
 use crate::{APP, bubble, clipboard, context, fonts, settings, tray, update};
 
 // Layout at 96 DPI.
@@ -292,6 +294,12 @@ impl Fonts {
         // SAFETY: a memory DC only used to check which face GDI picked.
         let dc = unsafe { CreateCompatibleDC(std::ptr::null_mut()) };
         let fonts = Fonts(FONTS.map(|(px, weight, faces)| {
+            // Thai headings in a Thai serif; the Latin one has no Thai.
+            let faces = if faces == SERIF && thai() {
+                SERIF_THAI
+            } else {
+                faces
+            };
             let quality = if faces == ICONS {
                 ANTIALIASED_QUALITY // no colour fringes on thin icons
             } else {
@@ -318,6 +326,93 @@ impl Fonts {
     fn get(&self, f: F) -> HFONT {
         self.0[f as usize]
     }
+}
+
+/// `s` with line breaks where it must wrap to fit `width` pixels in the
+/// DC's font. DrawText only wraps at spaces, and Thai puts none between
+/// words, so the break points come from Windows' own word breaking
+/// (Uniscribe), which knows Thai.
+fn wrap(dc: HDC, s: &str, width: i32) -> Vec<u16> {
+    let text: Vec<u16> = s.encode_utf16().collect();
+    let n = text.len();
+    if n == 0 {
+        return text;
+    }
+    // Where a line may start: after a space or a newline, or before a
+    // soft break Uniscribe found.
+    let mut can_break = vec![false; n + 1];
+    // SAFETY: buffers sized for the text; each item is broken within its
+    // own range of `text` and `attrs`.
+    unsafe {
+        let mut items: Vec<SCRIPT_ITEM> = vec![std::mem::zeroed(); n + 1];
+        let mut count = 0;
+        if ScriptItemize(
+            text.as_ptr(),
+            n as i32,
+            items.len() as i32,
+            std::ptr::null(),
+            std::ptr::null(),
+            items.as_mut_ptr(),
+            &mut count,
+        ) >= 0
+        {
+            let mut attrs: Vec<SCRIPT_LOGATTR> = vec![std::mem::zeroed(); n];
+            for i in 0..count as usize {
+                let (start, end) = (items[i].iCharPos as usize, items[i + 1].iCharPos as usize);
+                ScriptBreak(
+                    text[start..].as_ptr(),
+                    (end - start) as i32,
+                    &items[i].a,
+                    attrs[start..].as_mut_ptr(),
+                );
+            }
+            for (i, a) in attrs.iter().enumerate() {
+                can_break[i] |= a._bitfield & 1 != 0; // fSoftBreak
+            }
+        }
+    }
+    for i in 0..n {
+        if text[i] == u16::from(b' ') || text[i] == u16::from(b'\n') {
+            can_break[i + 1] = true;
+        }
+    }
+    let width_of = |part: &[u16]| {
+        let mut size = windows_sys::Win32::Foundation::SIZE { cx: 0, cy: 0 };
+        // SAFETY: measuring with the caller's DC and font.
+        unsafe { GetTextExtentPoint32W(dc, part.as_ptr(), part.len() as i32, &mut size) };
+        size.cx
+    };
+    let mut out = Vec::with_capacity(n + 8);
+    let mut line = 0;
+    let mut last_break = None;
+    for i in 1..=n {
+        if text[i - 1] == u16::from(b'\n') {
+            out.extend_from_slice(&text[line..i]);
+            line = i;
+            last_break = None;
+            continue;
+        }
+        let end = text[line..i]
+            .iter()
+            .rposition(|&c| c != u16::from(b' '))
+            .map_or(line, |p| line + p + 1);
+        if width_of(&text[line..end]) > width
+            && let Some(b) = last_break.filter(|&b| b > line)
+        {
+            out.extend_from_slice(&text[line..b]);
+            while out.last() == Some(&u16::from(b' ')) {
+                out.pop();
+            }
+            out.push(u16::from(b'\n'));
+            line = b;
+            last_break = None;
+        }
+        if can_break[i] {
+            last_break = Some(i);
+        }
+    }
+    out.extend_from_slice(&text[line..]);
+    out
 }
 
 fn create_font(height: i32, weight: u32, quality: u8, face: &str) -> HFONT {
@@ -497,7 +592,7 @@ pub fn open() {
         let x = work.left + ((work.right - work.left) - ww).max(0) / 2;
         let y = work.top + ((work.bottom - work.top) - wh).max(0) / 2;
 
-        let title = wide("PhitPup Settings");
+        let title = wide(t("PhitPup Settings"));
         let hwnd = CreateWindowExW(
             0,
             class.as_ptr(),
@@ -728,11 +823,12 @@ impl Builder<'_> {
 
     /// Word-wrapped text from (x, y), `w` wide; returns its height.
     fn para(&mut self, x: f32, y: f32, w: f32, s: &str, f: F, c: Rgb) -> f32 {
-        let text: Vec<u16> = s.encode_utf16().collect();
         let mut rc = R::new(x, y, w, 1000.0).scaled(self.scale);
         // SAFETY: measuring with our own DC and font.
+        unsafe { SelectObject(self.dc, self.fonts.get(f)) };
+        let text = wrap(self.dc, s, rc.right - rc.left);
+        // SAFETY: measuring with our own DC and font.
         unsafe {
-            SelectObject(self.dc, self.fonts.get(f));
             DrawTextW(
                 self.dc,
                 text.as_ptr(),
@@ -938,7 +1034,7 @@ fn sidebar(b: &mut Builder, page: Page) {
         LINE,
     );
     let name = if paused() {
-        "PhitPup · paused"
+        t("PhitPup · paused")
     } else {
         "PhitPup"
     };
@@ -958,6 +1054,7 @@ fn sidebar(b: &mut Builder, page: Page) {
         }
         let x = r.x + 16.0;
         let ink = if pg == page { p.accent } else { p.text };
+        let label = t(label);
         b.text(R::new(x, r.y, r.w - 16.0, r.h), label, F::Strong, ink, LINE);
         if pg == page {
             let tw = b.width(F::Strong, label);
@@ -972,7 +1069,7 @@ fn sidebar(b: &mut Builder, page: Page) {
         p.accent,
         LINE,
     );
-    let version = format!("Version {}", env!("CARGO_PKG_VERSION"));
+    let version = t("Version {v}").replace("{v}", env!("CARGO_PKG_VERSION"));
     b.text(
         R::new(28.0, H - 40.0, SIDEBAR - 40.0, 18.0),
         &version,
@@ -984,39 +1081,43 @@ fn sidebar(b: &mut Builder, page: Page) {
 
 fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
     let p = b.pal;
-    let mut y = b.title(y, "General");
+    let mut y = b.title(y, t("General"));
 
     let on = !paused();
     let caption = if on {
-        "Watching for text typed in the wrong layout."
+        t("Watching for text typed in the wrong layout.")
     } else {
-        "Paused. Every key passes through untouched."
+        t("Paused. Every key passes through untouched.")
     };
-    let (cy, hovered) = b.row(y, 68.0, 68.0, None, "PhitPup is on", caption, Some(Hit::On));
+    let (cy, hovered) = b.row(
+        y,
+        68.0,
+        68.0,
+        None,
+        t("PhitPup is on"),
+        caption,
+        Some(Hit::On),
+    );
     b.toggle(cy, on, hovered);
     y += 72.0;
 
     let options = [
         (
             Mode::Suggest,
-            "Suggest while typing".to_string(),
-            format!(
-                "A bubble shows the fix. {} accepts it, Esc hides it.",
-                c.accept_key.label()
-            ),
+            t("Suggest while typing").to_string(),
+            t("A bubble shows the fix. {key} accepts it, Esc hides it.")
+                .replace("{key}", &c.accept_key.label()),
         ),
         (
             Mode::Auto,
-            "Fix automatically when I press Space".to_string(),
-            format!(
-                "Only words it is very sure about. {} right after undoes it.",
-                c.hotkey.label()
-            ),
+            t("Fix automatically when I press Space").to_string(),
+            t("Only words it is very sure about. {key} right after undoes it.")
+                .replace("{key}", &c.hotkey.label()),
         ),
         (
             Mode::Manual,
-            format!("Only when I press {}", c.hotkey.label()),
-            "Fixes the last word; press again to reach further back.".to_string(),
+            t("Only when I press {key}").replace("{key}", &c.hotkey.label()),
+            t("Fixes the last word; press again to reach further back.").to_string(),
         ),
     ];
     let h = 68.0 + 56.0 * options.len() as f32 + 6.0;
@@ -1025,8 +1126,8 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
         h,
         68.0,
         Some(G_BULB),
-        "When to offer a fix",
-        "The hotkey always works.",
+        t("When to offer a fix"),
+        t("The hotkey always works."),
         None,
     );
     for (i, (mode, title, caption)) in options.iter().enumerate() {
@@ -1061,8 +1162,8 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
         68.0,
         68.0,
         Some(G_UNDERLINE),
-        "Underline the word instead of a bubble",
-        "Apps that cannot show it get the bubble.",
+        t("Underline the word instead of a bubble"),
+        t("Apps that cannot show it get the bubble."),
         Some(Hit::Underline),
     );
     b.toggle(cy, c.underline, hovered);
@@ -1073,8 +1174,8 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
         68.0,
         68.0,
         Some(G_FONT),
-        "Fix Thai typed in the wrong order",
-        "Such as เเม่ → แม่, ทํา → ทำ, ก่ี → กี่. Tab accepts.",
+        t("Fix Thai typed in the wrong order"),
+        t("Such as เเม่ → แม่, ทํา → ทำ, ก่ี → กี่. Tab accepts."),
         Some(Hit::Spelling),
     );
     b.toggle(cy, c.spelling, hovered);
@@ -1086,8 +1187,8 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
         68.0,
         68.0,
         Some(G_POWER),
-        "Start with Windows",
-        "Run PhitPup when you sign in.",
+        t("Start with Windows"),
+        t("Run PhitPup when you sign in."),
         Some(Hit::Startup),
     );
     b.toggle(cy, startup, hovered);
@@ -1098,18 +1199,18 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
         68.0,
         68.0,
         Some(G_FULLSCREEN),
-        "Turn off in full-screen windows",
-        "Games, videos and presentations.",
+        t("Turn off in full-screen windows"),
+        t("Games, videos and presentations."),
         Some(Hit::Fullscreen),
     );
     b.toggle(cy, c.off_in_fullscreen, hovered);
     y += 72.0;
 
     let path = r"%APPDATA%\PhitPup\config.toml";
-    let (cy, _) = b.row(y, 68.0, 68.0, Some(G_FILE), "Settings file", path, None);
+    let (cy, _) = b.row(y, 68.0, 68.0, Some(G_FILE), t("Settings file"), path, None);
     b.button(
         R::new(RIGHT - 20.0 - 96.0, cy - 16.0, 96.0, 32.0),
-        "Open",
+        t("Open"),
         None,
         false,
         Hit::OpenFile,
@@ -1119,26 +1220,26 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
 
 fn programs_page(b: &mut Builder, c: &Config, y: f32) -> f32 {
     let p = b.pal;
-    let mut y = b.title(y, "Programs");
+    let mut y = b.title(y, t("Programs"));
     y += b.para(
         LEFT,
         y,
         WIDTH,
-        "Choose programs where PhitPup stays out of the way.",
+        t("Choose programs where PhitPup stays out of the way."),
         F::Body,
         p.sub,
     );
     y += 16.0;
     b.text(
         R::new(LEFT, y, 300.0, 32.0),
-        "Your programs",
+        t("Your programs"),
         F::Strong,
         p.text,
         LINE,
     );
     b.button(
         R::new(RIGHT - 160.0, y, 160.0, 32.0),
-        "Add a program",
+        t("Add a program"),
         Some(G_ADD),
         true,
         Hit::AddProgram,
@@ -1150,7 +1251,7 @@ fn programs_page(b: &mut Builder, c: &Config, y: f32) -> f32 {
         b.card(R::new(LEFT, y, WIDTH, 68.0), false);
         b.text(
             R::new(LEFT + 20.0, y, WIDTH - 40.0, 68.0),
-            "Nothing added yet. Add a game or an app where PhitPup should do nothing.",
+            t("Nothing added yet. Add a game or an app where PhitPup should do nothing."),
             F::Body,
             p.sub,
             LINE | DT_CENTER,
@@ -1160,9 +1261,9 @@ fn programs_page(b: &mut Builder, c: &Config, y: f32) -> f32 {
     let hotkey = c.hotkey.label();
     for (i, (name, off)) in list.iter().enumerate() {
         let caption = if *off {
-            "Off: PhitPup does nothing here.".to_string()
+            t("Off: PhitPup does nothing here.").to_string()
         } else {
-            format!("No bubble: only {hotkey} works here.")
+            t("No bubble: only {key} works here.").replace("{key}", &hotkey)
         };
         let glyph = if *off { G_BLOCK } else { G_HIDE };
         let (cy, _) = b.row(y, 64.0, 64.0, Some(glyph), name, &caption, None);
@@ -1174,7 +1275,7 @@ fn programs_page(b: &mut Builder, c: &Config, y: f32) -> f32 {
         b.glyph(x, G_CLOSE, F::SmallGlyph, p.sub);
 
         let seg = R::new(x.x - 16.0 - 200.0, cy - 16.0, 200.0, 32.0);
-        for (j, (label, kind)) in [("Off", true), ("No bubble", false)]
+        for (j, (label, kind)) in [(t("Off"), true), (t("No bubble"), false)]
             .into_iter()
             .enumerate()
         {
@@ -1195,13 +1296,12 @@ fn programs_page(b: &mut Builder, c: &Config, y: f32) -> f32 {
     }
 
     y += 20.0;
-    y = b.section(y, "Built in");
+    y = b.section(y, t("Built in"));
     y += b.para(
         LEFT,
         y,
         WIDTH,
-        "Always off: password fields, password managers (KeePass, 1Password, Bitwarden and \
-         others), Windows sign-in prompts, remote desktop and virtual machines.",
+        t("Always off: password fields, password managers (KeePass, 1Password, Bitwarden and others), Windows sign-in prompts, remote desktop and virtual machines."),
         F::Caption,
         p.sub,
     );
@@ -1210,8 +1310,7 @@ fn programs_page(b: &mut Builder, c: &Config, y: f32) -> f32 {
         LEFT,
         y,
         WIDTH,
-        "No bubble: terminals and code editors (Windows Terminal, PowerShell, VS Code, Cursor, \
-         Visual Studio, JetBrains IDEs and others).",
+        t("No bubble: terminals and code editors (Windows Terminal, PowerShell, VS Code, Cursor, Visual Studio, JetBrains IDEs and others)."),
         F::Caption,
         p.sub,
     );
@@ -1220,13 +1319,12 @@ fn programs_page(b: &mut Builder, c: &Config, y: f32) -> f32 {
 
 fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
     let p = b.pal;
-    let mut y = b.title(y, "Words");
+    let mut y = b.title(y, t("Words"));
     y += b.para(
         LEFT,
         y,
         WIDTH,
-        "Words PhitPup should leave alone, and words it should always fix. Add them as you \
-         type them.",
+        t("Words PhitPup should leave alone, and words it should always fix. Add them as you type them."),
         F::Body,
         p.sub,
     );
@@ -1238,8 +1336,8 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
         68.0,
         68.0,
         Some(G_BULB),
-        "Learn from my corrections",
-        "Remembers the fixes you undo or keep.",
+        t("Learn from my corrections"),
+        t("Remembers the fixes you undo or keep."),
         Some(Hit::Learn),
     );
     b.toggle(cy, c.learn, hovered);
@@ -1268,7 +1366,7 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
     }
     let tx = field.x + 12.0;
     if win.draft.is_empty() {
-        let hint = "A word to leave alone, e.g. gdp";
+        let hint = t("A word to leave alone, e.g. gdp");
         b.text(
             R::new(tx, field.y, field.w - 24.0, field.h),
             hint,
@@ -1292,7 +1390,7 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
     }
     b.button(
         R::new(RIGHT - 96.0, y + 2.0, 96.0, 32.0),
-        "Add",
+        t("Add"),
         Some(G_ADD),
         true,
         Hit::AddWord,
@@ -1311,13 +1409,13 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
     y += 12.0;
 
     let n = c.ignore_words.len();
-    y = b.section(y, &format!("Leave alone ({n})"));
+    y = b.section(y, &t("Leave alone ({n})").replace("{n}", &n.to_string()));
     y = if n == 0 {
         b.para(
             LEFT,
             y,
             WIDTH,
-            "Press Shift+Esc while the bubble shows a word, or type it above.",
+            t("Press Shift+Esc while the bubble shows a word, or type it above."),
             F::Caption,
             p.faint,
         ) + y
@@ -1327,10 +1425,10 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
     y += 20.0;
 
     let n = c.learned_words.len();
-    y = b.section(y, &format!("Always fix ({n})"));
+    y = b.section(y, &t("Always fix ({n})").replace("{n}", &n.to_string()));
     y = if n == 0 {
-        let hint =
-            format!("Words you convert with {hotkey} and then keep typing after show up here.");
+        let hint = t("Words you convert with {key} and then keep typing after show up here.")
+            .replace("{key}", &hotkey);
         b.para(LEFT, y, WIDTH, &hint, F::Caption, p.faint) + y
     } else {
         chips(b, y + 22.0, &c.learned_words, Hit::RemoveLearned, true)
@@ -1339,7 +1437,7 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
         y += 8.0;
         b.text(
             R::new(LEFT, y, WIDTH, 18.0),
-            "Click a word to remove it.",
+            t("Click a word to remove it."),
             F::Caption,
             p.faint,
             LINE,
@@ -1440,7 +1538,7 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
         LEFT,
         y,
         WIDTH,
-        "Fixes text typed in the wrong keyboard layout, Thai and English.",
+        t("Fixes text typed in the wrong keyboard layout, Thai and English."),
         F::Body,
         p.text,
     );
@@ -1448,10 +1546,10 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
 
     let version = env!("CARGO_PKG_VERSION");
     let rows = [
-        (G_PERSON, "Made by", AUTHOR),
-        (G_PEOPLE, "Team", TEAM),
-        (G_INFO, "Version", version),
-        (G_DOC, "License", "Free, not for sale"),
+        (G_PERSON, t("Made by"), AUTHOR),
+        (G_PEOPLE, t("Team"), TEAM),
+        (G_INFO, t("Version"), version),
+        (G_DOC, t("License"), t("Free, not for sale")),
     ];
     for (glyph, title, value) in rows {
         let (cy, _) = b.row(y, 52.0, 52.0, Some(glyph), title, "", None);
@@ -1460,7 +1558,7 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
         y += 56.0;
     }
     let (caption, label, accent) = updates(update::state());
-    let (cy, _) = b.row(y, 68.0, 68.0, Some(G_UPDATE), "Updates", &caption, None);
+    let (cy, _) = b.row(y, 68.0, 68.0, Some(G_UPDATE), t("Updates"), &caption, None);
     let r = R::new(RIGHT - 20.0 - 170.0, cy - 16.0, 170.0, 32.0);
     b.button(r, &label, None, accent, Hit::Updates);
     y += 72.0;
@@ -1469,8 +1567,8 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
         68.0,
         68.0,
         Some(G_BELL),
-        "Remind me to check",
-        "Once this version is two months old.",
+        t("Remind me to check"),
+        t("Once this version is two months old."),
         Some(Hit::Remind),
     );
     b.toggle(cy, c.remind_updates, hovered);
@@ -1482,7 +1580,7 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
         LEFT + 24.0,
         y,
         WIDTH - 24.0,
-        "PhitPup works offline: the part that sees your keys has no networking code. Only when you click Check for updates does the separate phitpup-update.exe ask the website for the newest version number and, if you agree, download the installer. What you type is kept in memory only until you click or switch windows, and is never sent anywhere. The only things saved are your settings file, including the words you add, and the date of the last update reminder.",
+        t("PhitPup works offline: the part that sees your keys has no networking code. Only when you click Check for updates does the separate phitpup-update.exe ask the website for the newest version number and, if you agree, download the installer. What you type is kept in memory only until you click or switch windows, and is never sent anywhere. The only things saved are your settings file, including the words you add, and the date of the last update reminder."),
         F::Caption,
         p.sub,
     );
@@ -1496,65 +1594,71 @@ fn updates(state: update::State) -> (String, String, bool) {
     let mb = |bytes: u64| format!("{:.1} MB", bytes as f64 / 1_048_576.0);
     match state {
         State::Idle if update::helper().is_none() => (
-            "Opens the download page in your browser.".into(),
-            "Check for updates".into(),
+            t("Opens the download page in your browser.").into(),
+            t("Check for updates").into(),
             false,
         ),
         State::Idle => (
-            "Checks for a new version and installs it for you.".into(),
-            "Check for updates".into(),
+            t("Checks for a new version and installs it for you.").into(),
+            t("Check for updates").into(),
             false,
         ),
-        State::Checking => ("Checking\u{2026}".into(), "Checking\u{2026}".into(), false),
+        State::Checking => (
+            t("Checking\u{2026}").into(),
+            t("Checking\u{2026}").into(),
+            false,
+        ),
         State::Current => (
-            "You have the newest version.".into(),
-            "Check again".into(),
+            t("You have the newest version.").into(),
+            t("Check again").into(),
             false,
         ),
         State::Available(v, size) => (
-            format!("Version {v} is out ({}).", mb(size)),
-            format!("Install {v}"),
+            t("Version {v} is out ({size}).")
+                .replace("{v}", &v)
+                .replace("{size}", &mb(size)),
+            t("Install {v}").replace("{v}", &v),
             true,
         ),
         State::Downloading(done, total) => {
             let pct = (done * 100).checked_div(total).unwrap_or(0);
             (
-                format!("Downloading\u{2026} {pct}%"),
-                "Downloading\u{2026}".into(),
+                t("Downloading\u{2026} {pct}%").replace("{pct}", &pct.to_string()),
+                t("Downloading\u{2026}").into(),
                 false,
             )
         }
         State::Installing => (
-            "Installing. PhitPup will start again by itself.".into(),
-            "Installing\u{2026}".into(),
+            t("Installing. PhitPup will start again by itself.").into(),
+            t("Installing\u{2026}").into(),
             false,
         ),
-        State::Failed(why) => (why, "Try again".into(), false),
+        State::Failed(why) => (crate::i18n::t_dyn(&why), t("Try again").into(), false),
     }
 }
 
 fn shortcuts(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
     let p = b.pal;
-    let mut y = b.title(y, "Shortcuts");
+    let mut y = b.title(y, t("Shortcuts"));
 
     let changeable = [
         (
             Which::Fix,
-            "Fix the last word",
-            "Press again to go one more word back.",
+            t("Fix the last word"),
+            t("Press again to go one more word back."),
             c.hotkey,
         ),
         (
             Which::Accept,
-            "Accept the suggestion",
-            "While the bubble is showing.",
+            t("Accept the suggestion"),
+            t("While the bubble is showing."),
             c.accept_key,
         ),
     ];
     for (which, title, caption, key) in changeable {
         let listening = win.capture == Some(which);
         let caption = if listening {
-            "Press the new shortcut, or Esc to cancel."
+            t("Press the new shortcut, or Esc to cancel.")
         } else {
             caption
         };
@@ -1574,7 +1678,7 @@ fn shortcuts(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
             b.stroke(r.inset(1.0), 3.0, p.accent);
             b.text(
                 r,
-                "Press a shortcut…",
+                t("Press a shortcut\u{2026}"),
                 F::Strong,
                 p.accent,
                 LINE | DT_CENTER,
@@ -1590,8 +1694,8 @@ fn shortcuts(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
         68.0,
         68.0,
         Some(G_KEYBOARD),
-        "Also fix when I tap Shift twice",
-        "Two quick taps, nothing in between.",
+        t("Also fix when I tap Shift twice"),
+        t("Two quick taps, nothing in between."),
         Some(Hit::DoubleShift),
     );
     b.toggle(cy, c.double_shift, hovered);
@@ -1599,13 +1703,13 @@ fn shortcuts(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
 
     let fixed = [
         (
-            "Hide the suggestion",
-            "Until you start the next word.",
+            t("Hide the suggestion"),
+            t("Until you start the next word."),
             vec!["Esc"],
         ),
         (
-            "Never suggest this word",
-            "Adds it to Words.",
+            t("Never suggest this word"),
+            t("Adds it to Words."),
             vec!["Shift", "Esc"],
         ),
     ];
@@ -1630,7 +1734,7 @@ fn shortcuts(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
     if (c.hotkey, c.accept_key) != (Hotkey::FIX, Hotkey::ACCEPT) {
         y += 12.0;
         let r = R::new(LEFT, y, 160.0, 32.0);
-        b.button(r, "Reset to defaults", None, false, Hit::ResetKeys);
+        b.button(r, t("Reset to defaults"), None, false, Hit::ResetKeys);
         y += 32.0;
     }
     y
@@ -1948,13 +2052,13 @@ fn add_word() {
     let word = draft.trim().to_lowercase();
     let c = config();
     let note = if word.is_empty() {
-        Some("Type a word first.".to_string())
+        Some(t("Type a word first.").to_string())
     } else if word.contains(char::is_whitespace) {
-        Some("One word at a time, without spaces.".to_string())
+        Some(t("One word at a time, without spaces.").to_string())
     } else if !config::storable(&word) {
-        Some("Quotes and backslashes can't be saved.".to_string())
+        Some(t("Quotes and backslashes can't be saved.").to_string())
     } else if c.ignore_words.contains(&word) {
-        Some(format!("“{word}” is already in the list."))
+        Some(t("\u{201C}{word}\u{201D} is already in the list.").replace("{word}", &word))
     } else {
         None
     };
@@ -1997,7 +2101,7 @@ fn add_program(hwnd: HWND) {
                 menu,
                 MF_STRING | MF_GRAYED,
                 0,
-                wide("No other programs are open").as_ptr(),
+                wide(t("No other programs are open")).as_ptr(),
             );
         }
         for (i, n) in names.iter().enumerate() {
@@ -2108,16 +2212,13 @@ fn key_down(hwnd: HWND, vk: u16) -> bool {
         with(|w| w.capture = None);
         None
     } else if held(VK_LWIN) || held(VK_RWIN) {
-        Some("Shortcuts with the Windows key belong to Windows.".to_string())
+        Some(t("Shortcuts with the Windows key belong to Windows.").to_string())
     } else if !hotkey::is_main_key(vk) {
-        Some("That key can't be used. Try a letter, F-key, Space, Tab or Backspace.".to_string())
+        Some(t("That key can't be used. Try a letter, F-key, Space, Tab or Backspace.").to_string())
     } else if let Some(problem) = key.problem() {
-        Some(problem.to_string())
+        Some(t(problem).to_string())
     } else if key == other {
-        Some(format!(
-            "{} is already used for the other shortcut.",
-            key.label()
-        ))
+        Some(t("{key} is already used for the other shortcut.").replace("{key}", &key.label()))
     } else {
         edit(|c| match which {
             Which::Fix => c.hotkey = key,

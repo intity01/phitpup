@@ -47,6 +47,8 @@ mod fonts;
 #[cfg(windows)]
 mod hook;
 #[cfg(windows)]
+mod i18n;
+#[cfg(windows)]
 mod inject;
 #[cfg(windows)]
 mod layout;
@@ -179,7 +181,9 @@ mod app {
                 // Started again: show the running copy's settings window.
                 if !tray::open_settings_of_running_copy() {
                     message(
-                        "PhitPup is already running. Look for its icon in the notification area (bottom right).",
+                        crate::i18n::t(
+                            "PhitPup is already running. Look for its icon in the notification area (bottom right).",
+                        ),
                         MB_ICONINFORMATION,
                     );
                 }

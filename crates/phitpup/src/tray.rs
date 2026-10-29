@@ -34,6 +34,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     ASFW_ANY, AllowSetForegroundWindow, FindWindowW,
 };
 
+use crate::i18n::t;
 use crate::{APP, hook, settings, window};
 
 const WM_TRAY: u32 = WM_APP + 10;
@@ -128,10 +129,10 @@ pub fn start(main_thread: u32, welcome: bool, problems: Vec<String>) {
                 (c.accept_key.label(), c.hotkey.label())
             });
             balloon(
-                "PhitPup is running",
-                &format!(
-                    "Typed in the wrong layout? Press {accept} on the suggestion, or {hotkey}.\nClick this icon for settings."
-                ),
+                t("PhitPup is running"),
+                &t("Typed in the wrong layout? Press {accept} on the suggestion, or {hotkey}.\nClick this icon for settings.")
+                    .replace("{accept}", &accept)
+                    .replace("{hotkey}", &hotkey),
             );
         }
         if !problems.is_empty() {
@@ -212,9 +213,9 @@ fn update_icon(action: u32) {
     copy(
         &mut nid.szTip,
         if paused {
-            "PhitPup: paused"
+            t("PhitPup: paused")
         } else {
-            "PhitPup: fixes text typed in the wrong layout"
+            t("PhitPup: fixes text typed in the wrong layout")
         },
     );
     // SAFETY: nid is fully initialised; the shell copies the icon.
@@ -255,11 +256,10 @@ fn remind_if_due() {
     settings::set_last_reminder(now);
     let months = now.saturating_sub(built) / (30 * DAY);
     balloon(
-        "A newer PhitPup may be out",
-        &format!(
-            "You have version {}, from about {months} months ago. Click here to open the download page.",
-            env!("CARGO_PKG_VERSION")
-        ),
+        t("A newer PhitPup may be out"),
+        &t("You have version {v}, from about {months} months ago. Click here to open the download page.")
+            .replace("{v}", env!("CARGO_PKG_VERSION"))
+            .replace("{months}", &months.to_string()),
     );
     UPDATE_BALLOON.set(true);
 }
@@ -276,11 +276,9 @@ fn balloon(title: &str, text: &str) {
 }
 
 fn warn_settings(problems: &[String]) {
-    let text = format!(
-        "Some lines in the settings file could not be read, so their defaults are used:\n{}\n\n{}",
-        settings::path().display(),
-        problems.join("\n")
-    );
+    let text = t("Some lines in the settings file could not be read, so their defaults are used:\n{problems}\n\n{file}")
+        .replace("{problems}", &problems.join("\n"))
+        .replace("{file}", &settings::path().display().to_string());
     // SAFETY: NUL-terminated strings; blocks only this thread.
     unsafe {
         MessageBoxW(
@@ -352,21 +350,21 @@ fn show_menu(hwnd: HWND) {
         let add = |flags: u32, id: usize, text: &str| {
             AppendMenuW(menu, flags, id, wide(text).as_ptr());
         };
-        add(MF_STRING, CMD_SETTINGS, "Settings…");
+        add(MF_STRING, CMD_SETTINGS, t("Settings\u{2026}"));
         SetMenuDefaultItem(menu, CMD_SETTINGS as u32, 0);
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
-        add(MF_STRING | checked(paused()), CMD_PAUSE, "Pause");
+        add(MF_STRING | checked(paused()), CMD_PAUSE, t("Pause"));
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
         add(
             MF_STRING,
             CMD_SUGGEST,
-            &format!("Suggest while typing\t{accept}"),
+            &t("Suggest while typing\t{accept}").replace("{accept}", &accept),
         );
-        add(MF_STRING, CMD_AUTO, "Fix automatically\tSpace");
+        add(MF_STRING, CMD_AUTO, t("Fix automatically\tSpace"));
         add(
             MF_STRING,
             CMD_MANUAL,
-            &format!("Fix on hotkey only\t{hotkey}"),
+            &t("Fix on hotkey only\t{hotkey}").replace("{hotkey}", &hotkey),
         );
         let current = match mode {
             Mode::Manual => CMD_MANUAL,
@@ -384,10 +382,10 @@ fn show_menu(hwnd: HWND) {
         add(
             MF_STRING | checked(startup),
             CMD_STARTUP,
-            "Start with Windows",
+            t("Start with Windows"),
         );
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
-        add(MF_STRING, CMD_QUIT, "Quit PhitPup");
+        add(MF_STRING, CMD_QUIT, t("Quit PhitPup"));
 
         // The menu only closes on an outside click if our window is in front.
         let mut pt = std::mem::zeroed();
