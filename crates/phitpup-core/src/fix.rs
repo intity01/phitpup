@@ -204,7 +204,7 @@ impl Fixer {
         } else {
             Lang::English
         };
-        if let Some((n, insert)) = detector.near(lang).fix(&word).filter(|_| self.slips) {
+        if let Some((n, insert)) = self.slip(detector, lang, &word, start) {
             return Some(Suggestion {
                 word: self.buf[self.buf.len() - n..].iter().collect(),
                 edit: Edit {
@@ -225,6 +225,39 @@ impl Fixer {
             },
             kind: Kind::Doubled,
         })
+    }
+
+    /// A slip-of-the-finger fix for the end of `word`, which starts at
+    /// `start` in the buffer: how many characters to replace, and with what.
+    /// A capitalised English word is only looked at where a sentence starts
+    /// (elsewhere it is likely a name), and the fix keeps the capital.
+    fn slip(
+        &self,
+        detector: &Detector,
+        lang: Lang,
+        word: &str,
+        start: usize,
+    ) -> Option<(usize, String)> {
+        if !self.slips {
+            return None;
+        }
+        let near = detector.near(lang);
+        let mut chars = word.chars();
+        let first = chars.next()?;
+        if lang == Lang::English && first.is_ascii_uppercase() {
+            let before = self.buf[..start].iter().rev().find(|c| !c.is_whitespace());
+            let sentence_start = before.is_none_or(|c| matches!(c, '.' | '!' | '?'))
+                || self.buf[..start].ends_with(&['\n']);
+            if !sentence_start || !chars.as_str().chars().all(|c| c.is_ascii_lowercase()) {
+                return None;
+            }
+            let lower = word.to_ascii_lowercase();
+            let (n, fixed) = near.fix(&lower)?;
+            let mut fixed = fixed.chars();
+            let capital = fixed.next()?.to_ascii_uppercase();
+            return Some((n, std::iter::once(capital).chain(fixed).collect()));
+        }
+        near.fix(word)
     }
 
     /// A Thai spelling or Caps Lock fix for `word`, if those are on.
@@ -811,6 +844,22 @@ mod tests {
         assert_eq!(f.auto(&d, " ", |_| false, &[]), None);
         f.slips = false;
         assert_eq!(f.suggestion(&d, &[]), None);
+    }
+
+    #[test]
+    fn capitalised_slip_only_at_a_sentence_start() {
+        let d = det();
+        let offered = |text: &str| {
+            let mut f = Fixer::new();
+            f.slips = true;
+            f.typed(text);
+            f.suggestion(&d, &[]).map(|s| s.edit.insert)
+        };
+        assert_eq!(offered("Teh").as_deref(), Some("The"));
+        assert_eq!(offered("Done. Teh").as_deref(), Some("The"));
+        assert_eq!(offered("ok?  Becuase").as_deref(), Some("Because"));
+        assert_eq!(offered("I met Teh"), None, "a name, maybe");
+        assert_eq!(offered("Done. TEh"), None);
     }
 
     #[test]
