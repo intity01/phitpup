@@ -54,8 +54,9 @@ pub struct Config {
     /// Also offer to fix a word typed with Caps Lock left on (hELLO) and
     /// the same word typed twice (the the).
     pub typos: bool,
-    /// Also offer the common Thai word a slip of the finger turned into
-    /// something else (ส้วสดี for สวัสดี). Suggested only, never automatic.
+    /// Also offer the common word a slip of the finger turned into
+    /// something else (ส้วสดี for สวัสดี, teh for the). Suggested only,
+    /// never automatic.
     pub slips: bool,
     /// Show the bubble above the line instead of under the caret.
     pub bubble_above: bool,
@@ -115,9 +116,9 @@ spelling = true
 # and the same word typed twice (the the -> the).
 typos = true
 
-# Also offer the common Thai word that a slip of the finger turned into
-# something else (a key next to the right one, two keys swapped, one too many
-# or one missing: ส้วสดี -> สวัสดี). Suggested only, never fixed by itself.
+# Also offer the common word that a slip of the finger turned into something
+# else (a key next to the right one, two keys swapped, one too many or one
+# missing: ส้วสดี -> สวัสดี, teh -> the). Suggested only, never fixed by itself.
 slips = true
 
 # Show the bubble above the line, so it does not cover lists that open under

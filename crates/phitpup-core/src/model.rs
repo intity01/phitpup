@@ -23,6 +23,9 @@ const BOUNDARY: usize = 0;
 const MAGIC: &[u8; 4] = b"PPM2";
 
 static EMBEDDED: &[u8] = include_bytes!("model.bin");
+/// Common English words for spotting slips ([`english_words`]).
+static EN_WORDS: &[u8] = include_bytes!("en-words.bin");
+const WORDS_MAGIC: &[u8; 4] = b"PPW2";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Lang {
@@ -200,6 +203,57 @@ impl LangModel {
             lexicon,
         })
     }
+}
+
+/// Common English words, each with −log2 of how common it is in 1/[`SCALE`]
+/// bit, built by `cargo xtask english-words`. They are for spotting slips of
+/// the finger ([`crate::near`]) only: the English model above has no lexicon,
+/// so telling Thai from English is not affected by them.
+///
+/// Read afresh on each call: [`crate::near::Near`] keeps its own compact copy.
+pub fn english_words() -> Vec<(String, u16)> {
+    words_from_bytes(EN_WORDS).unwrap_or_default()
+}
+
+/// `words`, sorted, as stored in `en-words.bin`: each word as how many
+/// bytes it shares with the one before, then the rest.
+pub fn words_to_bytes(words: &[(String, u16)]) -> Vec<u8> {
+    let mut out = WORDS_MAGIC.to_vec();
+    out.extend_from_slice(&(words.len() as u32).to_le_bytes());
+    let mut prev: &[u8] = &[];
+    for (w, cost) in words {
+        let w = w.as_bytes();
+        let shared = prev
+            .iter()
+            .zip(w)
+            .take_while(|(a, b)| a == b)
+            .count()
+            .min(255);
+        out.push(shared as u8);
+        out.push((w.len() - shared) as u8);
+        out.extend_from_slice(&w[shared..]);
+        out.extend_from_slice(&cost.to_le_bytes());
+        prev = w;
+    }
+    out
+}
+
+fn words_from_bytes(mut bytes: &[u8]) -> Option<Vec<(String, u16)>> {
+    if take(&mut bytes, 4)? != WORDS_MAGIC {
+        return None;
+    }
+    let n = u32::from_le_bytes(take(&mut bytes, 4)?.try_into().ok()?) as usize;
+    let mut words = Vec::with_capacity(n);
+    let mut word: Vec<u8> = Vec::new();
+    for _ in 0..n {
+        let shared = take(&mut bytes, 1)?[0] as usize;
+        let rest = take(&mut bytes, 1)?[0] as usize;
+        word.truncate(shared);
+        word.extend_from_slice(take(&mut bytes, rest)?);
+        let cost = u16::from_le_bytes(take(&mut bytes, 2)?.try_into().ok()?);
+        words.push((std::str::from_utf8(&word).ok()?.to_owned(), cost));
+    }
+    Some(words)
 }
 
 fn take<'a>(bytes: &mut &'a [u8], n: usize) -> Option<&'a [u8]> {

@@ -7,28 +7,32 @@
 //! the start of a word, and Thai runs several words together, so only the
 //! part after the last place the run splits into known words is looked at.
 
-use std::collections::HashMap;
+use std::ops::Range;
 use std::sync::{Mutex, OnceLock};
 
 use crate::layouts::Layout;
-use crate::model::{Lang, Model};
+use crate::model::{Lang, Model, english_words};
 
 /// Edit costs, in tenths of an edit.
 const FULL: u32 = 10;
 const NEIGHBOUR: u32 = 6;
 const SAME_KEY: u32 = 4;
-const SWAP: u32 = 6;
+const SWAP: u32 = 4;
 /// A slip happening at all, and each tenth of an edit, in tenths of a bit.
 const SLIP: u32 = 40;
 const PER_TENTH: u32 = 8;
 /// How much likelier a fix must be than the text as typed, in tenths of a
 /// bit.
 const MARGIN: u32 = 20;
+/// How much likelier the best fix must be than the next one, in tenths of a
+/// bit.
+const CLOSE: u32 = 10;
 /// The longest word in the lexicon is shorter than this, in characters.
 const MAX_WORD: usize = 24;
 
 /// Letters as small numbers: Thai U+0E01..=U+0E4E as 0..78; English a-z as
-/// 0..26 and the apostrophe as 26.
+/// 0..26 and the apostrophe as 26. Words are compared, sorted and searched as
+/// these numbers.
 const LETTERS: usize = 78;
 
 fn index(lang: Lang, c: char) -> Option<u8> {
@@ -45,14 +49,23 @@ fn index(lang: Lang, c: char) -> Option<u8> {
     }
 }
 
-/// One known word, ready for a quick comparison.
+fn letter(lang: Lang, i: u8) -> char {
+    match (lang, i) {
+        (Lang::Thai, _) => char::from_u32(0x0E01 + u32::from(i)).unwrap_or('?'),
+        (Lang::English, 26) => '\'',
+        (Lang::English, _) => char::from(b'a' + i),
+    }
+}
+
+/// One known word: its letters are `Near::letters[start..start + len]`.
 struct Entry {
-    chars: Vec<u8>,
-    /// Which characters it uses: two words a slip or two apart differ in at
+    start: u32,
+    len: u8,
+    /// −log2 of how common it is, in 1/10 bit.
+    cost: u16,
+    /// Which letters it uses: two words a slip or two apart differ in at
     /// most four of these.
     mask: u128,
-    cost: u16,
-    word: String,
 }
 
 /// A [`Near`] made for a language and a layout (by name).
@@ -60,12 +73,13 @@ type Built = (Lang, String, &'static Near);
 
 pub struct Near {
     lang: Lang,
-    /// Word → cost (−log2 frequency, 1/10 bit).
-    words: HashMap<String, u16>,
+    /// Every word's letters, one after another.
+    letters: Vec<u8>,
+    /// The words, sorted by their letters.
     list: Vec<Entry>,
-    /// Sorted, to ask whether a word starts with what was typed.
-    sorted: Vec<String>,
-    /// Cost of typing the first character where the second was meant.
+    /// Where the words starting with each letter are in `list`.
+    first: Vec<Range<usize>>,
+    /// Cost of typing the first letter where the second was meant.
     sub: Vec<[u8; LETTERS]>,
 }
 
@@ -81,11 +95,14 @@ impl Near {
         {
             return near;
         }
-        let near: &'static Near = Box::leak(Box::new(Near::new(
-            lang,
-            Model::embedded().lang(lang).lexicon(),
-            layout,
-        )));
+        let near = match lang {
+            Lang::Thai => Near::new(lang, Model::embedded().lang(lang).lexicon(), layout),
+            Lang::English => {
+                let words = english_words();
+                Near::new(lang, words.iter().map(|(w, c)| (w.as_str(), *c)), layout)
+            }
+        };
+        let near: &'static Near = Box::leak(Box::new(near));
         built.push((lang, layout.name().to_owned(), near));
         near
     }
@@ -95,21 +112,36 @@ impl Near {
         words: impl Iterator<Item = (&'a str, u16)>,
         layout: &Layout,
     ) -> Self {
-        let words: HashMap<String, u16> = words.map(|(w, c)| (w.to_owned(), c)).collect();
-        let list = words
-            .iter()
-            .filter_map(|(w, &cost)| {
-                let chars: Vec<u8> = w.chars().map(|c| index(lang, c)).collect::<Option<_>>()?;
-                (chars.len() >= 3 && chars.len() <= MAX_WORD).then(|| Entry {
-                    mask: mask(&chars),
-                    chars,
-                    cost,
-                    word: w.clone(),
-                })
+        let mut words: Vec<(Vec<u8>, u16)> = words
+            .filter_map(|(w, cost)| {
+                let l: Vec<u8> = w.chars().map(|c| index(lang, c)).collect::<Option<_>>()?;
+                (!l.is_empty() && l.len() <= MAX_WORD).then_some((l, cost))
             })
             .collect();
-        let mut sorted: Vec<String> = words.keys().cloned().collect();
-        sorted.sort_unstable();
+        words.sort_unstable();
+        words.dedup_by(|a, b| a.0 == b.0);
+        let mut letters = Vec::new();
+        let list: Vec<Entry> = words
+            .iter()
+            .map(|(l, cost)| {
+                let start = letters.len() as u32;
+                letters.extend_from_slice(l);
+                Entry {
+                    start,
+                    len: l.len() as u8,
+                    cost: *cost,
+                    mask: mask(l),
+                }
+            })
+            .collect();
+        let first_of = |e: &Entry| letters[e.start as usize];
+        let first = (0..LETTERS as u8)
+            .map(|c| {
+                list.partition_point(|e| first_of(e) < c)
+                    ..list.partition_point(|e| first_of(e) <= c)
+            })
+            .collect();
+
         let mut keys = [None; LETTERS];
         for (sc, _, c) in layout.chars() {
             // English words are kept in lowercase; A sits where a does.
@@ -141,11 +173,27 @@ impl Near {
             .collect();
         Self {
             lang,
-            words,
+            letters,
             list,
-            sorted,
+            first,
             sub,
         }
+    }
+
+    fn word(&self, e: &Entry) -> &[u8] {
+        &self.letters[e.start as usize..e.start as usize + e.len as usize]
+    }
+
+    /// The cost of `w` if it is a known word.
+    fn cost(&self, w: &[u8]) -> Option<u16> {
+        self.list
+            .binary_search_by(|e| self.word(e).cmp(w))
+            .ok()
+            .map(|i| self.list[i].cost)
+    }
+
+    fn spell(&self, w: &[u8]) -> String {
+        w.iter().map(|&i| letter(self.lang, i)).collect()
     }
 
     /// What to replace the end of `run` with: how many characters from the
@@ -155,48 +203,54 @@ impl Near {
     /// Readings are compared by cost, in tenths of a bit: the words' costs
     /// (how rare they are) plus, for a fix, the cost of the slips.
     pub fn fix(&self, run: &str) -> Option<(usize, String)> {
-        let chars: Vec<char> = run.chars().collect();
         // Capitals are names, acronyms and the like, not slips; English is
         // compared in lowercase, so this also keeps the result's case.
-        if chars.len() < 3 || !chars.iter().all(|&c| index(self.lang, c).is_some()) {
-            return None;
-        }
+        let run: Vec<u8> = run
+            .chars()
+            .map(|c| index(self.lang, c))
+            .collect::<Option<_>>()?;
         // Chat elongation (ค่ะะ, sooo) is meant.
-        if chars[chars.len() - 1] == chars[chars.len() - 2] {
+        if run.len() < 3 || run[run.len() - 1] == run[run.len() - 2] {
             return None;
         }
-        let seg = self.segments(&chars);
+        // English puts spaces between words, so the run is one word.
+        let seg = match self.lang {
+            Lang::Thai => self.segments(&run),
+            Lang::English => {
+                let mut seg = vec![None; run.len() + 1];
+                seg[0] = Some(0);
+                seg
+            }
+        };
         // As typed: known words, then the start of one.
-        let as_typed = (0..=chars.len())
-            .filter_map(|i| Some(seg[i]? + self.cheapest_start(&chars[i..])?))
+        let as_typed = (0..=run.len())
+            .filter_map(|i| Some(seg[i]? + self.cheapest_start(&run[i..])?))
             .min();
         // Fixed: known words, then a near word in place of the rest.
-        let (cost, n, word) = (0..chars.len())
+        let (cost, n, word) = (0..run.len())
             .filter_map(|i| {
-                let tail = &chars[i..];
+                let tail = &run[i..];
                 let (cost, word) = self.closest(tail)?;
                 Some((seg[i]? + cost, tail.len(), word))
             })
             .min()?;
         as_typed
             .is_none_or(|t| cost + MARGIN < t)
-            .then_some((n, word))
+            .then(|| (n, self.spell(word)))
     }
 
-    /// `seg[i]`: the cheapest split of the first `i` characters into known
+    /// `seg[i]`: the cheapest split of the first `i` letters into known
     /// words.
-    fn segments(&self, chars: &[char]) -> Vec<Option<u32>> {
-        let mut seg = vec![None; chars.len() + 1];
+    fn segments(&self, run: &[u8]) -> Vec<Option<u32>> {
+        let mut seg = vec![None; run.len() + 1];
         seg[0] = Some(0);
-        for i in 0..chars.len() {
+        for i in 0..run.len() {
             let Some(base) = seg[i] else { continue };
-            let mut s = String::new();
-            for j in i..chars.len().min(i + MAX_WORD) {
-                s.push(chars[j]);
-                if let Some(&c) = self.words.get(&s) {
+            for j in i + 1..=run.len().min(i + MAX_WORD) {
+                if let Some(c) = self.cost(&run[i..j]) {
                     let total = base + u32::from(c);
-                    if seg[j + 1].is_none_or(|t| total < t) {
-                        seg[j + 1] = Some(total);
+                    if seg[j].is_none_or(|t| total < t) {
+                        seg[j] = Some(total);
                     }
                 }
             }
@@ -204,60 +258,68 @@ impl Near {
         seg
     }
 
-    /// The cost of the most common known word that starts with `chars`; 0
+    /// The cost of the most common known word that starts with `prefix`; 0
     /// for nothing.
-    fn cheapest_start(&self, chars: &[char]) -> Option<u32> {
-        if chars.is_empty() {
+    fn cheapest_start(&self, prefix: &[u8]) -> Option<u32> {
+        if prefix.is_empty() {
             return Some(0);
         }
-        let s: String = chars.iter().collect();
-        let i = self.sorted.partition_point(|w| w.as_str() < s.as_str());
-        self.sorted[i..]
+        let i = self.list.partition_point(|e| self.word(e) < prefix);
+        self.list[i..]
             .iter()
-            .take_while(|w| w.starts_with(&s))
-            .map(|w| u32::from(self.words[w]))
+            .take_while(|e| self.word(e).starts_with(prefix))
+            .map(|e| u32::from(e.cost))
             .min()
     }
 
     /// The known word that best explains `typed` as slips of the finger, and
     /// that reading's cost, if one stands out: one slip for words under
-    /// five characters, two from five on. Nothing for a known word.
-    fn closest(&self, typed: &[char]) -> Option<(u32, String)> {
-        if typed.len() < 3 || typed.len() > MAX_WORD + 2 {
+    /// five letters, two from five on. Nothing for a known word.
+    fn closest(&self, typed: &[u8]) -> Option<(u32, &[u8])> {
+        if typed.len() < 3 || typed.len() > MAX_WORD + 2 || self.cost(typed).is_some() {
             return None;
         }
-        let s: String = typed.iter().collect();
-        if self.words.contains_key(&s) {
-            return None;
-        }
-        let typed: Vec<u8> = typed
-            .iter()
-            .map(|&c| index(self.lang, c))
-            .collect::<Option<_>>()?;
-        let tmask = mask(&typed);
+        let tmask = mask(typed);
         let limit = if typed.len() >= 5 { 2 * FULL } else { FULL };
-        let mut found: Vec<(u32, &str)> = self
-            .list
-            .iter()
+        // English slips nearly always keep the first letter or swap it with
+        // the second, and English has many more words to look at.
+        let pool: Vec<&[Entry]> = match self.lang {
+            Lang::Thai => vec![&self.list],
+            Lang::English => {
+                let bucket = |c: u8| &self.list[self.first[c as usize].clone()];
+                let mut pool = vec![bucket(typed[0])];
+                if typed[1] != typed[0] {
+                    pool.push(bucket(typed[1]));
+                }
+                pool
+            }
+        };
+        let mut found: Vec<(u32, &[u8])> = pool
+            .into_iter()
+            .flatten()
             .filter(|e| {
-                e.chars.len().abs_diff(typed.len()) <= 2 && (e.mask ^ tmask).count_ones() <= 4
+                e.len >= 3
+                    && usize::from(e.len).abs_diff(typed.len()) <= 2
+                    && (e.mask ^ tmask).count_ones() <= 4
             })
-            .filter_map(|e| {
-                let d = self.distance(&typed, &e.chars, limit)?;
-                Some((u32::from(e.cost) + SLIP + d * PER_TENTH, e.word.as_str()))
+            .map(|e| (self.word(e), e.cost))
+            .filter(|(w, _)| self.lang == Lang::Thai || w[0] == typed[0] || w[1] == typed[0])
+            .filter_map(|(w, cost)| {
+                let d = self.distance(typed, w, limit)?;
+                Some((u32::from(cost) + SLIP + d * PER_TENTH, w))
             })
             .collect();
         found.sort_unstable();
         let &(cost, w) = found.first()?;
         // Another word about as likely: no way to tell which was meant.
-        if found.get(1).is_some_and(|&(c, _)| c < cost + MARGIN) {
+        if found.get(1).is_some_and(|&(c, _)| c < cost + CLOSE) {
             return None;
         }
-        Some((cost, w.to_owned()))
+        Some((cost, w))
     }
 
     /// Weighted edit distance (with swaps of neighbours), or `None` past
-    /// `limit`. Both words are at most `MAX_WORD + 2` characters.
+    /// `limit`. Both words are at most `MAX_WORD + 2` letters.
     fn distance(&self, a: &[u8], b: &[u8], limit: u32) -> Option<u32> {
         const W: usize = MAX_WORD + 3;
         let (n, m) = (a.len(), b.len());
@@ -298,8 +360,8 @@ impl Near {
     }
 }
 
-fn mask(chars: &[u8]) -> u128 {
-    chars.iter().fold(0, |m, &c| m | 1 << c)
+fn mask(letters: &[u8]) -> u128 {
+    letters.iter().fold(0, |m, &c| m | 1 << c)
 }
 
 /// Where a key sits: its row and how far along, in key widths, counting the
@@ -360,6 +422,32 @@ mod tests {
     }
 
     #[test]
+    fn english_slips() {
+        let english = Near::shared(Lang::English, &Layout::us_qwerty());
+        let fix = |w: &str| english.fix(w).map(|(_, w)| w);
+        assert_eq!(fix("teh").as_deref(), Some("the"));
+        assert_eq!(fix("recieve").as_deref(), Some("receive"));
+        assert_eq!(fix("becuase").as_deref(), Some("because"));
+        assert_eq!(fix("wrok").as_deref(), Some("work"));
+        for w in [
+            "the",
+            "receive",
+            "Teh",
+            "NASA",
+            "sooo",
+            "ok",
+            "สวัสดี",
+            "github",
+            "json",
+            "btw",
+            "wifi",
+            "youtube",
+        ] {
+            assert_eq!(fix(w), None, "{w}");
+        }
+    }
+
+    #[test]
     fn neighbours_follow_the_layout() {
         // ั and ้ are next to each other on Kedmanee but not on Pattachote,
         // so a Pattachote typist's ส้วสดี is a bigger slip.
@@ -372,24 +460,30 @@ mod tests {
 
 #[cfg(test)]
 mod quality {
+    use super::Near;
+    use crate::layouts::Layout;
+    use crate::model::Lang;
+
     /// How often fixes fire on real words and are right on slips:
     /// `cargo test -p phitpup-core --release quality -- --ignored --nocapture`
     #[test]
     #[ignore]
     fn quality() {
-        use crate::layouts::Layout;
-        use crate::model::Lang;
         for (lang, layout) in [
             (Lang::Thai, Layout::kedmanee()),
             (Lang::English, Layout::us_qwerty()),
         ] {
             println!("== {lang:?}");
-            run(super::Near::shared(lang, &layout));
+            run(Near::shared(lang, &layout));
         }
     }
 
-    fn run(n: &super::Near) {
-        let mut words: Vec<(&String, u16)> = n.words.iter().map(|(w, c)| (w, *c)).collect();
+    fn run(n: &Near) {
+        let mut words: Vec<(String, u16)> = n
+            .list
+            .iter()
+            .map(|e| (n.spell(n.word(e)), e.cost))
+            .collect();
         words.sort_by_key(|x| x.1);
         let t = std::time::Instant::now();
         let mut fired = 0;
@@ -403,22 +497,19 @@ mod quality {
         }
         println!("single: {fired}/{} in {:?}", words.len(), t.elapsed());
         let mut fired = 0;
-        let mut total = 0;
         let t = std::time::Instant::now();
         for i in 0..2000 {
-            let a = words[(i * 7) % 3000].0;
-            let b = words[(i * 13 + 5) % 6000].0;
-            let run = format!("{a}{b}");
-            total += 1;
-            if let Some(f) = n.fix(&run) {
+            let run = format!(
+                "{}{}",
+                words[(i * 7) % 3000].0,
+                words[(i * 13 + 5) % 6000].0
+            );
+            if n.fix(&run).is_some() {
                 fired += 1;
-                if fired < 25 {
-                    println!("{run} -> {f:?}");
-                }
             }
         }
-        println!("pairs: {fired}/{total} in {:?}", t.elapsed());
-        // One slip in each of the 3000 most common words of 4+ characters.
+        println!("pairs: {fired}/2000 in {:?}", t.elapsed());
+        // One slip in each of the 3000 most common words of 4+ letters.
         let (mut right, mut wrong, mut none) = (0, 0, 0);
         for (k, (w, _)) in words
             .iter()
@@ -440,7 +531,7 @@ mod quality {
             }
             let typo: String = c.iter().collect();
             match n.fix(&typo) {
-                Some((_, f)) if &f == *w => right += 1,
+                Some((_, f)) if &f == w => right += 1,
                 Some(_) => wrong += 1,
                 None => none += 1,
             }

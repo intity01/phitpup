@@ -89,6 +89,8 @@ Source: "{#SourceExe}"; DestDir: "{app}"; DestName: "phitpup.exe"; Flags: ignore
 ; The only part that connects to the internet, and only when asked.
 Source: "{#UpdateExe}"; DestDir: "{app}"; DestName: "phitpup-update.exe"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"
+Source: "..\crates\phitpup-core\src\en-words.LICENSE.txt"; DestDir: "{app}\licenses"; DestName: "english-words-SCOWL.txt"
+Source: "..\crates\phitpup-core\src\model-en-wordlist.LICENSE.txt"; DestDir: "{app}\licenses"; DestName: "english-wordlist-Hunspell.txt"
 Source: "..\THIRD_PARTY.md"; DestDir: "{app}"
 Source: "..\TRADEMARKS.md"; DestDir: "{app}"
 ; The fonts are inside the exe; their licence travels with them.

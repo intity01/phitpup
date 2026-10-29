@@ -53,6 +53,7 @@ fn main() {
         Some("gen-layouts") => gen_layouts(),
         Some("fetch-corpus") => fetch_corpus(),
         Some("train-model") => train::train(&root()),
+        Some("english-words") => train::english_words(&root()),
         Some("icons") => icons(),
         Some("installer-art") => installer_art(),
         Some("eval-detector") => {
@@ -67,7 +68,7 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: cargo xtask <gen-layouts | fetch-corpus | train-model | eval-detector | icons>"
+                "usage: cargo xtask <gen-layouts | fetch-corpus | train-model | english-words | eval-detector | icons>"
             );
             std::process::exit(2);
         }

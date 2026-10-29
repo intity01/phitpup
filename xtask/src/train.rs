@@ -47,6 +47,160 @@ pub fn build(dir: &Path, include_test: bool, thai_lexicon: usize) -> Model {
     Model::new(th, en.finish(MIN_TRIGRAM_ENGLISH))
 }
 
+/// SCOWL size levels kept for English slips, and what a word at each level
+/// is taken to cost in bits (level 10 holds the most common words).
+const ENGLISH_LEVELS: &[(u32, f64)] = &[
+    (10, 10.0),
+    (20, 12.5),
+    (35, 14.5),
+    (40, 15.5),
+    (50, 16.5),
+    // Rarer words: known, so never "fixed", but seldom offered.
+    (55, 22.0),
+    (60, 22.0),
+    (70, 22.0),
+];
+
+/// Everyday words that dictionaries leave out, taken as typed on purpose.
+const ENGLISH_EXTRA: &[&str] = &[
+    "todo",
+    "json",
+    "url",
+    "urls",
+    "btw",
+    "omg",
+    "wifi",
+    "imo",
+    "imho",
+    "pls",
+    "plz",
+    "lol",
+    "idk",
+    "tbh",
+    "smh",
+    "nvm",
+    "thx",
+    "lgtm",
+    "wip",
+    "fyi",
+    "asap",
+    "afaik",
+    "brb",
+    "gg",
+    "covid",
+    "tiktok",
+    "vlog",
+    "vlogs",
+    "docker",
+    "github",
+    "gitlab",
+    "repo",
+    "repos",
+    "config",
+    "async",
+    "npm",
+    "api",
+    "apis",
+    "app",
+    "apps",
+    "ui",
+    "ux",
+    "faq",
+    "pdf",
+    "ok",
+    "okay",
+    "emoji",
+    "emojis",
+    "selfie",
+    "selfies",
+    "hashtag",
+    "hashtags",
+    "podcast",
+    "podcasts",
+    "blog",
+    "blogs",
+    "login",
+    "logout",
+    "signup",
+    "username",
+    "email",
+    "emails",
+    "online",
+    "offline",
+    "website",
+    "websites",
+    "webpage",
+    "smartphone",
+    "laptop",
+    "laptops",
+    "gonna",
+    "wanna",
+    "gotta",
+    "yeah",
+    "nope",
+    "yep",
+    "kinda",
+    "sorta",
+    "dunno",
+    "bangkok",
+    "pattaya",
+    "chiang",
+    "mai",
+    "phuket",
+    "youtube",
+    "google",
+    "netflix",
+    "iphone",
+    "thai",
+];
+
+/// Writes `en-words.bin` from SCOWL, unpacked into `corpus/scowl/` (from
+/// <http://wordlist.aspell.net/>; only its `final/` lists are read).
+/// Within a level, a word spelt the usual way (by the English trigrams)
+/// counts as a little more common, so `the` beats `ten` for `teh`.
+pub fn english_words(root: &Path) {
+    let dir = root.join("corpus/scowl/final");
+    let model = Model::embedded().lang(Lang::English);
+    let mut words: std::collections::HashMap<String, f64> = Default::default();
+    for &(level, bits) in ENGLISH_LEVELS {
+        for list in ["english-words", "american-words"] {
+            let path = dir.join(format!("{list}.{level}"));
+            let bytes = std::fs::read(&path).unwrap_or_else(|e| {
+                panic!("{}: {e} (unpack SCOWL into corpus/scowl)", path.display())
+            });
+            // Latin-1; only plain lowercase words are kept anyway.
+            let text: String = bytes.iter().map(|&b| char::from(b)).collect();
+            for w in text.lines() {
+                if w.is_empty() || !w.bytes().all(|b| b.is_ascii_lowercase() || b == b'\'') {
+                    continue;
+                }
+                let symbols = (w.len() + 1) as f64;
+                let cost = bits + 0.2 * f64::from(model.cost(w)) * symbols;
+                let e = words.entry(w.to_owned()).or_insert(f64::MAX);
+                *e = e.min(cost);
+            }
+        }
+    }
+    let rare = ENGLISH_LEVELS.last().unwrap().1;
+    for w in ENGLISH_EXTRA {
+        words.entry((*w).to_owned()).or_insert(rare);
+    }
+    let mut words: Vec<(String, u16)> = words
+        .into_iter()
+        .map(|(w, bits)| (w, (bits * 10.0).round() as u16))
+        .collect();
+    words.sort_unstable();
+    let bytes = phitpup_core::model::words_to_bytes(&words);
+    let dest = root.join("crates/phitpup-core/src/en-words.bin");
+    std::fs::write(&dest, &bytes).expect("write en-words.bin");
+    println!(
+        "wrote {} ({} KB; {} words)",
+        dest.display(),
+        bytes.len() / 1024,
+        words.len()
+    );
+}
+
 pub fn train(root: &Path) {
     let model = build(&root.join("corpus"), true, THAI_LEXICON);
     let bytes = model.to_bytes();

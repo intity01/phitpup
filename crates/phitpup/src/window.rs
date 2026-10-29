@@ -1193,7 +1193,7 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
         68.0,
         Some(G_EDIT),
         t("Show the bubble above the line"),
-        t("So it does not cover lists that open under the text, like search suggestions."),
+        t("Keeps search suggestions and other lists in view."),
         Some(Hit::BubbleAbove),
     );
     b.toggle(cy, c.bubble_above, hovered);
@@ -1228,8 +1228,8 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
         68.0,
         68.0,
         Some(G_EDIT),
-        t("Suggest Thai words typed with a slip"),
-        t("Such as \u{0E2A}\u{0E49}\u{0E27}\u{0E2A}\u{0E14}\u{0E35} \u{2192} \u{0E2A}\u{0E27}\u{0E31}\u{0E2A}\u{0E14}\u{0E35}. Only suggested, never fixed by itself."),
+        t("Suggest words typed with a slip"),
+        t("Such as \u{0E2A}\u{0E49}\u{0E27}\u{0E2A}\u{0E14}\u{0E35} \u{2192} \u{0E2A}\u{0E27}\u{0E31}\u{0E2A}\u{0E14}\u{0E35} and teh \u{2192} the. Only suggested."),
         Some(Hit::Slips),
     );
     b.toggle(cy, c.slips, hovered);

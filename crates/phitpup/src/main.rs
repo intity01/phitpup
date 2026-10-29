@@ -198,6 +198,13 @@ mod app {
         let (config, problems) = settings::load();
         let (english, thai) = layout::find_pair()?;
         let detector = Detector::new(&english.layout, &thai.layout);
+        // The word lists for slips take a moment to set up; do it now rather
+        // than on the first word typed.
+        let (en, th) = (english.layout.clone(), thai.layout.clone());
+        std::thread::spawn(move || {
+            phitpup_core::near::Near::shared(Lang::English, &en);
+            phitpup_core::near::Near::shared(Lang::Thai, &th);
+        });
         if !Model::embedded().is_trained() {
             eprintln!("warning: built without a trained model; only the hotkey works");
         }
