@@ -141,7 +141,10 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
    - Tray menu and settings window offer it as a third mode.
    - About page in the settings window: made by Intity01, team sukudone.team-dev, version, MIT,
      privacy note.
-7. Website (GitHub Pages + WASM) and GitHub Actions release (2026-10-29, built; not published yet)
+7. Website (GitHub Pages + WASM) and GitHub Actions release (2026-10-29: published)
+   - Live: https://intity01.github.io/phitpup/ · repo https://github.com/intity01/phitpup ·
+     v0.1.0 released by Actions (phitpup.exe 731136 bytes, SHA-256 572a1772…828d, download
+     checked against it). Rust pinned to 1.96.0 in `rust-toolchain.toml` so CI lints match.
    - `site/`: one static page, Thai by default (English from the browser language or the switch),
      no external requests. Hero demo, try-it box, modes, privacy, install steps (SmartScreen),
      FAQ (antivirus, SmartScreen, wrong fixes, games, macOS, removal), credits.
