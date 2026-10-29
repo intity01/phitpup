@@ -105,9 +105,108 @@ pub fn check(word: &str) -> Result<(), Violation> {
     Ok(())
 }
 
+/// The same word with its Thai characters in the right order, if it was
+/// typed in a way that looks the same but is not: two เ for แ, ํ and า for ำ,
+/// a mark typed twice, or a tone mark before the vowel it sits on. Search,
+/// sorting and spell checkers treat those as different words. `None` when
+/// nothing needs changing, or when the result would still break the rules.
+pub fn respell(word: &str) -> Option<String> {
+    use Class::*;
+    const E: char = '\u{0E40}'; // เ
+    const AE: char = '\u{0E41}'; // แ
+    const NIKHAHIT: char = '\u{0E4D}'; // ํ
+    const AA: char = '\u{0E32}'; // า
+    const AM: char = '\u{0E33}'; // ำ
+    const PHINTHU: char = '\u{0E3A}'; // ฺ
+    let chars: Vec<char> = word.chars().collect();
+    let mut out: Vec<char> = Vec::with_capacity(chars.len());
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        let next = chars.get(i + 1).copied();
+        if c == E && next == Some(E) {
+            out.push(AE);
+            i += 2;
+            continue;
+        }
+        if c == NIKHAHIT {
+            if next == Some(AA) {
+                out.push(AM);
+                i += 2;
+                continue;
+            }
+            // น ํ ้ า: the tone mark goes before ำ.
+            if next.map(class) == Some(Tone) && chars.get(i + 2) == Some(&AA) {
+                out.extend([chars[i + 1], AM]);
+                i += 3;
+                continue;
+            }
+        }
+        let mark = matches!(
+            class(c),
+            Leading | AboveBelow | Tone | Maitaikhu | Thanthakhat | Nikhahit
+        );
+        if mark && out.last() == Some(&c) {
+            i += 1; // typed twice
+            continue;
+        }
+        let n = out.len();
+        if class(c) == AboveBelow
+            && c != PHINTHU
+            && n >= 2
+            && class(out[n - 1]) == Tone
+            && class(out[n - 2]) == Consonant
+        {
+            out.insert(n - 1, c); // ก่ี → กี่
+            i += 1;
+            continue;
+        }
+        out.push(c);
+        i += 1;
+    }
+    let fixed: String = out.into_iter().collect();
+    (fixed != word && check(&fixed).is_ok()).then_some(fixed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn respells_look_alike_typing() {
+        for (typed, fixed) in [
+            ("เเม่", "แม่"),
+            ("เเละ", "และ"),
+            ("กํา", "กำ"),
+            ("ทํางาน", "ทำงาน"),
+            ("นํ้า", "น้ำ"),
+            ("ไม่่", "ไม่"),
+            ("ดีี", "ดี"),
+            ("ก่ี", "กี่"),
+            ("ที่่", "ที่"),
+            ("แแม่", "แม่"),
+        ] {
+            assert_eq!(respell(typed).as_deref(), Some(fixed), "{typed}");
+        }
+    }
+
+    #[test]
+    fn leaves_correct_and_unclear_words_alone() {
+        for w in [
+            "แม่",
+            "น้ำ",
+            "กี่",
+            "สวัสดี",
+            "นะะะ",
+            "ค่าาา",
+            "hello",
+            "ก่้",
+            "้ำสสน",
+            "",
+        ] {
+            assert_eq!(respell(w), None, "{w}");
+        }
+    }
 
     #[test]
     fn accepts_real_words() {

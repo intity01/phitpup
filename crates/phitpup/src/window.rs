@@ -199,6 +199,7 @@ enum Hit {
     Remind,
     DoubleShift,
     Underline,
+    Spelling,
     Updates,
     AddProgram,
     /// Program `i` of [`programs`]: off (true) or no bubble (false).
@@ -1067,6 +1068,18 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
     b.toggle(cy, c.underline, hovered);
     y += 72.0;
 
+    let (cy, hovered) = b.row(
+        y,
+        68.0,
+        68.0,
+        Some(G_FONT),
+        "Fix Thai typed in the wrong order",
+        "Such as เเม่ → แม่, ทํา → ทำ, ก่ี → กี่. Tab accepts.",
+        Some(Hit::Spelling),
+    );
+    b.toggle(cy, c.spelling, hovered);
+    y += 72.0;
+
     let startup = settings::starts_with_windows();
     let (cy, hovered) = b.row(
         y,
@@ -1872,6 +1885,7 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
         Hit::On => tray::toggle_pause(),
         Hit::Mode(mode) => edit(|c| c.mode = mode),
         Hit::Underline => edit(|c| c.underline = !c.underline),
+        Hit::Spelling => edit(|c| c.spelling = !c.spelling),
         Hit::DoubleShift => edit(|c| c.double_shift = !c.double_shift),
         Hit::Startup => settings::set_start_with_windows(!settings::starts_with_windows()),
         Hit::Fullscreen => edit(|c| c.off_in_fullscreen = !c.off_in_fullscreen),

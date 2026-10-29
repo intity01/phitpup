@@ -205,5 +205,13 @@ Research: https://claude.ai/artifact/5REER2LjL4cjsJ8WekjnPz
      start-with-Windows choice and starts PhitPup again.
    - Without the helper (single-file copy) the button opens the latest release in the browser.
 
+13. Thai spelling order (2026-10-29)
+   - `spelling = true` (General page switch, on by default): Thai typed in the right layout but
+     in an order that looks right and is not is offered as a fix too, with a สะกด badge on the
+     bubble. `thai::respell`: เเ → แ, ํ า → ำ (also ํ tone า), a mark typed twice, a tone mark
+     before the vowel above or below it. The result must pass `thai::check`.
+   - Wrong-layout fixes come first; Tab accepts, auto mode fixes on Space, Shift+Backspace right
+     after undoes it and keeps the Thai layout (and stops suggesting that word). Not on the hotkey.
+
 ## Environment (checked 2026-10-28)
 rustc/cargo 1.96, rustup 1.29, Visual Studio Community 2026 (MSVC), git 2.54, gh 2.102, node 26.3.

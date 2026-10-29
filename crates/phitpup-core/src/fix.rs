@@ -24,7 +24,7 @@
 //! [`auto`](Fixer::auto) are fixed whatever the detector thinks.
 
 use crate::model::Lang;
-use crate::{Detector, Direction, Thresholds};
+use crate::{Detector, Direction, Thresholds, thai};
 
 /// Characters remembered before the caret. Older ones are forgotten.
 pub const MAX_CHARS: usize = 300;
@@ -46,6 +46,9 @@ pub struct Suggestion {
     /// The word as typed, so a stale suggestion is never applied.
     pub word: String,
     pub edit: Edit,
+    /// Thai typed in the right layout but in the wrong order
+    /// ([`thai::respell`]), rather than typed in the wrong layout.
+    pub spelling: bool,
 }
 
 #[derive(Debug)]
@@ -66,6 +69,16 @@ struct Undo {
     back_to: Lang,
 }
 
+/// The layout to go back to when a fix is undone: the other one, or the
+/// same one for a spelling fix.
+fn back_to(edit: &Edit, spelling: bool) -> Lang {
+    match (edit.switch_to, spelling) {
+        (lang, true) => lang,
+        (Lang::Thai, false) => Lang::English,
+        (Lang::English, false) => Lang::Thai,
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Fixer {
     buf: Vec<char>,
@@ -75,6 +88,8 @@ pub struct Fixer {
     pending: Option<String>,
     learned: Option<String>,
     rejected: Option<String>,
+    /// Also offer [`thai::respell`] fixes (suggest and auto mode).
+    pub spelling: bool,
 }
 
 impl Fixer {
@@ -142,14 +157,27 @@ impl Fixer {
         }
         let start = word_start(&self.buf, 1)?;
         let word: String = self.buf[start..].iter().collect();
-        let (direction, converted) = judge(detector, &word, detector.thresholds, learned)?;
+        let delete = self.buf.len() - start;
+        if let Some((direction, converted)) = judge(detector, &word, detector.thresholds, learned) {
+            return Some(Suggestion {
+                edit: Edit {
+                    delete,
+                    insert: converted,
+                    switch_to: target(direction),
+                },
+                word,
+                spelling: false,
+            });
+        }
+        let respelled = thai::respell(&word).filter(|_| self.spelling)?;
         Some(Suggestion {
             edit: Edit {
-                delete: self.buf.len() - start,
-                insert: converted,
-                switch_to: target(direction),
+                delete,
+                insert: respelled,
+                switch_to: Lang::Thai,
             },
             word,
+            spelling: true,
         })
     }
 
@@ -167,10 +195,7 @@ impl Fixer {
         self.undo = Some(Undo {
             original: self.buf.clone(),
             start,
-            back_to: match s.edit.switch_to {
-                Lang::Thai => Lang::English,
-                Lang::English => Lang::Thai,
-            },
+            back_to: back_to(&s.edit, s.spelling),
         });
         self.buf.truncate(start);
         self.buf.extend(s.edit.insert.chars());
@@ -199,14 +224,18 @@ impl Fixer {
             if skip(&word) {
                 return None;
             }
-            Some((start, judge(detector, &word, Thresholds::AUTO, learned)?))
+            if let Some((direction, converted)) = judge(detector, &word, Thresholds::AUTO, learned)
+            {
+                return Some((start, converted, target(direction), false));
+            }
+            let respelled = thai::respell(&word).filter(|_| self.spelling)?;
+            Some((start, respelled, Lang::Thai, true))
         })();
-        let Some((start, (direction, converted))) = fix else {
+        let Some((start, converted, switch_to, spelling)) = fix else {
             self.typed(sep);
             return None;
         };
         self.keep_pending();
-        let switch_to = target(direction);
         let edit = Edit {
             delete: self.buf.len() - start,
             insert: converted + sep,
@@ -223,10 +252,7 @@ impl Fixer {
         self.undo = Some(Undo {
             original,
             start,
-            back_to: match switch_to {
-                Lang::Thai => Lang::English,
-                Lang::English => Lang::Thai,
-            },
+            back_to: back_to(&edit, spelling),
         });
         Some(edit)
     }
@@ -644,6 +670,39 @@ mod tests {
         f.typed(" ");
         let e = f.hotkey(&d).unwrap();
         assert_eq!(e.insert, "สวัสดี ");
+    }
+
+    #[test]
+    fn spelling_fix_is_offered_only_when_on_and_undoes_in_thai() {
+        let d = det();
+        let mut f = Fixer::new();
+        let mut screen = String::from("ไป เเม่");
+        f.typed(&screen);
+        assert_eq!(f.suggestion(&d, &[]), None, "off by default");
+        f.spelling = true;
+        let s = f.suggestion(&d, &[]).unwrap();
+        assert!(s.spelling);
+        assert_eq!(s.edit.insert, "แม่");
+        apply(&mut screen, &f.accept(&s).unwrap());
+        assert_eq!(screen, "ไป แม่");
+
+        let e = f.hotkey(&d).unwrap();
+        apply(&mut screen, &e);
+        assert_eq!(screen, "ไป เเม่");
+        assert_eq!(e.switch_to, Lang::Thai, "still typing Thai");
+        assert_eq!(f.take_rejected().as_deref(), Some("เเม่"));
+    }
+
+    #[test]
+    fn auto_mode_respells_on_space() {
+        let d = det();
+        let mut f = Fixer::new();
+        f.spelling = true;
+        f.typed("ทํางาน");
+        let e = f.auto(&d, " ", |_| false, &[]).unwrap();
+        assert_eq!(e.insert, "ทำงาน ");
+        assert_eq!(e.switch_to, Lang::Thai);
+        assert_eq!(f.text(), "ทำงาน ");
     }
 
     #[test]

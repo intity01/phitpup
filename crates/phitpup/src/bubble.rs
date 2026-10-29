@@ -145,7 +145,8 @@ pub fn dark_theme() -> bool {
 #[derive(Clone, PartialEq)]
 struct Look {
     word: String,
-    lang: Lang,
+    /// TH or EN: the layout the fix is in; or สะกด for a spelling fix.
+    badge: &'static str,
     /// The accept key's label.
     hint: String,
     dpi: u32,
@@ -280,15 +281,23 @@ pub fn create() {
     });
 }
 
-/// The word as typed, its fix and the layout the fix switches to.
-fn current() -> Option<(String, String, Lang)> {
+/// The word as typed, its fix and the bubble's badge for it.
+fn current() -> Option<(String, String, &'static str)> {
     APP.get().and_then(|app| {
         app.suggestion
             .lock()
             .unwrap()
             .as_ref()
-            .map(|s| (s.word.clone(), s.edit.insert.clone(), s.edit.switch_to))
+            .map(|s| (s.word.clone(), s.edit.insert.clone(), badge(s)))
     })
+}
+
+fn badge(s: &phitpup_core::Suggestion) -> &'static str {
+    match (s.spelling, s.edit.switch_to) {
+        (true, _) => "สะกด",
+        (false, Lang::Thai) => "TH",
+        (false, Lang::English) => "EN",
+    }
 }
 
 fn underline_on() -> bool {
@@ -324,7 +333,7 @@ pub fn hide() {
 }
 
 fn settle() {
-    let Some((typed, word, lang)) = current() else {
+    let Some((typed, word, badge)) = current() else {
         return hide();
     };
     if underline_on() {
@@ -346,7 +355,7 @@ fn settle() {
         }
     }
     underline::hide();
-    show(word, lang)
+    show(word, badge)
 }
 
 fn fade_out(b: &mut Bubble) {
@@ -378,7 +387,7 @@ fn monitor_of(p: POINT) -> (RECT, u32) {
     }
 }
 
-fn show(word: String, lang: Lang) {
+fn show(word: String, badge: &'static str) {
     let (anchor, caret_h) = caret();
     let (work, dpi) = monitor_of(anchor);
     let scale = dpi as f32 / 96.0;
@@ -388,7 +397,7 @@ fn show(word: String, lang: Lang) {
     );
     let look = Look {
         word,
-        lang,
+        badge,
         hint,
         dpi,
         dark: dark_theme(),
@@ -626,10 +635,7 @@ fn render(look: &Look) -> Image {
     let px = |v: f32| (v * s).round() as i32;
     let pal = if look.dark { &DARK } else { &LIGHT };
     let word = wide(&look.word);
-    let badge = wide(match look.lang {
-        Lang::Thai => "TH",
-        Lang::English => "EN",
-    });
+    let badge = wide(look.badge);
     let hint = wide(&look.hint);
 
     // SAFETY: GDI objects are created, selected, restored and deleted here;
@@ -841,10 +847,14 @@ mod tests {
         let dir = std::path::PathBuf::from(std::env::var("PHITPUP_PREVIEW_DIR").unwrap());
         for (dark, bg) in [(false, 0xF3F3F3u32), (true, 0x202020)] {
             for dpi in [96, 144] {
-                for (word, lang) in [("สวัสดี", Lang::Thai), ("hello", Lang::English)] {
+                for (word, badge, name) in [
+                    ("สวัสดี", "TH", "th"),
+                    ("hello", "EN", "en"),
+                    ("แม่", "สะกด", "spelling"),
+                ] {
                     let look = Look {
                         word: word.into(),
-                        lang,
+                        badge,
                         hint: "Tab".into(),
                         dpi,
                         dark,
@@ -853,7 +863,7 @@ mod tests {
                     let name = format!(
                         "bubble-{}-{}-{dpi}.bmp",
                         if dark { "dark" } else { "light" },
-                        if lang == Lang::Thai { "th" } else { "en" }
+                        name
                     );
                     write_bmp(&dir.join(name), &img, hex(bg));
                 }

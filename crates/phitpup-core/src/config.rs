@@ -48,6 +48,9 @@ pub struct Config {
     /// Show suggestions as a wavy line under the word instead of a bubble,
     /// in apps that say where the word is.
     pub underline: bool,
+    /// Also offer to fix Thai typed in a look-alike order (เเ for แ, ํา for
+    /// ำ, a mark typed twice, a tone mark before its vowel).
+    pub spelling: bool,
     /// Tapping Shift twice also fixes the last word.
     pub double_shift: bool,
     /// A tray reminder to look for a new version once this one is old.
@@ -69,6 +72,7 @@ impl Default for Config {
             learned_words: Vec::new(),
             learn: true,
             underline: false,
+            spelling: true,
             double_shift: false,
             remind_updates: true,
             hotkey: Hotkey::FIX,
@@ -91,6 +95,10 @@ mode = "suggest"
 # Mark the word with a wavy underline instead of the bubble. Apps that do not
 # say where the word is (some games and chat apps) still get the bubble.
 underline = false
+
+# Also offer to fix Thai typed in the wrong order that looks right:
+# เเ for แ, ํ า for ำ, a mark typed twice, a tone mark before its vowel.
+spelling = true
 
 # Turn PhitPup off in windows that cover the whole screen (games, videos).
 off_in_fullscreen = true
@@ -159,6 +167,7 @@ impl Config {
                 "learned_words" => list(value).map(|w| c.learned_words = w),
                 "learn" => boolean(value).map(|b| c.learn = b),
                 "underline" => boolean(value).map(|b| c.underline = b),
+                "spelling" => boolean(value).map(|b| c.spelling = b),
                 "double_shift" => boolean(value).map(|b| c.double_shift = b),
                 "remind_updates" => boolean(value).map(|b| c.remind_updates = b),
                 "hotkey" => shortcut(value).map(|k| c.hotkey = k),
@@ -190,6 +199,7 @@ impl Config {
         };
         let mut t = set(text, "mode", &quoted(self.mode.as_str()));
         t = set(&t, "underline", &self.underline.to_string());
+        t = set(&t, "spelling", &self.spelling.to_string());
         t = set(&t, "off_in_fullscreen", &self.off_in_fullscreen.to_string());
         t = set(&t, "off_apps", &array(&self.off_apps));
         t = set(&t, "quiet_apps", &array(&self.quiet_apps));
@@ -363,6 +373,7 @@ accept_key = \"shift+backspace\"",
             learned_words: vec!["muj".into()],
             learn: false,
             underline: true,
+            spelling: false,
             double_shift: true,
             remind_updates: false,
             hotkey: Hotkey::parse("ctrl+backslash").unwrap(),

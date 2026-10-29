@@ -135,16 +135,16 @@ fn refresh(app: &App, quiet: bool) {
     if quiet || app.mode() == Mode::Manual {
         return;
     }
-    let (ignored, learned) = {
+    let (ignored, learned, spelling) = {
         let c = app.config.lock().unwrap();
-        (c.ignore_words.clone(), c.learned_words.clone())
+        (c.ignore_words.clone(), c.learned_words.clone(), c.spelling)
     };
-    let s = app
-        .fixer
-        .lock()
-        .unwrap()
+    let mut fixer = app.fixer.lock().unwrap();
+    fixer.spelling = spelling;
+    let s = fixer
         .suggestion(&app.detector, &learned)
         .filter(|s| !ignored.contains(&s.word.to_lowercase()));
+    drop(fixer);
     if s.is_none() {
         DISMISSED.store(false, Ordering::Relaxed);
     }
@@ -276,15 +276,14 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
 
     if vk == VK_SPACE && !ctrl && !alt && !win && !quiet && app.mode() == Mode::Auto {
         let edit = {
-            let (ignored, learned) = {
+            let (ignored, learned, spelling) = {
                 let c = app.config.lock().unwrap();
-                (c.ignore_words.clone(), c.learned_words.clone())
+                (c.ignore_words.clone(), c.learned_words.clone(), c.spelling)
             };
             let skip = |w: &str| ignored.contains(&w.to_lowercase());
-            app.fixer
-                .lock()
-                .unwrap()
-                .auto(&app.detector, " ", skip, &learned)
+            let mut fixer = app.fixer.lock().unwrap();
+            fixer.spelling = spelling;
+            fixer.auto(&app.detector, " ", skip, &learned)
         };
         set_suggestion(app, None);
         DISMISSED.store(false, Ordering::Relaxed);
