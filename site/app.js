@@ -21,7 +21,7 @@ const EN = {
   "hero.lead": "Forgot to switch to Thai and got <code>l;ylfu</code>? PhitPup sees you meant <b>สวัสดี</b> and fixes it on the spot. No deleting, no retyping.",
   "hero.download": "Download free",
   "hero.try": "Try it in the browser",
-  "hero.meta": "One file, nothing to install · under 1 MB · open source (MIT)",
+  "hero.meta": "One file, nothing to install · about 1 MB · open source (MIT)",
   "try.title": "Try it",
   "try.lead": "Type Thai while your keyboard is still on English (or the other way round). It all runs in your browser; nothing is sent anywhere.",
   "try.layout": "Thai layout",
@@ -142,7 +142,9 @@ function showRelease() {
 for (const id of ["download", "download-2"]) document.getElementById(id).href = DOWNLOAD;
 document.getElementById("source").href = `https://github.com/${REPO}`;
 
-fetch("release.json")
+// Ask the server every time: a cached copy would show the previous version
+// for up to ten minutes after a release.
+fetch("release.json", { cache: "no-cache" })
   .then((r) => (r.ok ? r.json() : null))
   .then((r) => {
     release = r;
