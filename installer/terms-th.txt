@@ -1,0 +1,48 @@
+﻿ผิดปุ๊บ (PhitPup) – ข้อตกลง
+พัฒนาโดย Intity01 · sukudone.team-dev
+
+สรุปสั้น ๆ
+
+• ผิดปุ๊บใช้ฟรี ใครขายโปรแกรมชื่อ PhitPup หรือ ผิดปุ๊บ ไม่ใช่เรา
+
+• ดาวน์โหลดของแท้ได้จากสองที่นี้เท่านั้น
+    https://intity01.github.io/phitpup/
+    https://github.com/intity01/phitpup/releases
+  ไฟล์จากที่อื่นไม่ได้มาจากเรา และอาจถูกแก้ไข
+
+• ชื่อ PhitPup และ ผิดปุ๊บ กับโลโก้ p เป็นของผู้พัฒนา ถ้าเอาโค้ดไปแก้แล้วแจกต่อ ต้องใช้ชื่อและไอคอนอื่น
+  และห้ามทำให้เข้าใจว่ามาจากเรา (ดู TRADEMARKS.md ในซอร์สโค้ด)
+
+• ผิดปุ๊บทำงานในเครื่องของคุณเท่านั้น สิ่งที่คุณพิมพ์ไม่ถูกบันทึกและไม่ถูกส่งไปไหน ตัวอัปเดตที่แยกไว้
+  (phitpup-update.exe) จะต่ออินเทอร์เน็ตเฉพาะตอนคุณกด "Check for updates" เพื่อถามเลขรุ่นล่าสุด
+  และโหลดตัวติดตั้ง
+
+• ซอร์สโค้ดเปิดเผยภายใต้สัญญาอนุญาต MIT ด้านล่าง (ฉบับภาษาอังกฤษคือฉบับที่ใช้บังคับ)
+  และเหมือนซอฟต์แวร์ฟรีส่วนใหญ่ ผิดปุ๊บไม่มีการรับประกันใด ๆ
+
+• ฟอนต์ในตัวโปรแกรมใช้สัญญาอนุญาต SIL Open Font License (อยู่ในโฟลเดอร์ licenses)
+
+
+สัญญาอนุญาต MIT
+
+MIT License
+
+Copyright (c) 2026 Intity01 (sukudone.team-dev) and PhitPup contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

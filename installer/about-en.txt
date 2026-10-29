@@ -1,0 +1,22 @@
+﻿What PhitPup does
+
+Forgot to switch the keyboard to Thai and typed l;ylfu? PhitPup sees you meant สวัสดี and fixes it.
+
+  • A small slip under the cursor suggests the fix. Press Tab to take it, Esc to hide it.
+  • Shift+Backspace fixes the last word, or the text you selected. Press it again right away to
+    get your word back.
+  • Shift+Esc tells PhitPup never to suggest that word again.
+
+It lives next to the clock as an orange p. Click it for the settings: pick suggest, auto or
+hotkey-only, the Thai layout (Kedmanee or Pattachote), programs to leave alone and words to
+skip.
+
+It stays out of password fields, password managers, Remote Desktop and full-screen games.
+
+Why might antivirus warn about it?
+To fix a word, PhitPup has to see the keys you press and type for you, which is what keyloggers
+do too, so some antivirus programs warn about anything like it. PhitPup keeps only the word you
+are typing, in memory, and never sends it anywhere. All of its code is public.
+
+Needs Windows 10 or 11 (64-bit). Installs for your account only, with no admin rights, and can be
+removed from Settings > Apps.

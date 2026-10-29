@@ -5,6 +5,8 @@
 ;   iscc /DSourceExe=path\to\phitpup.exe /DUpdateExe=path\to\phitpup-update.exe
 ;        /DOutputDir=dist installer\phitpup.iss
 ;
+;   (after `cargo xtask installer-art`, which draws the side images)
+;
 ; Run with /UPDATE (phitpup-update.exe does, with /SILENT) it keeps the
 ; person's start-with-Windows choice and starts PhitPup again at the end.
 ;
@@ -15,6 +17,9 @@
 #endif
 #ifndef UpdateExe
   #define UpdateExe "..\target\release\phitpup-update.exe"
+#endif
+#ifndef ArtDir
+  #define ArtDir "..\target\installer-art"
 #endif
 #ifndef OutputDir
   #define OutputDir "..\target\installer"
@@ -46,6 +51,8 @@ UninstallDisplayName=PhitPup
 UninstallDisplayIcon={app}\phitpup.exe
 SetupIconFile=..\assets\icon\phitpup.ico
 WizardStyle=modern
+WizardImageFile={#ArtDir}\wizard-100.bmp,{#ArtDir}\wizard-125.bmp,{#ArtDir}\wizard-150.bmp,{#ArtDir}\wizard-175.bmp,{#ArtDir}\wizard-200.bmp
+WizardSmallImageFile={#ArtDir}\small-100.bmp,{#ArtDir}\small-125.bmp,{#ArtDir}\small-150.bmp,{#ArtDir}\small-175.bmp,{#ArtDir}\small-200.bmp
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
@@ -59,9 +66,10 @@ Compression=lzma2/max
 SolidCompression=yes
 
 [Languages]
-Name: "en"; MessagesFile: "compiler:Default.isl"
+; The terms (accepted before installing) and what PhitPup does.
+Name: "en"; MessagesFile: "compiler:Default.isl"; LicenseFile: "terms-en.txt"; InfoBeforeFile: "about-en.txt"
 #ifexist AddBackslash(CompilerPath) + "Languages\Thai.isl"
-Name: "th"; MessagesFile: "compiler:Languages\Thai.isl"
+Name: "th"; MessagesFile: "compiler:Languages\Thai.isl"; LicenseFile: "terms-th.txt"; InfoBeforeFile: "about-th.txt"
 #endif
 
 [CustomMessages]
@@ -82,6 +90,7 @@ Source: "{#SourceExe}"; DestDir: "{app}"; DestName: "phitpup.exe"; Flags: ignore
 Source: "{#UpdateExe}"; DestDir: "{app}"; DestName: "phitpup-update.exe"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"
 Source: "..\THIRD_PARTY.md"; DestDir: "{app}"
+Source: "..\TRADEMARKS.md"; DestDir: "{app}"
 ; The fonts are inside the exe; their licence travels with them.
 Source: "..\assets\fonts\OFL-*.txt"; DestDir: "{app}\licenses"
 

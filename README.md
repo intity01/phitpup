@@ -43,8 +43,8 @@ cargo build --release -p phitpup-web --target wasm32-unknown-unknown   # the web
 ```
 
 The installer is built with [Inno Setup](https://jrsoftware.org/isinfo.php) 6.5 from
-`installer/phitpup.iss`: `iscc installer\phitpup.iss` after the release build writes
-`target\installer\PhitPup-Setup.exe`.
+`installer/phitpup.iss`: after the release build and `cargo xtask installer-art`,
+`iscc installer\phitpup.iss` writes `target\installer\PhitPup-Setup.exe`.
 
 | Path | What |
 |---|---|
@@ -60,3 +60,5 @@ The installer is built with [Inno Setup](https://jrsoftware.org/isinfo.php) 6.5 
 ## Credits
 
 Made by **Intity01** · sukudone.team-dev. MIT license; data sources in [THIRD_PARTY.md](THIRD_PARTY.md).
+The PhitPup name and logo are not part of the MIT license, and official downloads are only on the
+website and GitHub releases: see [TRADEMARKS.md](TRADEMARKS.md).

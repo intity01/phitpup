@@ -7,6 +7,10 @@
 //!
 //! `cargo xtask icons` exports the icon (drawn by `phitpup_core::icon`) to
 //! `assets/icon/` for the website and README: an `.ico`, PNGs and a preview.
+//!
+//! `cargo xtask installer-art` draws the installer's side and corner images
+//! (red pen on ruled paper, as in the app) into `target/installer-art/`, where
+//! `installer/phitpup.iss` picks them up. They are not committed.
 
 mod corpus;
 mod train;
@@ -50,6 +54,7 @@ fn main() {
         Some("fetch-corpus") => fetch_corpus(),
         Some("train-model") => train::train(&root()),
         Some("icons") => icons(),
+        Some("installer-art") => installer_art(),
         Some("eval-detector") => {
             let lexicon = match args.get(1).map(String::as_str) {
                 Some("--lexicon") => args
@@ -86,6 +91,159 @@ fn icons() {
     }
     write("phitpup-paused-32.png", &png(&render(32, Tone::Paused), 32));
     write("phitpup.svg", SVG.as_bytes());
+}
+
+/// The installer's images at 100–200% scaling, as 24-bit BMPs: the side
+/// panel (164 × 314 at 100%) and the corner of the inner pages (55 × 55).
+fn installer_art() {
+    use phitpup_core::icon::{Tone, render};
+    let dir = root().join("target").join("installer-art");
+    std::fs::create_dir_all(&dir).expect("create target/installer-art/");
+    const PAPER: [f32; 3] = [251.0, 247.0, 240.0];
+    const RULE: [f32; 3] = [230.0, 222.0, 210.0];
+    const MARGIN: [f32; 3] = [237.0, 198.0, 184.0];
+    const PEN: [f32; 3] = [217.0, 58.0, 18.0];
+    const WHITE: [f32; 3] = [255.0, 255.0, 255.0];
+
+    struct Canvas {
+        w: usize,
+        h: usize,
+        px: Vec<[f32; 3]>,
+    }
+    impl Canvas {
+        fn new(w: usize, h: usize, bg: [f32; 3]) -> Self {
+            Self {
+                w,
+                h,
+                px: vec![bg; w * h],
+            }
+        }
+        fn blend(&mut self, x: usize, y: usize, c: [f32; 3], a: f32) {
+            if x < self.w && y < self.h && a > 0.0 {
+                let p = &mut self.px[y * self.w + x];
+                for i in 0..3 {
+                    p[i] += (c[i] - p[i]) * a.min(1.0);
+                }
+            }
+        }
+        /// An anti-aliased stroke along the points (a pen line).
+        fn stroke(&mut self, pts: &[(f32, f32)], width: f32, c: [f32; 3]) {
+            let r = width / 2.0;
+            for y in 0..self.h {
+                for x in 0..self.w {
+                    let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+                    let d = pts
+                        .windows(2)
+                        .map(|s| segment_distance((px, py), s[0], s[1]))
+                        .fold(f32::MAX, f32::min);
+                    self.blend(x, y, c, (r + 0.5 - d).clamp(0.0, 1.0));
+                }
+            }
+        }
+        /// The icon's straight-alpha RGBA pixels with their top left at (x, y).
+        fn image(&mut self, rgba: &[u8], size: usize, x0: usize, y0: usize) {
+            for y in 0..size {
+                for x in 0..size {
+                    let p = &rgba[(y * size + x) * 4..][..4];
+                    let c = [f32::from(p[0]), f32::from(p[1]), f32::from(p[2])];
+                    self.blend(x0 + x, y0 + y, c, f32::from(p[3]) / 255.0);
+                }
+            }
+        }
+        fn bmp(&self) -> Vec<u8> {
+            let row = (self.w * 3).div_ceil(4) * 4;
+            let size = 54 + row * self.h;
+            let mut out = Vec::with_capacity(size);
+            out.extend(b"BM");
+            out.extend((size as u32).to_le_bytes());
+            out.extend([0u8; 4]);
+            out.extend(54u32.to_le_bytes());
+            out.extend(40u32.to_le_bytes());
+            out.extend((self.w as i32).to_le_bytes());
+            out.extend((self.h as i32).to_le_bytes());
+            out.extend(1u16.to_le_bytes());
+            out.extend(24u16.to_le_bytes());
+            out.extend([0u8; 24]);
+            for y in (0..self.h).rev() {
+                let start = out.len();
+                for p in &self.px[y * self.w..][..self.w] {
+                    out.extend([p[2], p[1], p[0]].map(|v| v.round() as u8));
+                }
+                out.resize(start + row, 0);
+            }
+            out
+        }
+    }
+    fn segment_distance(p: (f32, f32), a: (f32, f32), b: (f32, f32)) -> f32 {
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let len = dx * dx + dy * dy;
+        let t = if len == 0.0 {
+            0.0
+        } else {
+            (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / len).clamp(0.0, 1.0)
+        };
+        ((p.0 - a.0 - t * dx).powi(2) + (p.1 - a.1 - t * dy).powi(2)).sqrt()
+    }
+
+    for (pct, s) in [
+        (100, 1.0f32),
+        (125, 1.25),
+        (150, 1.5),
+        (175, 1.75),
+        (200, 2.0),
+    ] {
+        let (w, h) = ((164.0 * s).round() as usize, (314.0 * s).round() as usize);
+        let mut c = Canvas::new(w, h, PAPER);
+        // Ruled lines and the red margin line of a school notebook.
+        let mut y = 30.0 * s;
+        while y < h as f32 {
+            c.stroke(&[(0.0, y), (w as f32, y)], 1.0 * s, RULE);
+            y += 22.0 * s;
+        }
+        c.stroke(&[(26.0 * s, 0.0), (26.0 * s, h as f32)], 1.2 * s, MARGIN);
+        // The logo, circled in pen as the app circles the current page.
+        let size = (72.0 * s).round() as usize;
+        let (cx, cy) = (88.0 * s, 118.0 * s);
+        let x0 = (cx - size as f32 / 2.0).round() as usize;
+        let y0 = (cy - size as f32 / 2.0).round() as usize;
+        c.image(&render(size as u32, Tone::Active), size, x0, y0);
+        let lp: Vec<(f32, f32)> = (0..=100)
+            .map(|i| {
+                // A little more than one turn, slightly tilted, like a quick loop.
+                let t = i as f32 / 100.0 * std::f32::consts::TAU * 1.08 - 0.9;
+                let (rx, ry) = (58.0 * s * (1.0 + 0.03 * t.sin()), 52.0 * s);
+                let (x, y) = (rx * t.cos(), ry * t.sin());
+                let tilt: f32 = -0.12;
+                (
+                    cx + x * tilt.cos() - y * tilt.sin(),
+                    cy + x * tilt.sin() + y * tilt.cos(),
+                )
+            })
+            .collect();
+        c.stroke(&lp, 2.4 * s, PEN);
+        // A tick, as on the app's switches.
+        c.stroke(
+            &[
+                (56.0 * s, 228.0 * s),
+                (72.0 * s, 244.0 * s),
+                (112.0 * s, 200.0 * s),
+            ],
+            4.0 * s,
+            PEN,
+        );
+        let name = format!("wizard-{pct}.bmp");
+        std::fs::write(dir.join(&name), c.bmp()).expect("write installer art");
+        println!("target/installer-art/{name}");
+
+        let n = (55.0 * s).round() as usize;
+        let mut c = Canvas::new(n, n, WHITE);
+        let size = (44.0 * s).round() as usize;
+        let at = (n - size) / 2;
+        c.image(&render(size as u32, Tone::Active), size, at, at);
+        let name = format!("small-{pct}.bmp");
+        std::fs::write(dir.join(&name), c.bmp()).expect("write installer art");
+        println!("target/installer-art/{name}");
+    }
 }
 
 /// The icon for the web, on the same 120-unit grid as `phitpup_core::icon`

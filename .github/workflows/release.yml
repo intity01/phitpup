@@ -38,6 +38,7 @@ jobs:
           if (-not (Test-Path $iscc)) {
             choco install innosetup -y --no-progress
           }
+          cargo xtask installer-art
           & $iscc /DSourceExe=..\dist\phitpup.exe /DUpdateExe=..\target\release\phitpup-update.exe /DOutputDir=..\dist installer\phitpup.iss
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $hash = (Get-FileHash dist/PhitPup-Setup.exe -Algorithm SHA256).Hash.ToLower()
