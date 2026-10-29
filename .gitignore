@@ -5,3 +5,9 @@
 # Built by the Pages workflow
 /site/phitpup.wasm
 /site/release.json
+
+# Kept on the maintainer's machine only
+/.cargo/config.toml
+/SPEC.md
+/research.html
+/testing/

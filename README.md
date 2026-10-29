@@ -49,7 +49,8 @@ cargo build --release -p phitpup-web --target wasm32-unknown-unknown   # the web
 ```
 
 The installer is built with [Inno Setup](https://jrsoftware.org/isinfo.php) 6.5 from
-`installer/phitpup.iss`: after the release build and `cargo xtask installer-art`,
+`installer/phitpup.iss`: after the release build and
+`cargo run --release -p xtask -- installer-art`,
 `iscc installer\phitpup.iss` writes `target\installer\PhitPup-Setup.exe`.
 
 | Path | What |
@@ -60,8 +61,7 @@ The installer is built with [Inno Setup](https://jrsoftware.org/isinfo.php) 6.5 
 | `crates/phitpup-web` | The core for the website (wasm32, no bindings crate). |
 | `installer` | The Inno Setup script for `PhitPup-Setup.exe`. |
 | `site/` | The website (GitHub Pages). |
-| `xtask` | Layout table generation, model training, icon export. |
-| `SPEC.md` | Decisions and milestones. |
+| `xtask` | Layout table generation, model training, icon export. `cargo xtask <task>` in these docs is `cargo run --release -p xtask -- <task>`. |
 
 ## Credits
 
