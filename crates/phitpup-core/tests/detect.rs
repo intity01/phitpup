@@ -111,6 +111,18 @@ fn numbers_stay() {
 }
 
 #[test]
+fn single_english_words_typed_on_thai() {
+    let d = kedmanee(Thresholds::SUGGEST);
+    for (typed, meant) in [("ร", "i"), ("ฟ", "a")] {
+        let v = d.judge(typed).unwrap();
+        assert!(v.flip, "{typed}");
+        assert_eq!(v.converted, meant);
+    }
+    assert!(!d.judge("ก").unwrap().flip, "d is not a word");
+    assert!(!kedmanee(Thresholds::AUTO).judge("ร").unwrap().flip);
+}
+
+#[test]
 fn nothing_to_judge() {
     let d = kedmanee(Thresholds::SUGGEST);
     assert!(d.judge("😀").is_none());

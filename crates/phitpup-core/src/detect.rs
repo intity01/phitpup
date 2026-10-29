@@ -205,13 +205,19 @@ impl Detector {
                 (margin, converted.chars().any(|c| c.is_ascii_alphabetic()))
             }
         };
-        let long_enough = word.chars().count() >= thresholds.min_chars;
+        let n = word.chars().count();
+        // "I" and "a" are words on their own, and a lone Thai letter is not:
+        // ร or ฟ by itself is that word typed in the wrong layout.
+        let english_letter = direction == Direction::ToEnglish
+            && n == 1
+            && thresholds.min_chars <= 2
+            && matches!(converted.as_str(), "i" | "I" | "a" | "A");
         Some(Verdict {
             direction,
             converted,
             margin,
             vetoed: !allowed,
-            flip: allowed && long_enough && margin > 0.0,
+            flip: allowed && (english_letter || (n >= thresholds.min_chars && margin > 0.0)),
         })
     }
 }
