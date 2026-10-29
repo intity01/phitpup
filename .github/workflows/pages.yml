@@ -1,6 +1,7 @@
 # Builds the website (site/ plus the core compiled to WebAssembly for the
 # try-it box) and publishes it to GitHub Pages. release.json carries the
-# latest release's version, size and SHA-256 for the download section.
+# latest release's version, size and SHA-256 (of phitpup.exe and, from
+# 0.3.1, PhitPup-Setup.exe) for the download section.
 name: Website
 
 on:
@@ -42,7 +43,12 @@ jobs:
           if tag=$(gh release view --json tagName -q .tagName 2>/dev/null); then
             gh release download "$tag" -p phitpup.exe.sha256 -O sha.txt
             size=$(gh release view "$tag" --json assets -q '.assets[] | select(.name == "phitpup.exe") | .size')
-            printf '{"version":"%s","sha256":"%s","size":%s}\n' "${tag#v}" "$(cut -d' ' -f1 sha.txt)" "$size" > _site/release.json
+            setup=""
+            if gh release download "$tag" -p PhitPup-Setup.exe.sha256 -O setup.txt 2>/dev/null; then
+              setup_size=$(gh release view "$tag" --json assets -q '.assets[] | select(.name == "PhitPup-Setup.exe") | .size')
+              setup=$(printf ',"setup":{"sha256":"%s","size":%s}' "$(cut -d' ' -f1 setup.txt)" "$setup_size")
+            fi
+            printf '{"version":"%s","sha256":"%s","size":%s%s}\n' "${tag#v}" "$(cut -d' ' -f1 sha.txt)" "$size" "$setup" > _site/release.json
             cat _site/release.json
           fi
       - uses: actions/configure-pages@v5

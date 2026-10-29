@@ -39,6 +39,9 @@ use crate::{APP, hook, settings, window};
 const WM_TRAY: u32 = WM_APP + 10;
 /// Sent by a second copy of PhitPup: open the settings window.
 const WM_OPEN_SETTINGS: u32 = WM_APP + 11;
+/// Sent by the installer and uninstaller (installer/phitpup.iss). Not
+/// WM_CLOSE: older versions would destroy the window and keep running.
+const WM_QUIT_REQUEST: u32 = WM_APP + 12;
 const CLASS: &str = "PhitPupTray";
 const RELOAD_TIMER: usize = 1;
 /// Checks now and then whether the update reminder is due.
@@ -467,6 +470,11 @@ unsafe extern "system" fn window_proc(
                 WM_RBUTTONUP | WM_CONTEXTMENU => show_menu(hwnd),
                 _ => {}
             }
+            0
+        }
+        WM_QUIT_REQUEST => {
+            debug!("asked to quit");
+            quit();
             0
         }
         WM_TIMER if wparam == REMIND_TIMER => {

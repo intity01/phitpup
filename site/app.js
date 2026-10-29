@@ -6,7 +6,8 @@
 
 const REPO = document.documentElement.dataset.repo;
 const RELEASES = `https://github.com/${REPO}/releases`;
-const DOWNLOAD = `${RELEASES}/latest/download/phitpup.exe`;
+const PORTABLE = `${RELEASES}/latest/download/phitpup.exe`;
+const SETUP = `${RELEASES}/latest/download/PhitPup-Setup.exe`;
 
 // ---------------------------------------------------------------- language
 
@@ -21,7 +22,7 @@ const EN = {
   "hero.lead": "Forgot to switch to Thai and got <code>l;ylfu</code>? PhitPup sees you meant <b>สวัสดี</b> and fixes it on the spot. No deleting, no retyping.",
   "hero.download": "Download free",
   "hero.try": "Try it in the browser",
-  "hero.meta": "One file, nothing to install · about 1 MB · open source (MIT)",
+  "hero.meta": "Easy install, no admin rights needed · about 2.5 MB · open source (MIT)",
   "try.title": "Try it",
   "try.lead": "Type Thai while your keyboard is still on English (or the other way round). It all runs in your browser; nothing is sent anywhere.",
   "try.layout": "Thai layout",
@@ -49,12 +50,13 @@ const EN = {
   "privacy.title": "What you type never leaves your computer",
   "privacy.p": "PhitPup has no networking code at all. It tells wrong-layout words apart with small statistics tables built into the program, remembers only the word you are typing, forgets it as soon as you click or switch windows, and all of its code is open to read.",
   "install.title": "Set up in a minute",
-  "install.1.t": "Download phitpup.exe",
-  "install.1.p": "A single file, nothing to install. Put it anywhere, for example in Documents.",
+  "install.1.t": "Download the installer",
+  "install.1.p": "PhitPup-Setup.exe installs for your account only, with no admin rights. PhitPup then shows up in the Start menu and can be removed from Windows Settings.",
+  "install.portable": "Or use the single file, nothing to install (phitpup.exe)",
   "install.1.b": "Download the latest version",
   "install.hash": "SHA-256:",
-  "install.2.t": "Open it",
-  "install.2.p": "If a blue \"Windows protected your PC\" window appears, click <b>More info</b>, then <b>Run anyway</b>. PhitPup does not have a paid code-signing certificate yet.",
+  "install.2.t": "Run the installer",
+  "install.2.p": "If a blue \"Windows protected your PC\" window appears, click <b>More info</b>, then <b>Run anyway</b>. PhitPup does not have a paid code-signing certificate yet. Then click Next until it is done.",
   "install.3.t": "Start typing",
   "install.3.p": "The orange p icon sits next to the clock. Click it to open the settings, pick a mode and make PhitPup start with Windows.",
   "faq.title": "Questions",
@@ -69,7 +71,7 @@ const EN = {
   "faq.mac.q": "Is there a macOS or phone version?",
   "faq.mac.a": "Windows only for now. The core is already separate from the Windows-specific parts, so macOS is possible later.",
   "faq.remove.q": "How do I remove it?",
-  "faq.remove.a": "Right-click the icon, choose Quit, and delete phitpup.exe. If you turned on Start with Windows, turn it off first. Settings live in %APPDATA%\\PhitPup; delete that folder too.",
+  "faq.remove.a": "Open Windows Settings, go to Apps &gt; Installed apps, pick PhitPup and click Uninstall. If you use the single file, turn off Start with Windows, right-click the icon, choose Quit and delete phitpup.exe. Settings live in %APPDATA%\\PhitPup; delete that folder too.",
   "footer.made": "Made by",
   "footer.source": "Source code",
   "status.fixed": "Fixed",
@@ -77,7 +79,8 @@ const EN = {
   "status.nothing": "Nothing to fix",
   "status.loading": "Loading PhitPup…",
   "status.failed": "The try-it box could not load in this browser.",
-  "meta.release": (v, size) => `Version ${v} · ${size} · one file, nothing to install · open source (MIT)`,
+  "meta.release": (v, size) => `Version ${v} · ${size} · installs without admin rights · open source (MIT)`,
+  "meta.portable": (v, size) => `Version ${v} · ${size} · one file, nothing to install · open source (MIT)`,
 };
 
 const TH_EXTRA = {
@@ -88,7 +91,8 @@ const TH_EXTRA = {
   "status.nothing": "ไม่มีอะไรต้องแก้",
   "status.loading": "กำลังโหลดผิดปุ๊บ…",
   "status.failed": "ช่องทดลองโหลดไม่ได้ในเบราว์เซอร์นี้",
-  "meta.release": (v, size) => `รุ่น ${v} · ${size} · ไฟล์เดียวไม่ต้องติดตั้ง · โอเพนซอร์ส MIT`,
+  "meta.release": (v, size) => `รุ่น ${v} · ${size} · ติดตั้งโดยไม่ต้องใช้สิทธิ์ admin · โอเพนซอร์ส MIT`,
+  "meta.portable": (v, size) => `รุ่น ${v} · ${size} · ไฟล์เดียวไม่ต้องติดตั้ง · โอเพนซอร์ส MIT`,
 };
 
 const TH = { ...TH_EXTRA };
@@ -130,16 +134,25 @@ document.getElementById("lang").addEventListener("click", () => setLang(lang ===
 
 // ---------------------------------------------------------------- release
 
-let release = null; // { version, sha256, size } written by the Pages workflow
+// { version, sha256, size, setup: { sha256, size } } written by the Pages
+// workflow. Releases before 0.3.1 have no installer; then the download
+// buttons fetch the single file.
+let release = null;
 
 function showRelease() {
   if (!release) return;
-  const mb = (release.size / 1048576).toFixed(1);
-  document.getElementById("meta").textContent = t("meta.release", release.version, `${mb} MB`);
-  document.getElementById("sha").textContent = release.sha256;
+  const file = release.setup ?? release;
+  const mb = (file.size / 1048576).toFixed(1);
+  const meta = release.setup ? "meta.release" : "meta.portable";
+  document.getElementById("meta").textContent = t(meta, release.version, `${mb} MB`);
+  document.getElementById("sha").textContent = file.sha256;
+  for (const id of ["download", "download-2"]) {
+    document.getElementById(id).href = release.setup ? SETUP : PORTABLE;
+  }
 }
 
-for (const id of ["download", "download-2"]) document.getElementById(id).href = DOWNLOAD;
+for (const id of ["download", "download-2"]) document.getElementById(id).href = PORTABLE;
+document.getElementById("portable").href = PORTABLE;
 document.getElementById("source").href = `https://github.com/${REPO}`;
 
 // Ask the server every time: a cached copy would show the previous version

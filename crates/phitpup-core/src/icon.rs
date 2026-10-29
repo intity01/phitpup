@@ -365,10 +365,12 @@ fn entry_head(size: u32) -> [u8; 8] {
 }
 
 /// A compiled resource file (`.res`) with the images as icon group 1, the
-/// one Explorer shows for the exe. MSVC's linker takes it as an input.
-pub fn res(images: &[(u32, Vec<u8>)]) -> Vec<u8> {
+/// one Explorer shows for the exe, and `version` (from [`version_info`]) if
+/// given. MSVC's linker takes it as an input.
+pub fn res(images: &[(u32, Vec<u8>)], version: Option<&[u8]>) -> Vec<u8> {
     const RT_ICON: u16 = 3;
     const RT_GROUP_ICON: u16 = 14;
+    const RT_VERSION: u16 = 16;
     let mut out = Vec::new();
     resource(&mut out, 0, 0, &[]); // the empty entry every .res starts with
     let mut group = vec![0u8, 0, 1, 0];
@@ -381,7 +383,87 @@ pub fn res(images: &[(u32, Vec<u8>)]) -> Vec<u8> {
         group.extend(id.to_le_bytes());
     }
     resource(&mut out, RT_GROUP_ICON, 1, &group);
+    if let Some(v) = version {
+        resource(&mut out, RT_VERSION, 1, v);
+    }
     out
+}
+
+/// A `VS_VERSIONINFO` block: what Explorer shows under Properties > Details,
+/// and what installers and antivirus read. `version` is "major.minor.patch";
+/// `strings` are pairs like ("ProductName", "PhitPup"), in US English.
+pub fn version_info(version: &str, strings: &[(&str, &str)]) -> Vec<u8> {
+    let mut parts = version.split('.').map(|p| p.parse::<u16>().unwrap_or(0));
+    let mut part = || parts.next().unwrap_or(0);
+    let (major, minor, patch) = (part(), part(), part());
+    let ms = (u32::from(major) << 16) | u32::from(minor);
+    let ls = u32::from(patch) << 16;
+    let mut fixed = Vec::new();
+    for v in [
+        0xFEEF_04BD, // signature
+        0x0001_0000, // structure version
+        ms,
+        ls, // file version
+        ms,
+        ls,          // product version
+        0x3F,        // flags mask
+        0,           // flags
+        0x0004_0004, // VOS_NT_WINDOWS32
+        1,           // VFT_APP
+        0,
+        0,
+        0, // subtype, date
+    ] {
+        fixed.extend(u32::to_le_bytes(v));
+    }
+    let table: Vec<u8> = strings
+        .iter()
+        .flat_map(|(k, v)| {
+            let text = utf16(v);
+            version_node(k, &text, (text.len() / 2) as u16, 1, &[])
+        })
+        .collect();
+    let table = version_node("040904B0", &[], 0, 1, &table);
+    let string_info = version_node("StringFileInfo", &[], 0, 1, &table);
+    let translation = [0x09u8, 0x04, 0xB0, 0x04]; // US English, Unicode
+    let var = version_node("Translation", &translation, 4, 0, &[]);
+    let var_info = version_node("VarFileInfo", &[], 0, 1, &var);
+    let children = [string_info, var_info].concat();
+    version_node("VS_VERSION_INFO", &fixed, fixed.len() as u16, 0, &children)
+}
+
+/// One node of a version block: length, value length (in words for text,
+/// bytes otherwise), type (1 = text), key, value, then the children, each
+/// part starting on a 4-byte boundary.
+fn version_node(key: &str, value: &[u8], value_len: u16, kind: u16, children: &[u8]) -> Vec<u8> {
+    let mut out = vec![0, 0];
+    out.extend(value_len.to_le_bytes());
+    out.extend(kind.to_le_bytes());
+    out.extend(utf16(key));
+    let pad = |out: &mut Vec<u8>| {
+        while !out.len().is_multiple_of(4) {
+            out.push(0);
+        }
+    };
+    pad(&mut out);
+    out.extend(value);
+    if !children.is_empty() {
+        pad(&mut out);
+        out.extend(children);
+    }
+    let len = out.len() as u16;
+    out[..2].copy_from_slice(&len.to_le_bytes());
+    // The next sibling starts aligned; the padding is not counted.
+    pad(&mut out);
+    out
+}
+
+/// UTF-16LE with the closing NUL.
+fn utf16(s: &str) -> Vec<u8> {
+    s.encode_utf16()
+        .chain([0])
+        .flat_map(u16::to_le_bytes)
+        .collect()
 }
 
 fn resource(out: &mut Vec<u8>, kind: u16, id: u16, data: &[u8]) {
@@ -437,8 +519,26 @@ mod tests {
             .iter()
             .map(|&s| (s, png(&render(s, Tone::Active), s)))
             .collect();
-        let r = res(&imgs);
+        let r = res(&imgs, None);
         assert_eq!(r.len() % 4, 0);
         assert_eq!(&r[..8], &[0, 0, 0, 0, 32, 0, 0, 0]);
+    }
+
+    #[test]
+    fn version_info_holds_numbers_and_strings() {
+        let v = version_info("0.3.12", &[("ProductName", "PhitPup")]);
+        assert_eq!(usize::from(u16::from_le_bytes([v[0], v[1]])), v.len());
+        let at = v
+            .windows(4)
+            .position(|w| w == [0xBD, 0x04, 0xEF, 0xFE])
+            .unwrap();
+        // File version 0.3.12.0, after the signature and structure version.
+        assert_eq!(&v[at + 8..at + 16], &[3, 0, 0, 0, 0, 0, 12, 0]);
+        assert!(
+            v.windows(utf16("PhitPup").len())
+                .any(|w| w == utf16("PhitPup"))
+        );
+        let r = res(&[], Some(&v));
+        assert_eq!(r.len() % 4, 0);
     }
 }

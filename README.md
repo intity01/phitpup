@@ -24,9 +24,11 @@ in progress.
 
 ## Download
 
-Get `phitpup.exe` from [Releases](../../releases/latest) (Windows 10/11, x64). It is a single file;
-nothing to install. Check it against the published SHA-256. Windows SmartScreen may warn because the
-program is not code-signed yet: **More info → Run anyway**.
+Get `PhitPup-Setup.exe` from [Releases](../../releases/latest) (Windows 10/11, x64). It installs for
+your account only, with no admin rights, adds a Start menu entry and can be removed from Windows
+Settings. `phitpup.exe` from the same page is the program alone, which runs without installing.
+Check either against the published SHA-256. Windows SmartScreen may warn because the program is not
+code-signed yet: **More info → Run anyway**.
 
 ## Build
 
@@ -38,11 +40,16 @@ cargo test --workspace
 cargo build --release -p phitpup-web --target wasm32-unknown-unknown   # the website's try-it box
 ```
 
+The installer is built with [Inno Setup](https://jrsoftware.org/isinfo.php) 6.5 from
+`installer/phitpup.iss`: `iscc installer\phitpup.iss` after the release build writes
+`target\installer\PhitPup-Setup.exe`.
+
 | Path | What |
 |---|---|
 | `crates/phitpup-core` | Layouts, conversion, detector, fixer, settings, icon. No OS calls; builds for WASM. |
 | `crates/phitpup` | The Windows app: keyboard hook, injection, bubble, tray, settings window. |
 | `crates/phitpup-web` | The core for the website (wasm32, no bindings crate). |
+| `installer` | The Inno Setup script for `PhitPup-Setup.exe`. |
 | `site/` | The website (GitHub Pages). |
 | `xtask` | Layout table generation, model training, icon export. |
 | `SPEC.md` | Decisions and milestones. |

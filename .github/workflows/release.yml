@@ -1,5 +1,6 @@
-# Push a tag like v0.1.0 to build phitpup.exe and publish it as a GitHub
-# release with its SHA-256, then rebuild the website so it shows the new hash.
+# Push a tag like v0.1.0 to build phitpup.exe and its installer
+# (installer/phitpup.iss) and publish both as a GitHub release with their
+# SHA-256, then rebuild the website so it shows the new hashes.
 name: Release
 
 on:
@@ -30,6 +31,18 @@ jobs:
           $hash = (Get-FileHash dist/phitpup.exe -Algorithm SHA256).Hash.ToLower()
           "$hash  phitpup.exe" | Out-File dist/phitpup.exe.sha256 -Encoding ascii -NoNewline
           "SHA256 $hash"
+      - name: Installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          & $iscc /DSourceExe=..\dist\phitpup.exe /DOutputDir=..\dist installer\phitpup.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $hash = (Get-FileHash dist/PhitPup-Setup.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  PhitPup-Setup.exe" | Out-File dist/PhitPup-Setup.exe.sha256 -Encoding ascii -NoNewline
+          "SHA256 $hash"
       - name: Publish
         shell: pwsh
         env:
@@ -37,15 +50,19 @@ jobs:
         run: |
           $tag = "${{ github.ref_name }}"
           $hash = (Get-Content dist/phitpup.exe.sha256).Split(" ")[0]
+          $setup = (Get-Content dist/PhitPup-Setup.exe.sha256).Split(" ")[0]
           $notes = @"
-          Download **phitpup.exe** below and run it; there is nothing to install.
+          Download **PhitPup-Setup.exe** below and run it. It installs for your account only (no admin rights), adds PhitPup to the Start menu and can be removed from Windows Settings.
+          Or download **phitpup.exe**, a single file that runs without installing.
 
-          SHA-256: ``$hash``
+          SHA-256:
+          - PhitPup-Setup.exe: ``$setup``
+          - phitpup.exe: ``$hash``
 
           Windows may say "Windows protected your PC": click **More info**, then **Run anyway**.
           This build was made by GitHub Actions from the source at this tag.
           "@
-          gh release create $tag dist/phitpup.exe dist/phitpup.exe.sha256 --title "PhitPup $($tag.TrimStart('v'))" --notes $notes
+          gh release create $tag dist/PhitPup-Setup.exe dist/PhitPup-Setup.exe.sha256 dist/phitpup.exe dist/phitpup.exe.sha256 --title "PhitPup $($tag.TrimStart('v'))" --notes $notes
       - name: Update the website
         env:
           GH_TOKEN: ${{ github.token }}
