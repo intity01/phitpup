@@ -54,6 +54,30 @@ impl Default for Thresholds {
     }
 }
 
+/// Abbreviations typed in English on purpose, which the English letter
+/// model cannot tell from Thai typed on the English layout ("pdf" reads as
+/// ยกด). Left out: those that spell a common Thai word on Kedmanee or
+/// Pattachote, such as cd (แก, ลง), pc (แล), fb (ดิ) and ok (นา).
+pub const ABBREVIATIONS: &[&str] = &[
+    "afaik", "afk", "ai", "aka", "api", "apk", "asap", "bcc", "bkk", "brb", "bts", "btw", "ceo",
+    "covid", "cpu", "css", "csv", "cto", "diy", "dm", "dns", "doc", "docx", "dvd", "eta", "etc",
+    "eu", "exe", "faq", "fps", "ftp", "fyi", "gg", "git", "gps", "gpt", "gpu", "hdd", "hdmi", "hr",
+    "html", "http", "https", "ide", "idk", "ig", "imho", "imo", "ios", "iot", "jpeg", "jpg", "js",
+    "json", "kpi", "lan", "lcd", "lgtm", "llm", "lmao", "lol", "mba", "mp3", "mp4", "mrt", "nas",
+    "nft", "npm", "nvm", "okr", "oled", "otp", "pdf", "phd", "pls", "plz", "png", "ppt", "pptx",
+    "ps5", "qr", "ram", "rgb", "roi", "rom", "sdk", "seo", "smh", "sms", "sql", "ssd", "ssh",
+    "svg", "tba", "tbh", "thx", "todo", "tsv", "tv", "txt", "ty", "uae", "uri", "url", "usa",
+    "usb", "ux", "vpn", "vs", "wan", "wifi", "wip", "wtf", "www", "xls", "xlsx", "xml", "yaml",
+    "yt", "zip",
+];
+
+/// Whether `word` is one of the [`ABBREVIATIONS`], in any case, or its plural.
+fn is_abbreviation(word: &str) -> bool {
+    let w = word.to_ascii_lowercase();
+    let known = |w: &str| ABBREVIATIONS.binary_search(&w).is_ok();
+    known(&w) || w.strip_suffix('s').is_some_and(known)
+}
+
 /// The bubble's shortest word: see [`Detector::judge_typing`].
 const TYPING_MIN_CHARS: usize = 3;
 
@@ -253,7 +277,10 @@ impl Detector {
         let (margin, allowed) = match direction {
             Direction::ToThai => {
                 let margin = en_cost(word) - th_cost(&converted) - thresholds.to_thai;
-                (margin, !looks_numeric(word) && check(&converted))
+                (
+                    margin,
+                    !looks_numeric(word) && !is_abbreviation(word) && check(&converted),
+                )
             }
             Direction::ToEnglish => {
                 let penalty = if check(word) {

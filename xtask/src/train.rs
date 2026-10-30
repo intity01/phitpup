@@ -182,7 +182,12 @@ pub fn english_words(root: &Path) {
         }
     }
     let rare = ENGLISH_LEVELS.last().unwrap().1;
-    for w in ENGLISH_EXTRA {
+    // The abbreviations the detector leaves in English are known words
+    // here too, so no slip fix turns "gps" into "gas".
+    let abbreviations = phitpup_core::detect::ABBREVIATIONS
+        .iter()
+        .filter(|w| w.bytes().all(|b| b.is_ascii_lowercase()));
+    for w in ENGLISH_EXTRA.iter().chain(abbreviations) {
         words.entry((*w).to_owned()).or_insert(rare);
     }
     let mut words: Vec<(String, u16)> = words

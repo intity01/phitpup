@@ -168,3 +168,35 @@ fn manual_flips_by_script() {
     );
     assert_eq!(d.manual("   "), None);
 }
+
+#[test]
+fn abbreviations_stay_english() {
+    use phitpup_core::Converter;
+    use phitpup_core::detect::ABBREVIATIONS;
+    assert!(ABBREVIATIONS.is_sorted(), "kept sorted for the lookup");
+    let thai: std::collections::HashSet<&str> = Model::embedded()
+        .lang(phitpup_core::model::Lang::Thai)
+        .lexicon()
+        .map(|(w, _)| w)
+        .collect();
+    for layout in [Layout::kedmanee(), Layout::pattachote()] {
+        let d = Detector::new(&Layout::us_qwerty(), &layout);
+        let to_th = Converter::new(&Layout::us_qwerty(), &layout);
+        for a in ABBREVIATIONS {
+            let as_thai = to_th.convert(a);
+            assert!(
+                !thai.contains(as_thai.as_str()),
+                "{a} spells the Thai word {as_thai}"
+            );
+            for w in [a.to_string(), a.to_uppercase(), format!("{a}s")] {
+                for th in [Thresholds::SUGGEST, Thresholds::AUTO] {
+                    let v = d.judge_with(&w, th);
+                    assert!(!v.is_some_and(|v| v.flip), "{w}");
+                }
+            }
+        }
+    }
+    // Thai typed on the English layout is still caught.
+    let d = kedmanee(Thresholds::SUGGEST);
+    assert!(d.judge("l;ylfu").unwrap().flip);
+}
