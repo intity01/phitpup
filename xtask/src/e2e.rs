@@ -25,11 +25,12 @@ use windows_sys::Win32::System::DataExchange::{
 use windows_sys::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
 use windows_sys::Win32::System::StationsAndDesktops::{CloseDesktop, OpenInputDesktop};
 use windows_sys::Win32::System::Threading::{
-    OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    CreateProcessW, DETACHED_PROCESS, OpenProcess, PROCESS_INFORMATION,
+    PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW, STARTUPINFOW,
 };
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyboardLayout, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
-    LoadKeyboardLayoutW, SendInput, VK_BACK, VK_CONTROL, VK_DELETE, VK_ESCAPE, VK_MENU, VK_SHIFT,
+    LoadKeyboardLayoutW, SendInput, VK_BACK, VK_CONTROL, VK_DELETE, VK_ESCAPE, VK_F24, VK_SHIFT,
     VK_TAB, VkKeyScanExW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -389,18 +390,10 @@ impl Run {
         }
         set_clipboard_text(self.clipboard.as_deref().unwrap_or(""));
         if let Some(exe) = &self.restart {
-            // Not on our output: it would keep the pipe of whoever ran us open.
-            let started = Command::new(exe)
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn();
-            match started {
-                Ok(_) => println!("Started your PhitPup again ({}).", exe.display()),
-                Err(e) => println!(
-                    "Could not start your PhitPup again ({e}): {}",
-                    exe.display()
-                ),
+            if detached(exe) {
+                println!("Started your PhitPup again ({}).", exe.display());
+            } else {
+                println!("Could not start your PhitPup again: {}", exe.display());
             }
         }
     }
@@ -410,6 +403,37 @@ impl Run {
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
+}
+
+/// Starts `exe` with no handles of ours. `Command` passes on every
+/// inheritable one, and a PhitPup that keeps running would hold the output
+/// pipe of whoever ran us open, so `cargo xtask e2e | ...` never ends.
+fn detached(exe: &Path) -> bool {
+    let mut line = wide(&format!("\"{}\"", exe.display()));
+    // SAFETY: a zeroed STARTUPINFOW with its size, a writable command line,
+    // and the returned handles closed.
+    unsafe {
+        let mut si: STARTUPINFOW = std::mem::zeroed();
+        si.cb = size_of::<STARTUPINFOW>() as u32;
+        let mut pi: PROCESS_INFORMATION = std::mem::zeroed();
+        let ok = CreateProcessW(
+            std::ptr::null(),
+            line.as_mut_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            0, // inherit nothing
+            DETACHED_PROCESS,
+            std::ptr::null(),
+            std::ptr::null(),
+            &si,
+            &mut pi,
+        );
+        if ok != 0 {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+        }
+        ok != 0
+    }
 }
 
 fn find(class: &str) -> HWND {
@@ -496,14 +520,15 @@ fn unlocked() -> bool {
 }
 
 /// Brings `hwnd` to the front. Windows lets a process do that only right
-/// after a key press, so an Alt tap goes first.
+/// after a key press, so F24 is tapped first: unlike Alt, it does nothing
+/// in the app (Alt would open Notepad's menu shortcuts and eat the next keys).
 fn front(hwnd: HWND) -> Result<(), String> {
     // SAFETY: plain window calls.
     unsafe {
         if GetForegroundWindow() == hwnd {
             return Ok(());
         }
-        tap(VK_MENU, &[]);
+        tap(VK_F24, &[]);
         SetForegroundWindow(hwnd);
         pause(300);
         if GetForegroundWindow() != hwnd {
