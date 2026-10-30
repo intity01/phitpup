@@ -555,23 +555,35 @@ fn window_text(hwnd: HWND) -> String {
     String::from_utf16_lossy(&buf[..n.max(0) as usize])
 }
 
-/// The visible top-level window whose title contains `part`.
+/// The visible top-level window titled exactly `part` (LINE's is just
+/// "LINE"), or else the first whose title contains it.
 fn window_titled(part: &str) -> HWND {
-    struct Search<'a>(&'a str, HWND);
+    struct Search<'a>(&'a str, bool, HWND);
     unsafe extern "system" fn each(hwnd: HWND, lparam: LPARAM) -> i32 {
         // SAFETY: lparam is the Search below, alive for the call.
         let s = unsafe { &mut *(lparam as *mut Search) };
+        let title = window_text(hwnd);
+        let fits = if s.1 {
+            title == s.0
+        } else {
+            title.contains(s.0)
+        };
         // SAFETY: plain query.
-        if unsafe { IsWindowVisible(hwnd) } != 0 && window_text(hwnd).contains(s.0) {
-            s.1 = hwnd;
+        if unsafe { IsWindowVisible(hwnd) } != 0 && fits {
+            s.2 = hwnd;
             return 0;
         }
         1
     }
-    let mut s = Search(part, std::ptr::null_mut());
-    // SAFETY: the callback only runs during the call.
-    unsafe { EnumWindows(Some(each), &mut s as *mut Search as LPARAM) };
-    s.1
+    for exact in [true, false] {
+        let mut s = Search(part, exact, std::ptr::null_mut());
+        // SAFETY: the callback only runs during the call.
+        unsafe { EnumWindows(Some(each), &mut s as *mut Search as LPARAM) };
+        if !s.2.is_null() {
+            return s.2;
+        }
+    }
+    std::ptr::null_mut()
 }
 
 fn exe_of(hwnd: HWND) -> Option<PathBuf> {
