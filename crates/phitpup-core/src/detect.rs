@@ -54,6 +54,9 @@ impl Default for Thresholds {
     }
 }
 
+/// The bubble's shortest word: see [`Detector::judge_typing`].
+const TYPING_MIN_CHARS: usize = 3;
+
 /// Extra Thai cost for text that breaks Thai spelling rules.
 const INVALID_THAI_PENALTY: f32 = 4.0;
 /// Extra English cost for capitals mid-word ("gLL", "lkEd"), which is what
@@ -62,12 +65,17 @@ const MIXED_CASE_PENALTY: f32 = 2.0;
 
 /// English cost including the capitalisation pattern. lower, Capitalised and
 /// UPPER are normal; anything else is not.
-fn english_cost(model: &Model, text: &str) -> f32 {
+fn english_cost(model: &Model, text: &str, open: bool) -> f32 {
     let letters: Vec<char> = text.chars().filter(char::is_ascii_alphabetic).collect();
     let upper = letters.iter().filter(|c| c.is_ascii_uppercase()).count();
     let normal =
         upper == 0 || upper == letters.len() || (upper == 1 && letters[0].is_ascii_uppercase());
-    model.lang(Lang::English).cost(text) + if normal { 0.0 } else { MIXED_CASE_PENALTY }
+    let en = model.lang(Lang::English);
+    (if open {
+        en.cost_open(text)
+    } else {
+        en.cost(text)
+    }) + if normal { 0.0 } else { MIXED_CASE_PENALTY }
 }
 
 /// Digits with number punctuation (12.5, 10:30, 1/2) stay as typed.
@@ -98,6 +106,8 @@ pub struct Detector {
     english: Layout,
     thai: Layout,
     model: &'static Model,
+    /// The Thai lexicon, sorted, to see what a word being typed could become.
+    thai_words: Vec<String>,
     pub thresholds: Thresholds,
 }
 
@@ -113,6 +123,15 @@ impl Detector {
             english: english.clone(),
             thai: thai.clone(),
             model,
+            thai_words: {
+                let mut w: Vec<String> = model
+                    .lang(Lang::Thai)
+                    .lexicon()
+                    .map(|(w, _)| w.to_owned())
+                    .collect();
+                w.sort_unstable();
+                w
+            },
             thresholds: Thresholds::default(),
         }
     }
@@ -197,35 +216,70 @@ impl Detector {
 
     /// Judges one word at `thresholds` instead of the detector's own.
     pub fn judge_with(&self, word: &str, thresholds: Thresholds) -> Option<Verdict> {
+        self.judge_inner(word, thresholds, false)
+    }
+
+    /// Judges a word that is still being typed, for the bubble. Its end has
+    /// not come yet: กั and ประเ are fine Thai so far, though neither could
+    /// end a word. Two letters are too few to tell the languages apart (ทำ
+    /// reads as "me", "gi" as เร), so the bubble waits for a third, as auto
+    /// mode does.
+    pub fn judge_typing(&self, word: &str, thresholds: Thresholds) -> Option<Verdict> {
+        self.judge_inner(word, thresholds, true)
+    }
+
+    /// Whether some common Thai word starts with `text`.
+    fn starts_thai_word(&self, text: &str) -> bool {
+        let i = self.thai_words.partition_point(|w| w.as_str() < text);
+        self.thai_words.get(i).is_some_and(|w| w.starts_with(text))
+    }
+
+    fn judge_inner(&self, word: &str, thresholds: Thresholds, open: bool) -> Option<Verdict> {
         let direction = self.direction(word)?;
         let converted = self.convert(word, direction);
         let th = self.model.lang(Lang::Thai);
+        let th_cost = |t: &str| if open { th.cost_open(t) } else { th.cost(t) };
+        let en_cost = |t: &str| english_cost(self.model, t, open);
+        // A leading vowel waits for its consonant while the word is typed.
+        let check = |t: &str| {
+            let t = if open {
+                t.trim_end_matches(thai::is_leading)
+            } else {
+                t
+            };
+            thai::check(t).is_ok()
+        };
 
         let (margin, allowed) = match direction {
             Direction::ToThai => {
-                let margin =
-                    english_cost(self.model, word) - th.cost(&converted) - thresholds.to_thai;
-                (
-                    margin,
-                    !looks_numeric(word) && thai::check(&converted).is_ok(),
-                )
+                let margin = en_cost(word) - th_cost(&converted) - thresholds.to_thai;
+                (margin, !looks_numeric(word) && check(&converted))
             }
             Direction::ToEnglish => {
-                let penalty = if thai::check(word).is_err() {
-                    INVALID_THAI_PENALTY
-                } else {
+                let penalty = if check(word) {
                     0.0
+                } else {
+                    INVALID_THAI_PENALTY
                 };
-                let margin = th.cost(word) + penalty
-                    - english_cost(self.model, &converted)
-                    - thresholds.to_english;
-                (margin, converted.chars().any(|c| c.is_ascii_alphabetic()))
+                let margin = th_cost(word) + penalty - en_cost(&converted) - thresholds.to_english;
+                // หรื is on its way to หรือ, whatever "sin" looks like.
+                let thai_so_far = open && self.starts_thai_word(word);
+                (
+                    margin,
+                    !thai_so_far && converted.chars().any(|c| c.is_ascii_alphabetic()),
+                )
             }
         };
         let n = word.chars().count();
+        let min_chars = if open {
+            thresholds.min_chars.max(TYPING_MIN_CHARS)
+        } else {
+            thresholds.min_chars
+        };
         // "I" and "a" are words on their own, and a lone Thai letter is not:
         // ร or ฟ by itself is that word typed in the wrong layout.
-        let english_letter = direction == Direction::ToEnglish
+        let english_letter = !open
+            && direction == Direction::ToEnglish
             && n == 1
             && thresholds.min_chars <= 2
             && matches!(converted.as_str(), "i" | "I" | "a" | "A");
@@ -234,7 +288,7 @@ impl Detector {
             converted,
             margin,
             vetoed: !allowed,
-            flip: allowed && (english_letter || (n >= thresholds.min_chars && margin > 0.0)),
+            flip: allowed && (english_letter || (n >= min_chars && margin > 0.0)),
         })
     }
 }

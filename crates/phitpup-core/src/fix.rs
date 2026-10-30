@@ -174,10 +174,12 @@ impl Fixer {
         if self.buf.last().is_none_or(|c| c.is_whitespace()) {
             return None;
         }
-        let start = word_start(&self.buf, 1)?;
+        let start = last_word(&self.buf)?;
         let word: String = self.buf[start..].iter().collect();
         let delete = self.buf.len() - start;
-        if let Some((direction, converted)) = judge(detector, &word, detector.thresholds, learned) {
+        if let Some((direction, converted)) =
+            judge(detector, &word, detector.thresholds, learned, true)
+        {
             return Some(Suggestion {
                 edit: Edit {
                     delete,
@@ -307,12 +309,13 @@ impl Fixer {
             if self.buf.last().is_none_or(|c| c.is_whitespace()) {
                 return None;
             }
-            let start = word_start(&self.buf, 1)?;
+            let start = last_word(&self.buf)?;
             let word: String = self.buf[start..].iter().collect();
             if skip(&word) {
                 return None;
             }
-            if let Some((direction, converted)) = judge(detector, &word, Thresholds::AUTO, learned)
+            if let Some((direction, converted)) =
+                judge(detector, &word, Thresholds::AUTO, learned, false)
             {
                 return Some((start, converted, target(direction), Kind::Layout));
             }
@@ -359,7 +362,7 @@ impl Fixer {
             return Some(edit);
         }
         let Some(s) = self.session.take() else {
-            let start = word_start(&self.buf, 1)?;
+            let start = last_word(&self.buf)?;
             let tail: String = self.buf[start..].iter().collect();
             let direction = detector.direction(&tail)?;
             let insert = detector.convert(&tail, direction);
@@ -421,18 +424,25 @@ impl Fixer {
 }
 
 /// The fix for `word`: always for a learned word, otherwise when the
-/// detector says so at `thresholds`.
+/// detector says so at `thresholds`. `typing` is for the bubble, which
+/// judges the word before it is finished.
 fn judge(
     detector: &Detector,
     word: &str,
     thresholds: Thresholds,
     learned: &[String],
+    typing: bool,
 ) -> Option<(Direction, String)> {
     if learned.contains(&word.to_lowercase()) {
         let d = detector.direction(word)?;
         return Some((d, detector.convert(word, d)));
     }
-    let v = detector.judge_with(word, thresholds).filter(|v| v.flip)?;
+    let v = if typing {
+        detector.judge_typing(word, thresholds)
+    } else {
+        detector.judge_with(word, thresholds)
+    };
+    let v = v.filter(|v| v.flip)?;
     Some((v.direction, v.converted))
 }
 
@@ -441,6 +451,21 @@ fn target(direction: Direction) -> Lang {
         Direction::ToThai => Lang::Thai,
         Direction::ToEnglish => Lang::English,
     }
+}
+
+/// Start of the last word, or of its last part when it runs Thai and Latin
+/// letters together: in "ไฟล์pdf" and "คือl;ylfu" the layout was switched
+/// on purpose partway, so only the part after the switch is judged.
+fn last_word(chars: &[char]) -> Option<usize> {
+    let start = word_start(chars, 1)?;
+    let word = &chars[start..];
+    let thai = word.iter().rposition(|&c| thai::is_thai(c));
+    let latin = word.iter().rposition(char::is_ascii_alphabetic);
+    Some(match (thai, latin) {
+        // After the last letter of the script that came first.
+        (Some(t), Some(l)) => start + t.min(l) + 1,
+        _ => start,
+    })
 }
 
 /// Start of the `n`-th word from the end. Whitespace after the last word
@@ -711,6 +736,41 @@ mod tests {
         );
         assert_eq!(f.accept(&s), Some(s.edit.clone()));
         assert_eq!(f.text(), "hello สวัสดี");
+    }
+
+    #[test]
+    fn thai_typed_on_purpose_gets_no_english_bubble_on_the_way() {
+        let d = det();
+        for word in ["กับ", "หรือ", "เรื่อง", "ประเทศ", "อะไร", "ระบบ", "ทำให้", "ที่สุด"]
+        {
+            let mut f = Fixer::new();
+            for c in word.chars() {
+                f.typed(&c.to_string());
+                assert_eq!(f.suggestion(&d, &[]), None, "{word} at {}", f.text());
+            }
+        }
+        // English typed on the Thai layout is still caught as it is typed.
+        let mut f = Fixer::new();
+        f.typed("้ำสส");
+        assert_eq!(f.suggestion(&d, &[]).unwrap().edit.insert, "hell");
+    }
+
+    #[test]
+    fn a_run_of_thai_then_latin_is_judged_from_the_switch() {
+        let d = det();
+        let mut f = Fixer::new();
+        f.typed("คือl;ylfu");
+        let s = f.suggestion(&d, &[]).unwrap();
+        assert_eq!(
+            (s.word.as_str(), s.edit.insert.as_str()),
+            ("l;ylfu", "สวัสดี")
+        );
+        assert_eq!(s.edit.delete, 6);
+        for typed in ["ใช้app", "เปิดExcel", "ดูyoutube"] {
+            let mut f = Fixer::new();
+            f.typed(typed);
+            assert_eq!(f.suggestion(&d, &[]), None, "{typed}");
+        }
     }
 
     #[test]

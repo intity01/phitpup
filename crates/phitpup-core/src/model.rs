@@ -156,6 +156,22 @@ impl LangModel {
         total as f32 / n as f32 / SCALE
     }
 
+    /// Like [`cost`](Self::cost) for a word still being typed: the end of the
+    /// word is not counted, since it has not come yet.
+    pub fn cost_open(&self, word: &str) -> f32 {
+        let (mut a, mut b) = (BOUNDARY, BOUNDARY);
+        let (mut total, mut n) = (0u32, 0u32);
+        for c in word.chars().map(|c| self.lang.index(c)) {
+            total += self.step(a, b, c);
+            n += 1;
+            (a, b) = (b, c);
+        }
+        if n == 0 {
+            return 0.0;
+        }
+        total as f32 / n as f32 / SCALE
+    }
+
     fn write(&self, out: &mut Vec<u8>) {
         out.extend_from_slice(&self.uni);
         out.extend_from_slice(&self.bi);

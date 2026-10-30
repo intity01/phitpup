@@ -33,6 +33,11 @@ pub enum Class {
     Other,
 }
 
+/// เ แ โ ใ ไ: written before the consonant they follow in speech.
+pub fn is_leading(c: char) -> bool {
+    class(c) == Class::Leading
+}
+
 pub fn class(c: char) -> Class {
     match c {
         '\u{0E01}'..='\u{0E2E}' => Class::Consonant,

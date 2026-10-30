@@ -45,7 +45,8 @@ pub extern "C" fn out_ptr() -> *const u8 {
     OUT.with_borrow(|o| o.as_ptr())
 }
 
-/// The bubble: the word being typed, judged like suggest mode.
+/// The bubble: the word being typed, judged like suggest mode, as a word
+/// that is not finished yet.
 ///
 /// # Safety
 /// `ptr` must point to `len` bytes of UTF-8.
@@ -53,7 +54,9 @@ pub extern "C" fn out_ptr() -> *const u8 {
 pub unsafe extern "C" fn suggest(layout: u32, ptr: *const u8, len: usize) -> usize {
     // SAFETY: as documented.
     let word = unsafe { text(ptr, len) };
-    answer(layout, |d| verdict(d.judge_with(word, Thresholds::SUGGEST)))
+    answer(layout, |d| {
+        verdict(d.judge_typing(word, Thresholds::SUGGEST))
+    })
 }
 
 /// Auto mode: the word just finished with Space, at the strict thresholds.
