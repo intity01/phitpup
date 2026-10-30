@@ -1391,7 +1391,7 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
         68.0,
         Some(G_BULB),
         t("Learn from my corrections"),
-        t("Remembers the fixes you undo or keep."),
+        t("Remembers fixes you undo, keep, or hide with Esc 3 times."),
         Some(Hit::Learn),
     );
     b.toggle(cy, c.learn, hovered);
@@ -1469,7 +1469,7 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
             LEFT,
             y,
             WIDTH,
-            t("Press Shift+Esc while the bubble shows a word, or type it above."),
+            t("Press Esc three times, or Shift+Esc once, while the bubble shows a word, or type it above."),
             F::Caption,
             p.faint,
         ) + y
@@ -2091,7 +2091,12 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
         }),
         Hit::Input => {}
         Hit::AddWord => add_word(),
-        Hit::Learn => edit(|c| c.learn = !c.learn),
+        Hit::Learn => edit(|c| {
+            c.learn = !c.learn;
+            if !c.learn {
+                c.dismissed_words.clear();
+            }
+        }),
         Hit::RemoveLearned(i) => edit(|c| {
             if i < c.learned_words.len() {
                 c.learned_words.remove(i);

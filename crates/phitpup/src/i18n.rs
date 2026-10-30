@@ -123,12 +123,14 @@ fn thai_for(en: &str) -> Option<&'static str> {
             "คำที่ไม่ต้องให้ผิดปุ๊บแก้ และคำที่ให้แก้เสมอ เพิ่มได้ตอนพิมพ์"
         }
         "Learn from my corrections" => "เรียนรู้จากที่ฉันแก้",
-        "Remembers the fixes you undo or keep." => "จำคำที่คุณคืนกลับหรือเก็บไว้",
+        "Remembers fixes you undo, keep, or hide with Esc 3 times." => {
+            "จำคำที่คุณคืนกลับหรือเก็บไว้ และคำที่กด Esc ซ่อนครบ 3 ครั้ง"
+        }
         "A word to leave alone, e.g. gdp" => "คำที่ไม่ต้องแก้ เช่น gdp",
         "Add" => "เพิ่ม",
         "Leave alone ({n})" => "ไม่ต้องแก้ ({n})",
-        "Press Shift+Esc while the bubble shows a word, or type it above." => {
-            "กด Shift+Esc ตอนที่ป้ายขึ้น หรือพิมพ์ในช่องด้านบน"
+        "Press Esc three times, or Shift+Esc once, while the bubble shows a word, or type it above." => {
+            "กด Esc 3 ครั้ง หรือ Shift+Esc ครั้งเดียว ตอนที่ป้ายขึ้น หรือพิมพ์ในช่องด้านบน"
         }
         "Always fix ({n})" => "แก้ให้เสมอ ({n})",
         "Words you convert with {key} and then keep typing after show up here." => {

@@ -6,7 +6,7 @@
 //!
 //! In suggest mode it also asks the fixer for a suggestion after every key,
 //! and the accept key (Tab), Esc or Shift+Esc act on the bubble while one is
-//! shown. Both shortcuts come from the settings. In auto mode, Space after
+//! shown; a word hidden with Esc three times is not suggested again. Both shortcuts come from the settings. In auto mode, Space after
 //! a word the detector is sure about is swallowed and the worker types the
 //! fixed word and the space instead.
 //!
@@ -281,8 +281,18 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
                     }
                 } else {
                     debug!("Esc: suggestion dismissed");
+                    let mut c = app.config.lock().unwrap();
+                    if c.learn && c.dismiss(&s.word) {
+                        if c.ignore_words.contains(&s.word.to_lowercase()) {
+                            debug!("Esc for the third time: the word will not be suggested again");
+                        }
+                        post(app, WM_SAVE);
+                    }
                 }
                 return true;
+            }
+            if app.config.lock().unwrap().accepted(&s.word) {
+                post(app, WM_SAVE);
             }
             if let Some(edit) = app.fixer.lock().unwrap().accept(&s) {
                 *app.accepted.lock().unwrap() = Some(edit);

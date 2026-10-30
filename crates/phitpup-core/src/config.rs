@@ -42,8 +42,12 @@ pub struct Config {
     /// Words (as typed) fixed without asking: the user converted them with
     /// the hotkey and kept the result.
     pub learned_words: Vec<String>,
+    /// Words whose suggestion Esc hid, once per time, oldest first; at
+    /// [`DISMISSALS`] the word moves to `ignore_words`.
+    pub dismissed_words: Vec<String>,
     /// Learn from corrections: an undone fix adds the word to
-    /// `ignore_words`, a kept hotkey fix to `learned_words`.
+    /// `ignore_words`, a kept hotkey fix to `learned_words`, and Esc counts
+    /// in `dismissed_words`.
     pub learn: bool,
     /// Show suggestions as a wavy line under the word instead of a bubble,
     /// in apps that say where the word is.
@@ -79,6 +83,7 @@ impl Default for Config {
             quiet_apps: Vec::new(),
             ignore_words: Vec::new(),
             learned_words: Vec::new(),
+            dismissed_words: Vec::new(),
             learn: true,
             underline: false,
             spelling: true,
@@ -143,9 +148,11 @@ ignore_words = []
 
 # Learn from corrections: undoing a fix right away adds the word to
 # ignore_words; converting a word with the hotkey and keeping it adds it to
-# learned_words, which are then fixed without asking.
+# learned_words, which are then fixed without asking. Hiding the bubble's
+# word with Esc three times adds it to ignore_words; dismissed_words counts.
 learn = true
 learned_words = []
+dismissed_words = []
 
 # Shortcuts: modifiers ctrl, shift, alt, then a key such as backspace, tab,
 # space, enter, insert, f1-f24, a-z.
@@ -190,6 +197,7 @@ impl Config {
                 "quiet_apps" => list(value).map(|a| c.quiet_apps = a),
                 "ignore_words" => list(value).map(|w| c.ignore_words = w),
                 "learned_words" => list(value).map(|w| c.learned_words = w),
+                "dismissed_words" => list(value).map(|w| c.dismissed_words = w),
                 "learn" => boolean(value).map(|b| c.learn = b),
                 "underline" => boolean(value).map(|b| c.underline = b),
                 "spelling" => boolean(value).map(|b| c.spelling = b),
@@ -237,6 +245,7 @@ impl Config {
         t = set(&t, "ignore_words", &array(&self.ignore_words));
         t = set(&t, "learn", &self.learn.to_string());
         t = set(&t, "learned_words", &array(&self.learned_words));
+        t = set(&t, "dismissed_words", &array(&self.dismissed_words));
         t = set(&t, "hotkey", &quoted(&self.hotkey.to_string()));
         t = set(&t, "double_shift", &self.double_shift.to_string());
         t = set(&t, "remind_updates", &self.remind_updates.to_string());
@@ -244,17 +253,49 @@ impl Config {
     }
 }
 
+/// How many times Esc hides a word's suggestion before it is left alone.
+pub const DISMISSALS: usize = 3;
+/// The most Esc presses `dismissed_words` remembers; older ones are dropped.
+const KEEP_DISMISSED: usize = 100;
+
 impl Config {
     /// Leave `word` alone from now on (it moves out of the learned words).
     /// False if it was already there or cannot be stored.
     pub fn ignore(&mut self, word: &str) -> bool {
         let word = word.to_lowercase();
         self.learned_words.retain(|w| *w != word);
+        self.dismissed_words.retain(|w| *w != word);
         if !storable(&word) || self.ignore_words.contains(&word) {
             return false;
         }
         self.ignore_words.push(word);
         true
+    }
+
+    /// Esc hid the suggestion for `word`; the [`DISMISSALS`]th time it is
+    /// left alone. False if nothing changed.
+    pub fn dismiss(&mut self, word: &str) -> bool {
+        let word = word.to_lowercase();
+        if !storable(&word) || self.ignore_words.contains(&word) {
+            return false;
+        }
+        let n = self.dismissed_words.iter().filter(|w| **w == word).count();
+        if n + 1 >= DISMISSALS {
+            return self.ignore(&word);
+        }
+        self.dismissed_words.push(word);
+        let extra = self.dismissed_words.len().saturating_sub(KEEP_DISMISSED);
+        self.dismissed_words.drain(..extra);
+        true
+    }
+
+    /// The suggestion for `word` was taken: Esc presses on it so far no
+    /// longer count. False if there were none.
+    pub fn accepted(&mut self, word: &str) -> bool {
+        let word = word.to_lowercase();
+        let n = self.dismissed_words.len();
+        self.dismissed_words.retain(|w| *w != word);
+        self.dismissed_words.len() != n
     }
 
     /// Fix `word` without asking from now on (it moves out of the ignored
@@ -402,6 +443,7 @@ accept_key = \"shift+backspace\"",
             quiet_apps: vec!["notes.exe".into(), "x # y.exe".into()],
             ignore_words: vec!["gdp".into()],
             learned_words: vec!["muj".into()],
+            dismissed_words: vec!["เด้อ".into(), "เด้อ".into()],
             learn: false,
             underline: true,
             spelling: false,
@@ -417,6 +459,33 @@ accept_key = \"shift+backspace\"",
         assert_eq!(Config::parse(&text), (c, vec![]));
         assert_eq!(text.lines().count(), TEMPLATE.lines().count());
         assert!(!storable("a\"b") && !storable(" ") && storable("แหก"));
+    }
+
+    #[test]
+    fn esc_three_times_leaves_a_word_alone() {
+        let mut c = Config::default();
+        assert!(c.dismiss("Jira") && c.dismiss("jira"));
+        assert_eq!(c.dismissed_words, ["jira", "jira"]);
+        assert!(c.dismiss("JIRA"));
+        assert_eq!(c.ignore_words, ["jira"]);
+        assert!(c.dismissed_words.is_empty());
+        assert!(!c.dismiss("jira"));
+
+        // Taking the fix starts the count again.
+        assert!(c.dismiss("teh") && c.dismiss("teh"));
+        assert!(c.accepted("teh") && !c.accepted("teh"));
+        assert!(c.dismiss("teh"));
+        assert!(c.ignore_words == ["jira"]);
+
+        // Only the latest presses are kept.
+        for i in 0..KEEP_DISMISSED + 10 {
+            c.dismiss(&format!("w{i}"));
+        }
+        assert_eq!(c.dismissed_words.len(), KEEP_DISMISSED);
+        assert_eq!(
+            c.dismissed_words.last().unwrap(),
+            &format!("w{}", KEEP_DISMISSED + 9)
+        );
     }
 
     #[test]
