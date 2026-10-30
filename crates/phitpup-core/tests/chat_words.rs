@@ -16,7 +16,7 @@ const DOUBLES: &str = "that that|had had|bye bye|no no|so so|very very|ha ha|go 
 
 /// Words that auto mode wrongly fixes today. Every one is a bug; remove a
 /// word here once it is left alone.
-const KNOWN_AUTO: &[&str] = &["gif", "iOS", "TikTok", "mRNA", "zsh", "ถถถ", "MHz", "KBank"];
+const KNOWN_AUTO: &[&str] = &[];
 
 /// The words in `items` the bubble suggests fixing at some point while they
 /// are typed, and those auto mode fixes on Space.
@@ -49,13 +49,13 @@ fn cases() -> Vec<(&'static str, &'static str, Vec<&'static str>, usize)> {
     let words = |s: &'static str| s.split(' ').collect::<Vec<_>>();
     let doubles = DOUBLES.split('|').collect::<Vec<_>>();
     vec![
-        ("Kedmanee", "Thai chat", words(THAI_CHAT), 11),
-        ("Kedmanee", "English tech", words(EN_WORDS), 29),
-        ("Kedmanee", "capitals", words(CAPS), 3),
+        ("Kedmanee", "Thai chat", words(THAI_CHAT), 1),
+        ("Kedmanee", "English tech", words(EN_WORDS), 3),
+        ("Kedmanee", "capitals", words(CAPS), 2),
         ("Kedmanee", "doubles", doubles.clone(), 1),
-        ("Pattachote", "Thai chat", words(THAI_CHAT), 13),
-        ("Pattachote", "English tech", words(EN_WORDS), 31),
-        ("Pattachote", "capitals", words(CAPS), 5),
+        ("Pattachote", "Thai chat", words(THAI_CHAT), 1),
+        ("Pattachote", "English tech", words(EN_WORDS), 10),
+        ("Pattachote", "capitals", words(CAPS), 2),
         ("Pattachote", "doubles", doubles, 1),
     ]
 }

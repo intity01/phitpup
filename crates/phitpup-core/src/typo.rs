@@ -1,11 +1,17 @@
 //! Slips that have nothing to do with the keyboard layout: a word typed
 //! with Caps Lock left on, and the same word typed twice.
 
+/// Words written lowercase-then-capitals on purpose.
+const MEANT: &[&str] = &["eid", "esim", "ios", "mrna", "qpcr", "rrna", "trna"];
+
 /// "hELLO" → "Hello": Caps Lock was on and Shift was held for the first
 /// letter. Latin letters only, at least three, the first lowercase and all
 /// the others uppercase. Words in all capitals are left alone; those are
-/// usually meant.
+/// usually meant, and so are a few like iOS and mRNA.
 pub fn caps(word: &str) -> Option<String> {
+    if MEANT.contains(&word.to_ascii_lowercase().as_str()) {
+        return None;
+    }
     let mut chars = word.chars();
     let first = chars.next()?;
     let rest: Vec<char> = chars.collect();
@@ -62,7 +68,18 @@ mod tests {
     fn caps_lock_slips() {
         assert_eq!(caps("hELLO").as_deref(), Some("Hello"));
         assert_eq!(caps("tHE").as_deref(), Some("The"));
-        for w in ["HELLO", "Hello", "hello", "iPHONE2", "hE", "eBay", "ผิด", ""] {
+        for w in [
+            "HELLO",
+            "Hello",
+            "hello",
+            "iPHONE2",
+            "hE",
+            "eBay",
+            "ผิด",
+            "",
+            "iOS",
+            "mRNA",
+        ] {
             assert_eq!(caps(w), None, "{w}");
         }
     }

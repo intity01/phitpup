@@ -13,6 +13,14 @@ use std::sync::{Mutex, OnceLock};
 use crate::layouts::Layout;
 use crate::model::{Lang, Model, english_words};
 
+/// Chat words and slang the Thai lexicon (written Thai) lacks. Typed on
+/// purpose, so they are words here, not slips to fix.
+const CHAT_THAI: &str = "เด้อ เด้ออ เนอะ เหรอะ หรา ชิมิ จุงเบย จึ้ง เริ่ด เกิ้น นอยด์ งือ งับ     ม่ะ ป้ะ อ่ะ ค่า จ้า น้า ตะเอง เค้า ฟิน ปัง ตึง ชิล ชิว ติ่ง เกรียน โอปป้า ชิปเปอร์ แฟนด้อม     เมน เวิ่น เอ๋อ กร๊าก ถถถ สตอรี่ ไลฟ์ แคปชั่น แฮชแท็ก เมนต์ คอมเมนต์ แอด แอดมิน ทวิต ทวีต     ติ๊กต็อก ยูทูบ เฟซ เฟสบุ๊ค อัปเดต อัปโหลด อัพ โพสต์ แชร์ ไลค์ เพจ กรุ๊ป แบต ชาร์จ เซฟ เช็ก     เช็ค โอเค โอเคร เทพ โปร มือโปร";
+/// Tech words and brands common in Thai chat that English word lists lack.
+const TECH_ENGLISH: &str = "ubuntu debian fedora nginx apache golang kotlin typescript     javascript powershell kubernetes docker podman terraform ansible jenkins gitlab github     bitbucket jira confluence discord twitch reddit instagram facebook whatsapp telegram     shopee lazada grab foodpanda lineman agoda airbnb uber spotify youtube netflix tiktok canva     figma notion trello asana miro chatgpt openai anthropic claude gemini copilot midjourney     nvidia samsung xiaomi oppo vivo huawei realme lenovo asus acer logitech razer valorant     roblox minecraft fortnite genshin pubg dota csgo chatbot backend frontend devops     fullstack localhost pnpm yarn webpack vite svelte nextjs nuxt django flask laravel     webhook dockerfile repo amd";
+/// Their cost: a fairly common word.
+const EXTRA_COST: u16 = 160;
+
 /// Edit costs, in tenths of an edit.
 const FULL: u32 = 10;
 const NEIGHBOUR: u32 = 6;
@@ -99,11 +107,19 @@ impl Near {
         {
             return near;
         }
+        let extra = |list: &'static str| list.split_whitespace().map(|w| (w, EXTRA_COST));
         let near = match lang {
-            Lang::Thai => Near::new(lang, Model::embedded().lang(lang).lexicon(), layout),
+            Lang::Thai => {
+                let words = Model::embedded()
+                    .lang(lang)
+                    .lexicon()
+                    .chain(extra(CHAT_THAI));
+                Near::new(lang, words, layout)
+            }
             Lang::English => {
                 let words = english_words();
-                Near::new(lang, words.iter().map(|(w, c)| (w.as_str(), *c)), layout)
+                let words = words.iter().map(|(w, c)| (w.as_str(), *c));
+                Near::new(lang, words.chain(extra(TECH_ENGLISH)), layout)
             }
         };
         let near: &'static Near = Box::leak(Box::new(near));

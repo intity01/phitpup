@@ -62,15 +62,16 @@ impl Default for Thresholds {
 pub const ABBREVIATIONS: &[&str] = &[
     "afaik", "afk", "ai", "aka", "api", "apk", "asap", "bcc", "bff", "bkk", "brb", "bruh", "bts",
     "btw", "ceo", "covid", "cpu", "css", "csv", "cto", "diy", "dm", "dns", "doc", "docx", "dvd",
-    "eta", "etc", "eu", "exe", "faq", "fps", "ftp", "fyi", "gg", "git", "gps", "gpt", "gpu",
-    "haha", "hahaha", "hbu", "hdd", "hdmi", "hehe", "hr", "html", "http", "https", "ide", "idk",
-    "ig", "ikr", "imho", "imo", "ios", "iot", "irl", "jpeg", "jpg", "js", "json", "khao", "khob",
-    "khun", "kpi", "krab", "krap", "krub", "lan", "lcd", "lgtm", "llm", "lmao", "lol", "mba",
-    "mp3", "mp4", "mrt", "nas", "nft", "ngl", "npm", "nvm", "okr", "oled", "otp", "pdf", "pfp",
-    "phd", "pls", "plz", "png", "ppt", "pptx", "ps5", "qr", "ram", "rgb", "roi", "rom", "sdk",
-    "seo", "smh", "sms", "sql", "ssd", "ssh", "svg", "tba", "tbh", "thx", "tmr", "tmrw", "todo",
-    "tsv", "tv", "txt", "ty", "uae", "uri", "url", "usa", "usb", "ux", "vpn", "vs", "wan", "wifi",
-    "wip", "wtf", "www", "wyd", "xls", "xlsx", "xml", "yaml", "yeet", "yt", "zip",
+    "eta", "etc", "eu", "exe", "faq", "fps", "ftp", "fyi", "gg", "ghz", "gif", "git", "gps", "gpt",
+    "gpu", "haha", "hahaha", "hbu", "hdd", "hdmi", "hehe", "heic", "hr", "html", "http", "https",
+    "ide", "idk", "ig", "ikr", "imho", "imo", "ios", "iot", "irl", "jpeg", "jpg", "js", "json",
+    "khao", "khob", "khun", "khz", "kpi", "krab", "krap", "krub", "kwh", "lan", "lcd", "lgtm",
+    "llm", "lmao", "lol", "mah", "mba", "mhz", "mkv", "mp3", "mp4", "mrt", "msi", "nas", "nft",
+    "ngl", "npm", "nvm", "okr", "oled", "otp", "pdf", "pfp", "phd", "php", "pls", "plz", "png",
+    "ppt", "pptx", "ps5", "qr", "ram", "rgb", "roi", "rom", "sdk", "seo", "smh", "sms", "sql",
+    "ssd", "ssh", "svg", "tba", "tbh", "thx", "tmr", "tmrw", "todo", "tsv", "tv", "txt", "ty",
+    "uae", "uri", "url", "usa", "usb", "ux", "vpn", "vs", "wan", "webp", "wifi", "wip", "wtf",
+    "www", "wyd", "xls", "xlsx", "xml", "yaml", "yeet", "yt", "zip", "zsh",
 ];
 
 /// Whether `word` is one of the [`ABBREVIATIONS`] or its plural, in
@@ -197,6 +198,24 @@ fn english_shape(text: &str) -> bool {
 /// meant as typed, not นาถถ. No Thai word ends in ถถ.
 fn laughs(text: &str) -> bool {
     text.ends_with("55")
+}
+
+/// ถถถ: Thai laughter, as 555 is.
+fn thai_laughs(text: &str) -> bool {
+    text.chars().count() >= 2 && text.chars().all(|c| c == 'ถ')
+}
+
+/// Capitals inside a brand or unit (TikTok, KBank, MHz): it starts with a
+/// capital, has another one later, and ends in lowercase. Thai typed in the
+/// wrong layout gets capitals from its Shift letters, but rarely in this
+/// shape.
+fn camel_case(text: &str) -> bool {
+    let b = text.as_bytes();
+    b.len() >= 3
+        && b.iter().all(u8::is_ascii_alphabetic)
+        && b[0].is_ascii_uppercase()
+        && b[1..].iter().any(u8::is_ascii_uppercase)
+        && b[b.len() - 1].is_ascii_lowercase()
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -384,6 +403,7 @@ impl Detector {
                         && !shaped
                         && !is_abbreviation(word)
                         && !laughs(word)
+                        && !camel_case(word)
                         && check(&converted),
                 )
             }
@@ -411,6 +431,7 @@ impl Detector {
                     !thai_so_far
                         && !marks_alone
                         && !thai_abbreviation(word)
+                        && !thai_laughs(word)
                         && converted.chars().any(|c| c.is_ascii_alphabetic()),
                 )
             }
