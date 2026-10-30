@@ -391,7 +391,13 @@ impl Run {
     /// The text in the window is `want`.
     fn expect(&mut self, want: &str) -> Result<(), String> {
         let got = self.text()?;
-        if got == want {
+        // Word processors capitalise a sentence's first letter themselves.
+        let mut chars = want.chars();
+        let capitalised: String = chars
+            .next()
+            .map(|c| c.to_uppercase().chain(chars).collect())
+            .unwrap_or_default();
+        if got == want || !matches!(self.target, Target::Notepad) && got == capitalised {
             Ok(())
         } else {
             Err(format!("expected {want:?}, got {got:?}"))
