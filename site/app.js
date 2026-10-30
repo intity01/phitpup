@@ -266,10 +266,16 @@ async function loadCore() {
 }
 loadCore();
 
-/** Start of the word that ends at `end` (no whitespace inside). */
+/** Start of the word that ends at `end` (no whitespace inside). When it runs
+ * Thai and Latin letters together ("คือl;ylfu"), the layout was switched on
+ * purpose partway, so it starts after the switch, as in the app. */
 function wordStart(text, end) {
   let i = end;
   while (i > 0 && !/\s/.test(text[i - 1])) i--;
+  const word = text.slice(i, end);
+  const lastThai = word.search(/[฀-๿][^฀-๿]*$/);
+  const lastLatin = word.search(/[A-Za-z][^A-Za-z]*$/);
+  if (lastThai >= 0 && lastLatin >= 0) i += Math.min(lastThai, lastLatin) + 1;
   return i;
 }
 

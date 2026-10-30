@@ -110,6 +110,24 @@ fn looks_numeric(text: &str) -> bool {
             .all(|c| c.is_ascii_digit() || ".,:-/+%".contains(c))
 }
 
+/// Thai letters in short groups ending in dots (ดร., ก.พ., ส.ส.กำ): a Thai
+/// abbreviation. As English it would hold " or * (what the Thai dot's key
+/// types), which words do not.
+fn thai_abbreviation(text: &str) -> bool {
+    let groups: Vec<&str> = text.split('.').collect();
+    groups.len() > 1
+        && groups
+            .iter()
+            .all(|g| g.chars().count() <= 3 && g.chars().all(thai::is_thai))
+        && groups[..groups.len() - 1].iter().all(|g| !g.is_empty())
+}
+
+/// 555 is how Thai laughs (5 reads ห้า, "ha"); "ok55" and "lol555" are
+/// meant as typed, not นาถถ. No Thai word ends in ถถ.
+fn laughs(text: &str) -> bool {
+    text.ends_with("55")
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Verdict {
     pub direction: Direction,
@@ -279,7 +297,10 @@ impl Detector {
                 let margin = en_cost(word) - th_cost(&converted) - thresholds.to_thai;
                 (
                     margin,
-                    !looks_numeric(word) && !is_abbreviation(word) && check(&converted),
+                    !looks_numeric(word)
+                        && !is_abbreviation(word)
+                        && !laughs(word)
+                        && check(&converted),
                 )
             }
             Direction::ToEnglish => {
@@ -293,7 +314,9 @@ impl Detector {
                 let thai_so_far = open && self.starts_thai_word(word);
                 (
                     margin,
-                    !thai_so_far && converted.chars().any(|c| c.is_ascii_alphabetic()),
+                    !thai_so_far
+                        && !thai_abbreviation(word)
+                        && converted.chars().any(|c| c.is_ascii_alphabetic()),
                 )
             }
         };

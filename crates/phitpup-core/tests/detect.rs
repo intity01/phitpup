@@ -200,3 +200,19 @@ fn abbreviations_stay_english() {
     let d = kedmanee(Thresholds::SUGGEST);
     assert!(d.judge("l;ylfu").unwrap().flip);
 }
+
+#[test]
+fn thai_abbreviations_and_laughter_stay() {
+    let d = kedmanee(Thresholds::SUGGEST);
+    for w in ["ดร.", "ก.พ", "ก.พ.", "ส.ส.กำ", "รมว.", "ม.ค."] {
+        for v in [d.judge(w), d.judge_typing(w, Thresholds::SUGGEST)] {
+            assert!(!v.is_some_and(|v| v.flip), "{w}");
+        }
+    }
+    for w in ["ok55", "ok555", "lol555", "555"] {
+        assert!(!d.judge(w).is_some_and(|v| v.flip), "{w}");
+    }
+    // English in quotes, typed on the Thai layout, is still caught.
+    assert_eq!(d.judge(".้ำสสน.").unwrap().converted, "\"hello\"");
+    assert!(d.judge(".้ำสสน.").unwrap().flip);
+}
