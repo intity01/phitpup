@@ -24,6 +24,10 @@ const PER_TENTH: u32 = 8;
 /// How much likelier a fix must be than the text as typed, in tenths of a
 /// bit.
 const MARGIN: u32 = 20;
+/// A word not in the lexicon (a name, slang, jargon), in tenths of a bit:
+/// this much, plus `UNKNOWN_PER`/10 of what the letter model says it costs.
+const UNKNOWN: u32 = 125;
+const UNKNOWN_PER: u32 = 7;
 /// How much likelier the best fix must be than the next one, in tenths of a
 /// bit.
 const CLOSE: u32 = 10;
@@ -226,6 +230,17 @@ impl Near {
         let as_typed = (0..=run.len())
             .filter_map(|i| Some(seg[i]? + self.cheapest_start(&run[i..])?))
             .min();
+        // Or known words, then one the lexicon does not have, if its letters
+        // read like the language.
+        let model = Model::embedded().lang(self.lang);
+        let unknown = (0..run.len())
+            .filter_map(|i| {
+                let tail = &run[i..];
+                let bits = model.cost(&self.spell(tail)) * (tail.len() as f32 + 1.0);
+                Some(seg[i]? + UNKNOWN + UNKNOWN_PER * (bits * 10.0) as u32 / 10)
+            })
+            .min();
+        let as_typed = as_typed.into_iter().chain(unknown).min();
         // Fixed: known words, then a near word in place of the rest.
         let (cost, n, word) = (0..run.len())
             .filter_map(|i| {
@@ -444,6 +459,34 @@ mod tests {
             "youtube",
         ] {
             assert_eq!(fix(w), None, "{w}");
+        }
+    }
+
+    #[test]
+    fn leaves_unknown_words_alone() {
+        // Names and slang the lexicon lacks, but whose letters read fine.
+        let english = Near::shared(Lang::English, &Layout::us_qwerty());
+        for w in [
+            "ubuntu",
+            "kubernetes",
+            "nginx",
+            "shopee",
+            "minecraft",
+            "laravel",
+        ] {
+            assert_eq!(english.fix(w), None, "{w}");
+        }
+        for w in [
+            "นอยด์",
+            "แคปชั่น",
+            "แฟนด้อม",
+            "จุงเบย",
+            "สตอรี่",
+            "ติ๊กต็อก",
+            "โอปป้า",
+            "ไลค์",
+        ] {
+            assert_eq!(thai().fix(w), None, "{w}");
         }
     }
 
