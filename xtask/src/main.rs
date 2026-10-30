@@ -62,7 +62,7 @@ fn main() {
         Some("icons") => icons(),
         Some("installer-art") => installer_art(),
         #[cfg(windows)]
-        Some("e2e") => e2e::run(&root()),
+        Some("e2e") => e2e::run(&root(), &args[1..]),
         Some("eval-detector") => {
             let lexicon = match args.get(1).map(String::as_str) {
                 Some("--lexicon") => args

@@ -1,4 +1,10 @@
-//! `cargo xtask e2e`: PhitPup against a real Notepad, with real key presses.
+//! `cargo xtask e2e`: PhitPup against a real app, with real key presses.
+//!
+//! `cargo xtask e2e` uses Notepad; `cargo xtask e2e edge` a page with a text
+//! box in a new Microsoft Edge window; `cargo xtask e2e window "<title>"` a
+//! window that is already open (LINE, WordCraft...), typing where its focus
+//! is. Add `--quiet` for an app where PhitPup shows no bubble (code editors
+//! such as VS Code): then only Shift+Backspace and English are checked.
 //!
 //! Builds the app, asks a running PhitPup to quit (and starts it again at the
 //! end), and starts the new build with its settings in `target-e2e/home`, so
@@ -14,7 +20,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use windows_sys::Win32::Foundation::{CloseHandle, HWND, LPARAM};
+use windows_sys::Win32::Foundation::{CloseHandle, HWND, LPARAM, RECT};
 use windows_sys::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC,
     DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, GetDIBits, ReleaseDC, SRCCOPY, SelectObject,
@@ -29,14 +35,14 @@ use windows_sys::Win32::System::Threading::{
     PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW, STARTUPINFOW,
 };
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    GetKeyboardLayout, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
-    LoadKeyboardLayoutW, SendInput, VK_BACK, VK_CONTROL, VK_DELETE, VK_ESCAPE, VK_F24, VK_SHIFT,
-    VK_TAB, VkKeyScanExW,
+    GetKeyboardLayout, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP,
+    LoadKeyboardLayoutW, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEINPUT, SendInput, VK_BACK,
+    VK_CONTROL, VK_DELETE, VK_ESCAPE, VK_F24, VK_SHIFT, VK_TAB, VkKeyScanExW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, FindWindowW, GetForegroundWindow, GetSystemMetrics, GetWindowTextW,
+    EnumWindows, FindWindowW, GetForegroundWindow, GetSystemMetrics, GetWindowRect, GetWindowTextW,
     GetWindowThreadProcessId, IsWindowVisible, PostMessageW, SM_CXSCREEN, SM_CYSCREEN,
-    SetForegroundWindow, SetProcessDPIAware, WM_CLOSE, WM_INPUTLANGCHANGEREQUEST,
+    SetCursorPos, SetForegroundWindow, SetProcessDPIAware, WM_CLOSE, WM_INPUTLANGCHANGEREQUEST,
 };
 
 /// `WM_APP + 12`, `WM_QUIT_REQUEST` in `crates/phitpup/src/tray.rs`.
@@ -46,11 +52,36 @@ const SETTINGS_CLASS: &str = "PhitPupSettings";
 const CF_UNICODETEXT: u32 = 13;
 /// The settings the test copy starts with.
 const CONFIG: &str = "mode = \"suggest\"\nlearn = true\n";
+const EDGE: &str = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe";
+const PAGE_TITLE: &str = "PhitPup e2e";
+/// A text box that has the focus when the page opens.
+const PAGE: &str = "<!doctype html><meta charset=utf-8><title>PhitPup e2e</title>\
+<textarea autofocus spellcheck=false style=\"width:90vw;height:60vh;font-size:20px\"></textarea>";
 /// สวัสดี typed on a US layout.
 const SLIP: &str = "l;ylfu";
 const HELLO: &str = "\u{0E2A}\u{0E27}\u{0E31}\u{0E2A}\u{0E14}\u{0E35}";
 
-pub fn run(root: &Path) {
+/// Where the keys go.
+enum Target {
+    Notepad,
+    Edge,
+    /// The open window whose title contains this.
+    Window(String),
+}
+
+pub fn run(root: &Path, args: &[String]) {
+    let quiet = args.iter().any(|a| a == "--quiet");
+    let args: Vec<&str> = args
+        .iter()
+        .map(String::as_str)
+        .filter(|a| *a != "--quiet")
+        .collect();
+    let target = match args.as_slice() {
+        [] | ["notepad"] => Target::Notepad,
+        ["edge"] => Target::Edge,
+        ["window", title] => Target::Window(title.to_string()),
+        _ => fail_early("usage: cargo xtask e2e [notepad | edge | window \"<title>\"] [--quiet]"),
+    };
     // SAFETY: plain process setting, so screenshots are full size.
     unsafe { SetProcessDPIAware() };
     if !unlocked() {
@@ -60,29 +91,39 @@ pub fn run(root: &Path) {
     let dir = root.join("target-e2e");
     let home = dir.join("home");
     let _ = std::fs::remove_dir_all(&home);
-    std::fs::create_dir_all(&home).expect("create target-e2e/home");
-    std::fs::write(home.join("config.toml"), CONFIG).expect("write the test settings");
     let file = dir.join("e2e.txt");
-    std::fs::write(&file, "").expect("create target-e2e/e2e.txt");
+    let ready = std::fs::create_dir_all(&home)
+        .and_then(|()| std::fs::write(home.join("config.toml"), CONFIG))
+        .and_then(|()| std::fs::write(&file, ""));
+    if let Err(e) = ready {
+        fail_early(&format!("could not set up target-e2e: {e}"));
+    }
 
     println!("Leave the keyboard and mouse alone until this finishes.");
     let mut run = Run {
         restart: stop_running_copy(),
         clipboard: clipboard_text(),
         phitpup: None,
-        notepad: None,
+        target,
+        quiet,
+        window: None,
         launched: None,
         typed: false,
+        stopped: false,
         log: dir.join("phitpup.log"),
         exe,
         dir,
         home,
     };
-    let code = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run.start(&file);
-        run.cases()
-    }))
-    .unwrap_or(1);
+    // Release builds abort on a panic, so nothing here may panic: finish()
+    // has to run to put your PhitPup back.
+    let code = match run.start(&file) {
+        Ok(()) => run.cases(),
+        Err(why) => {
+            println!("  could not start: {why}");
+            1
+        }
+    };
     run.finish();
     std::process::exit(code);
 }
@@ -129,11 +170,17 @@ struct Run {
     restart: Option<PathBuf>,
     clipboard: Option<String>,
     phitpup: Option<Child>,
-    notepad: Option<HWND>,
-    /// Kept only so it is not a zombie; Notepad is closed by its tab.
+    target: Target,
+    /// No bubble in this app; only the hotkey works.
+    quiet: bool,
+    /// The window the keys go to.
+    window: Option<HWND>,
+    /// Kept only so it is not a zombie; the app is closed by its tab.
     launched: Option<Child>,
-    /// A case has typed; from then on Notepad must stay in front.
+    /// A case has typed; from then on the window must stay in front.
     typed: bool,
+    /// Another window came to the front: the rest are skipped.
+    stopped: bool,
     log: PathBuf,
     exe: PathBuf,
     dir: PathBuf,
@@ -141,8 +188,8 @@ struct Run {
 }
 
 impl Run {
-    fn start(&mut self, file: &Path) {
-        let log = std::fs::File::create(&self.log).expect("create the log");
+    fn start(&mut self, file: &Path) -> Result<(), String> {
+        let log = std::fs::File::create(&self.log).map_err(|e| format!("the log: {e}"))?;
         let child = Command::new(&self.exe)
             .env("PHITPUP_HOME", &self.home)
             .env("PHITPUP_DEBUG", "1")
@@ -150,33 +197,57 @@ impl Run {
             .stdout(Stdio::null())
             .stderr(log)
             .spawn()
-            .expect("start phitpup.exe");
+            .map_err(|e| format!("phitpup.exe: {e}"))?;
         self.phitpup = Some(child);
         wait_until("PhitPup to start", Duration::from_secs(10), || {
             !find(TRAY_CLASS).is_null()
-        });
+        })?;
         // The word lists for slips take a moment.
         std::thread::sleep(Duration::from_secs(3));
 
         // Not waited for: Windows 11's Notepad may hand the file to a window
-        // that is already open and stay running, or keep running itself.
-        self.launched = Some(
-            Command::new("notepad.exe")
-                .arg(file)
-                .spawn()
-                .expect("start Notepad"),
-        );
-        let name = file.file_name().unwrap().to_string_lossy().into_owned();
+        // that is already open and stay running, or keep running itself;
+        // Edge too.
+        let title = match &self.target {
+            Target::Notepad => {
+                let child = Command::new("notepad.exe").arg(file).spawn();
+                self.launched = Some(child.map_err(|e| format!("Notepad: {e}"))?);
+                "e2e.txt".to_string()
+            }
+            Target::Edge => {
+                let page = self.dir.join("e2e.html");
+                std::fs::write(&page, PAGE).map_err(|e| format!("e2e.html: {e}"))?;
+                // Detached: Edge keeps running in the background.
+                let args = format!("--new-window --no-first-run \"{}\"", page.display());
+                if !detached(Path::new(EDGE), &args) {
+                    return Err("could not start Microsoft Edge".into());
+                }
+                PAGE_TITLE.to_string()
+            }
+            Target::Window(title) => title.clone(),
+        };
         let mut hwnd: HWND = std::ptr::null_mut();
-        wait_until("Notepad to open", Duration::from_secs(10), || {
-            hwnd = window_titled(&name);
-            !hwnd.is_null()
-        });
-        self.notepad = Some(hwnd);
-        std::thread::sleep(Duration::from_millis(800));
+        wait_until(
+            &format!("a window titled {title:?}"),
+            Duration::from_secs(15),
+            || {
+                hwnd = window_titled(&title);
+                !hwnd.is_null()
+            },
+        )?;
+        self.window = Some(hwnd);
+        std::thread::sleep(Duration::from_millis(1500));
+        if matches!(self.target, Target::Edge) {
+            // The focus may be in the address bar: click into the text box,
+            // which fills the middle of the page.
+            front(hwnd)?;
+            click_middle(hwnd);
+            pause(300);
+        }
+        Ok(())
     }
 
-    /// Runs every case; the number that failed.
+    /// Runs the cases that fit the target; the number that failed.
     fn cases(&mut self) -> i32 {
         let cases: [(&str, Case); 6] = [
             ("Tab accepts the suggestion", |r| {
@@ -229,8 +300,25 @@ impl Run {
             }),
             ("The language switches at once", |r| r.language()),
         ];
+        // In a quiet app only the hotkey works; the language case needs our
+        // own settings window, so it runs with Notepad only.
+        let wanted = |i: usize| match (&self.target, self.quiet) {
+            (_, true) => i == 2 || i == 3,
+            (Target::Notepad, false) => true,
+            _ => i < 5,
+        };
+        let cases: Vec<_> = cases
+            .into_iter()
+            .enumerate()
+            .filter(|&(i, _)| wanted(i))
+            .collect();
         let mut failed = 0;
-        for (i, (name, case)) in cases.iter().enumerate() {
+        for &(i, (name, case)) in &cases {
+            if self.stopped {
+                failed += 1;
+                println!("  skip  {name}");
+                continue;
+            }
             match case(self) {
                 Ok(()) => println!("  ok    {name}"),
                 Err(why) => {
@@ -253,14 +341,17 @@ impl Run {
         failed
     }
 
-    /// Notepad in front, empty, on the US layout.
+    /// The window in front, empty, on the US layout.
     fn fresh(&mut self) -> Result<(), String> {
-        let hwnd = self.notepad.ok_or("Notepad is not open")?;
+        let hwnd = self.window.ok_or("the window is not open")?;
         // Someone clicked elsewhere: stop rather than type into their window.
         // SAFETY: plain query.
         let now = unsafe { GetForegroundWindow() };
         if now != hwnd && self.typed {
-            panic!("another window came to the front; stopped so nothing is typed into it");
+            self.stopped = true;
+            return Err(
+                "another window came to the front; stopped so nothing is typed into it".into(),
+            );
         }
         self.typed = true;
         front(hwnd)?;
@@ -292,7 +383,7 @@ impl Run {
         Err(format!("PhitPup did not log \"{line}\""))
     }
 
-    /// The text in Notepad is `want`.
+    /// The text in the window is `want`.
     fn expect(&mut self, want: &str) -> Result<(), String> {
         let got = self.text()?;
         if got == want {
@@ -303,7 +394,7 @@ impl Run {
     }
 
     fn text(&mut self) -> Result<String, String> {
-        front(self.notepad.ok_or("Notepad is not open")?)?;
+        front(self.window.ok_or("the window is not open")?)?;
         set_clipboard_text("");
         tap(b'A' as u16, &[VK_CONTROL]);
         tap(b'C' as u16, &[VK_CONTROL]);
@@ -367,18 +458,23 @@ impl Run {
         std::fs::write(&path, lines.join("\n") + "\n").map_err(|e| e.to_string())
     }
 
-    /// Empties and saves the test file, closes its tab, stops the test copy,
-    /// and puts back the clipboard and the PhitPup that was running.
+    /// Empties the text; saves and closes Notepad's tab or Edge's window;
+    /// stops the test copy and puts back the clipboard and the PhitPup that
+    /// was running.
     fn finish(&mut self) {
-        if let Some(hwnd) = self.notepad.take()
+        if let Some(hwnd) = self.window.take()
             && front(hwnd).is_ok()
         {
             tap(b'A' as u16, &[VK_CONTROL]);
             tap(VK_DELETE, &[]);
-            tap(b'S' as u16, &[VK_CONTROL]);
-            pause(300);
-            tap(b'W' as u16, &[VK_CONTROL]);
-            pause(300);
+            if matches!(self.target, Target::Notepad) {
+                tap(b'S' as u16, &[VK_CONTROL]);
+                pause(300);
+            }
+            if !matches!(self.target, Target::Window(_)) {
+                tap(b'W' as u16, &[VK_CONTROL]);
+                pause(300);
+            }
         }
         if let Some(mut child) = self.phitpup.take() {
             quit(find(TRAY_CLASS));
@@ -390,7 +486,7 @@ impl Run {
         }
         set_clipboard_text(self.clipboard.as_deref().unwrap_or(""));
         if let Some(exe) = &self.restart {
-            if detached(exe) {
+            if detached(exe, "") {
                 println!("Started your PhitPup again ({}).", exe.display());
             } else {
                 println!("Could not start your PhitPup again: {}", exe.display());
@@ -408,8 +504,8 @@ fn wide(s: &str) -> Vec<u16> {
 /// Starts `exe` with no handles of ours. `Command` passes on every
 /// inheritable one, and a PhitPup that keeps running would hold the output
 /// pipe of whoever ran us open, so `cargo xtask e2e | ...` never ends.
-fn detached(exe: &Path) -> bool {
-    let mut line = wide(&format!("\"{}\"", exe.display()));
+fn detached(exe: &Path, args: &str) -> bool {
+    let mut line = wide(&format!("\"{}\" {args}", exe.display()));
     // SAFETY: a zeroed STARTUPINFOW with its size, a writable command line,
     // and the returned handles closed.
     unsafe {
@@ -500,9 +596,11 @@ fn stop_running_copy() -> Option<PathBuf> {
     let exe = exe_of(tray)?;
     println!("Stopping your PhitPup for the test ({}).", exe.display());
     quit(tray);
-    wait_until("your PhitPup to quit", Duration::from_secs(5), || {
+    if let Err(why) = wait_until("your PhitPup to quit", Duration::from_secs(5), || {
         find(TRAY_CLASS).is_null()
-    });
+    }) {
+        fail_early(&why);
+    }
     pause(500);
     Some(exe)
 }
@@ -532,7 +630,7 @@ fn front(hwnd: HWND) -> Result<(), String> {
         SetForegroundWindow(hwnd);
         pause(300);
         if GetForegroundWindow() != hwnd {
-            return Err("could not bring Notepad to the front".into());
+            return Err("could not bring the window to the front".into());
         }
     }
     Ok(())
@@ -552,7 +650,7 @@ fn english(hwnd: HWND) -> Result<(), String> {
             pause(150);
         }
     }
-    Err("Notepad did not switch to the US layout".into())
+    Err("the window did not switch to the US layout".into())
 }
 
 // ------------------------------------------------------------ keys
@@ -601,7 +699,8 @@ fn type_text(text: &str) {
         // SAFETY: plain query.
         let scan = unsafe { VkKeyScanExW(c, us) };
         if scan == -1 {
-            panic!("{text:?} has a character the US layout cannot type");
+            eprintln!("e2e: {text:?} has a character the US layout cannot type");
+            continue;
         }
         let vk = (scan & 0xFF) as u16;
         let mods: &[u16] = if scan & 0x100 != 0 { &[VK_SHIFT] } else { &[] };
@@ -614,14 +713,44 @@ fn pause(ms: u64) {
     std::thread::sleep(Duration::from_millis(ms));
 }
 
-fn wait_until(what: &str, limit: Duration, mut done: impl FnMut() -> bool) {
+fn wait_until(what: &str, limit: Duration, mut done: impl FnMut() -> bool) -> Result<(), String> {
     let deadline = Instant::now() + limit;
     while !done() {
         if Instant::now() > deadline {
-            panic!("timed out waiting for {what}");
+            return Err(format!("timed out waiting for {what}"));
         }
         pause(100);
     }
+    Ok(())
+}
+
+/// Clicks the middle of `hwnd`.
+fn click_middle(hwnd: HWND) {
+    let mut r = RECT {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    };
+    // SAFETY: plain window and input calls.
+    unsafe {
+        GetWindowRect(hwnd, &mut r);
+        SetCursorPos((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+    }
+    let button = |flags| INPUT {
+        r#type: INPUT_MOUSE,
+        Anonymous: INPUT_0 {
+            mi: MOUSEINPUT {
+                dx: 0,
+                dy: 0,
+                mouseData: 0,
+                dwFlags: flags,
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    };
+    send(&[button(MOUSEEVENTF_LEFTDOWN), button(MOUSEEVENTF_LEFTUP)]);
 }
 
 fn log_len(log: &Path) -> usize {
