@@ -41,8 +41,9 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     EnumWindows, FindWindowW, GetForegroundWindow, GetSystemMetrics, GetWindowRect, GetWindowTextW,
-    GetWindowThreadProcessId, IsWindowVisible, PostMessageW, SM_CXSCREEN, SM_CYSCREEN,
-    SetCursorPos, SetForegroundWindow, SetProcessDPIAware, WM_CLOSE, WM_INPUTLANGCHANGEREQUEST,
+    GetWindowThreadProcessId, IsIconic, IsWindowVisible, PostMessageW, SM_CXSCREEN, SM_CYSCREEN,
+    SW_RESTORE, SetCursorPos, SetForegroundWindow, SetProcessDPIAware, ShowWindow, WM_CLOSE,
+    WM_INPUTLANGCHANGEREQUEST,
 };
 
 /// `WM_APP + 12`, `WM_QUIT_REQUEST` in `crates/phitpup/src/tray.rs`.
@@ -409,8 +410,16 @@ impl Run {
         set_clipboard_text("");
         tap(b'A' as u16, &[VK_CONTROL]);
         tap(b'C' as u16, &[VK_CONTROL]);
-        pause(300);
-        Ok(clipboard_text().unwrap_or_default().replace("\r\n", "\n"))
+        // Some apps (VS Code) fill the clipboard a while after the key.
+        let mut text = String::new();
+        for _ in 0..10 {
+            pause(200);
+            text = clipboard_text().unwrap_or_default();
+            if !text.is_empty() {
+                break;
+            }
+        }
+        Ok(text.replace("\r\n", "\n"))
     }
 
     /// The settings window's title follows `language` in the settings file.
@@ -643,9 +652,15 @@ fn unlocked() -> bool {
 /// Brings `hwnd` to the front. Windows lets a process do that only right
 /// after a key press, so F24 is tapped first: unlike Alt, it does nothing
 /// in the app (Alt would open Notepad's menu shortcuts and eat the next keys).
+/// A minimized window is restored first: it can be the foreground window
+/// while not shown, and then its text box does not get the keys.
 fn front(hwnd: HWND) -> Result<(), String> {
     // SAFETY: plain window calls.
     unsafe {
+        if IsIconic(hwnd) != 0 {
+            ShowWindow(hwnd, SW_RESTORE);
+            pause(500);
+        }
         if GetForegroundWindow() == hwnd {
             return Ok(());
         }
