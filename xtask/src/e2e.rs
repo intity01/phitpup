@@ -291,10 +291,15 @@ impl Run {
                 if !config.contains(&format!("ignore_words = [\"{SLIP}\"]")) {
                     return Err(format!("{SLIP} is not in ignore_words"));
                 }
+                // Nothing to accept: Notepad types a tab. Elsewhere Tab may move
+                // the focus out of the text (browsers do), so stop here.
+                if !matches!(r.target, Target::Notepad) {
+                    return Ok(());
+                }
                 r.fresh()?;
                 type_text(SLIP);
                 pause(500);
-                tap(VK_TAB, &[]); // nothing to accept: a tab is typed
+                tap(VK_TAB, &[]);
                 pause(300);
                 r.expect(&format!("{SLIP}\t"))
             }),
