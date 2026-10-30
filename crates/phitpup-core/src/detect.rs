@@ -54,21 +54,22 @@ impl Default for Thresholds {
     }
 }
 
-/// Abbreviations typed in English on purpose, which the English letter
-/// model cannot tell from Thai typed on the English layout ("pdf" reads as
-/// ยกด). Left out: those that spell a common Thai word on Kedmanee or
-/// Pattachote, such as cd (แก, ลง), pc (แล), fb (ดิ) and ok (นา).
+/// Abbreviations, and Thai chat words in Latin letters (krub, khob), typed
+/// in English on purpose, which the English letter model cannot tell from
+/// Thai typed on the English layout ("pdf" reads as ยกด). Left out: those
+/// that spell a common Thai word on Kedmanee or Pattachote, such as cd (แก,
+/// ลง), pc (แล), fb (ดิ), ok (นา) and kha (นี้).
 pub const ABBREVIATIONS: &[&str] = &[
     "afaik", "afk", "ai", "aka", "api", "apk", "asap", "bcc", "bkk", "brb", "bts", "btw", "ceo",
     "covid", "cpu", "css", "csv", "cto", "diy", "dm", "dns", "doc", "docx", "dvd", "eta", "etc",
     "eu", "exe", "faq", "fps", "ftp", "fyi", "gg", "git", "gps", "gpt", "gpu", "hdd", "hdmi", "hr",
     "html", "http", "https", "ide", "idk", "ig", "imho", "imo", "ios", "iot", "jpeg", "jpg", "js",
-    "json", "kpi", "lan", "lcd", "lgtm", "llm", "lmao", "lol", "mba", "mp3", "mp4", "mrt", "nas",
-    "nft", "npm", "nvm", "okr", "oled", "otp", "pdf", "phd", "pls", "plz", "png", "ppt", "pptx",
-    "ps5", "qr", "ram", "rgb", "roi", "rom", "sdk", "seo", "smh", "sms", "sql", "ssd", "ssh",
-    "svg", "tba", "tbh", "thx", "todo", "tsv", "tv", "txt", "ty", "uae", "uri", "url", "usa",
-    "usb", "ux", "vpn", "vs", "wan", "wifi", "wip", "wtf", "www", "xls", "xlsx", "xml", "yaml",
-    "yt", "zip",
+    "json", "khao", "khob", "khun", "kpi", "krab", "krap", "krub", "lan", "lcd", "lgtm", "llm",
+    "lmao", "lol", "mba", "mp3", "mp4", "mrt", "nas", "nft", "npm", "nvm", "okr", "oled", "otp",
+    "pdf", "phd", "pls", "plz", "png", "ppt", "pptx", "ps5", "qr", "ram", "rgb", "roi", "rom",
+    "sdk", "seo", "smh", "sms", "sql", "ssd", "ssh", "svg", "tba", "tbh", "thx", "todo", "tsv",
+    "tv", "txt", "ty", "uae", "uri", "url", "usa", "usb", "ux", "vpn", "vs", "wan", "wifi", "wip",
+    "wtf", "www", "xls", "xlsx", "xml", "yaml", "yt", "zip",
 ];
 
 /// Whether `word` is one of the [`ABBREVIATIONS`], in any case, or its plural.
@@ -312,9 +313,20 @@ impl Detector {
                 let margin = th_cost(word) + penalty - en_cost(&converted) - thresholds.to_english;
                 // หรื is on its way to หรือ, whatever "sin" looks like.
                 let thai_so_far = open && self.starts_thai_word(word);
+                // ๆ and ฯ belong to the word before ("ดี ๆเสนอ"), and look
+                // odd at either end of a run: the rest must read as English
+                // too. "question" typed on Kedmanee starts with ๆ (q).
+                let rest = word.trim_start_matches(['ๆ', 'ฯ']);
+                let rest = rest.trim_end_matches(['ๆ', 'ฯ']);
+                let marks_alone = rest.len() < word.len()
+                    && !rest.is_empty()
+                    && !self
+                        .judge_inner(rest, thresholds, open)
+                        .is_some_and(|v| v.flip);
                 (
                     margin,
                     !thai_so_far
+                        && !marks_alone
                         && !thai_abbreviation(word)
                         && converted.chars().any(|c| c.is_ascii_alphabetic()),
                 )

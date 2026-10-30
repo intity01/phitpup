@@ -216,3 +216,26 @@ fn thai_abbreviations_and_laughter_stay() {
     assert_eq!(d.judge(".้ำสสน.").unwrap().converted, "\"hello\"");
     assert!(d.judge(".้ำสสน.").unwrap().flip);
 }
+
+#[test]
+fn repetition_marks_stay_with_thai() {
+    for layout in [Layout::kedmanee(), Layout::pattachote()] {
+        let d = Detector::new(&Layout::us_qwerty(), &layout);
+        for w in ["ๆเสนอ", "นี้ๆ", "ๆวันที่", "ๆตัวอย่าง", "ทีฯ", "ๆหนี้ฉัน"]
+        {
+            assert!(
+                !d.judge_with(w, Thresholds::AUTO).is_some_and(|v| v.flip),
+                "{w}"
+            );
+            assert!(!d.judge(w).is_some_and(|v| v.flip), "{w}");
+        }
+    }
+    // English with q, typed on Kedmanee, starts with ๆ and is still caught.
+    let d = kedmanee(Thresholds::SUGGEST);
+    for meant in ["question", "quite", "quality"] {
+        let typed = d.convert(meant, Direction::ToThai);
+        assert!(typed.starts_with('ๆ'), "{typed}");
+        let v = d.judge(&typed).unwrap();
+        assert!(v.flip && v.converted == meant, "{typed} -> {}", v.converted);
+    }
+}
