@@ -2629,6 +2629,83 @@ unsafe extern "system" fn window_proc(
 mod tests {
     use super::*;
 
+    /// A window that is never shown, with each page's interesting state.
+    fn test_win(page: Page, dpi: u32, dark: bool, scroll: f32) -> Win {
+        let words = page == Page::Words;
+        Win {
+            hwnd: std::ptr::null_mut(),
+            dpi,
+            dark,
+            fonts: Fonts::new(dpi),
+            page,
+            mouse: Some((400.0, 120.0)),
+            tracking: false,
+            scroll,
+            max_scroll: 0.0,
+            hits: Vec::new(),
+            input: None,
+            draft: if words { "wtf".into() } else { String::new() },
+            focus: words,
+            caret_on: true,
+            capture: (page == Page::Shortcuts).then_some(Which::Accept),
+            note: None,
+            kb: (page == Page::General).then_some(Hit::Startup),
+        }
+    }
+
+    /// Each language on the General page can be clicked on its own, and
+    /// choosing one draws the window in it, with the choice circled.
+    #[test]
+    fn language_choices() {
+        // SAFETY: a memory DC made here and freed at the end.
+        let dc = unsafe { CreateCompatibleDC(std::ptr::null_mut()) };
+        let mut c = Config::default();
+        let mut win = test_win(Page::General, 96, false, 0.0);
+        let choices: Vec<(R, Language)> = build(&win, &c, dc)
+            .hits
+            .into_iter()
+            .filter_map(|(r, h)| match h {
+                Hit::Language(l) => Some((r, l)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(choices.len(), 3);
+        for (i, &(a, _)) in choices.iter().enumerate() {
+            assert!(a.x >= LEFT && a.x + a.w <= RIGHT, "{a:?}");
+            for &(b, _) in &choices[i + 1..] {
+                assert!(a.x + a.w <= b.x || b.x + b.w <= a.x, "{a:?} overlaps {b:?}");
+            }
+        }
+
+        for (language, title) in [(Language::Thai, "ทั่วไป"), (Language::English, "General")]
+        {
+            // What a click does, short of saving the settings file.
+            c.language = language;
+            crate::i18n::set(language);
+            win.fonts = Fonts::new(win.dpi);
+            let b = build(&win, &c, dc);
+            let texts: Vec<String> = b
+                .texts
+                .iter()
+                .map(|t| {
+                    String::from_utf16_lossy(&t.s)
+                        .trim_end_matches('\0')
+                        .to_string()
+                })
+                .collect();
+            assert!(texts.iter().any(|t| t == title), "{language:?}: {texts:?}");
+            let pens = b
+                .shapes
+                .iter()
+                .filter(|s| matches!(s, Shape::Pen { .. }))
+                .count();
+            assert!(pens >= 2, "the page and the choice are circled");
+        }
+        crate::i18n::set(Language::Auto);
+        // SAFETY: the DC made above.
+        unsafe { DeleteDC(dc) };
+    }
+
     /// Writes every page, light and dark, at 100% and 150%, as BMP files into
     /// `PHITPUP_PREVIEW_DIR`, to look at without a live desktop:
     /// `cargo test -p phitpup window_preview -- --ignored`
@@ -2663,26 +2740,7 @@ mod tests {
         for dark in [false, true] {
             for dpi in [96, 144] {
                 for (page, _, name) in PAGES {
-                    let words = page == Page::Words;
-                    let mut win = Win {
-                        hwnd: std::ptr::null_mut(),
-                        dpi,
-                        dark,
-                        fonts: Fonts::new(dpi),
-                        page,
-                        mouse: Some((400.0, 120.0)),
-                        tracking: false,
-                        scroll,
-                        max_scroll: 0.0,
-                        hits: Vec::new(),
-                        input: None,
-                        draft: if words { "wtf".into() } else { String::new() },
-                        focus: words,
-                        caret_on: true,
-                        capture: (page == Page::Shortcuts).then_some(Which::Accept),
-                        note: None,
-                        kb: (page == Page::General).then_some(Hit::Startup),
-                    };
+                    let mut win = test_win(page, dpi, dark, scroll);
                     let s = dpi as f32 / 96.0;
                     let (w, h) = ((W * s).round() as i32, (H * s).round() as i32);
                     let theme = if dark { "dark" } else { "light" };

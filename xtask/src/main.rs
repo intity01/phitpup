@@ -8,11 +8,16 @@
 //! `cargo xtask icons` exports the icon (drawn by `phitpup_core::icon`) to
 //! `assets/icon/` for the website and README: an `.ico`, PNGs and a preview.
 //!
+//! `cargo xtask e2e` checks the built app in a real Notepad with real key
+//! presses (see `e2e.rs`).
+//!
 //! `cargo xtask installer-art` draws the installer's side and corner images
 //! (red pen on ruled paper, as in the app) into `target/installer-art/`, where
 //! `installer/phitpup.iss` picks them up. They are not committed.
 
 mod corpus;
+#[cfg(windows)]
+mod e2e;
 mod train;
 
 use std::fmt::Write as _;
@@ -56,6 +61,8 @@ fn main() {
         Some("english-words") => train::english_words(&root()),
         Some("icons") => icons(),
         Some("installer-art") => installer_art(),
+        #[cfg(windows)]
+        Some("e2e") => e2e::run(&root()),
         Some("eval-detector") => {
             let lexicon = match args.get(1).map(String::as_str) {
                 Some("--lexicon") => args
@@ -68,7 +75,7 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: cargo xtask <gen-layouts | fetch-corpus | train-model | english-words | eval-detector | icons>"
+                "usage: cargo xtask <gen-layouts | fetch-corpus | train-model | english-words | eval-detector | icons | installer-art | e2e>"
             );
             std::process::exit(2);
         }

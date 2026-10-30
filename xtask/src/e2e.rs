@@ -1,0 +1,717 @@
+//! `cargo xtask e2e`: PhitPup against a real Notepad, with real key presses.
+//!
+//! Builds the app, asks a running PhitPup to quit (and starts it again at the
+//! end), and starts the new build with its settings in `target-e2e/home`, so
+//! yours are left alone. Then it types into Notepad with `SendInput`, which
+//! goes through PhitPup's keyboard hook like a person typing, presses Tab,
+//! Esc or Shift+Backspace, and reads the text back by copying it. A failed
+//! check saves a screenshot to `target-e2e/`.
+//!
+//! The keyboard and mouse must be left alone while it runs (about a minute),
+//! and the screen must not be locked. Your clipboard text is put back.
+
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant};
+
+use windows_sys::Win32::Foundation::{CloseHandle, HWND, LPARAM};
+use windows_sys::Win32::Graphics::Gdi::{
+    BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC,
+    DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, GetDIBits, ReleaseDC, SRCCOPY, SelectObject,
+};
+use windows_sys::Win32::System::DataExchange::{
+    CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard, SetClipboardData,
+};
+use windows_sys::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
+use windows_sys::Win32::System::StationsAndDesktops::{CloseDesktop, OpenInputDesktop};
+use windows_sys::Win32::System::Threading::{
+    OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+};
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+    GetKeyboardLayout, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+    LoadKeyboardLayoutW, SendInput, VK_BACK, VK_CONTROL, VK_DELETE, VK_ESCAPE, VK_MENU, VK_SHIFT,
+    VK_TAB, VkKeyScanExW,
+};
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    EnumWindows, FindWindowW, GetForegroundWindow, GetSystemMetrics, GetWindowTextW,
+    GetWindowThreadProcessId, IsWindowVisible, PostMessageW, SM_CXSCREEN, SM_CYSCREEN,
+    SetForegroundWindow, SetProcessDPIAware, WM_CLOSE, WM_INPUTLANGCHANGEREQUEST,
+};
+
+/// `WM_APP + 12`, `WM_QUIT_REQUEST` in `crates/phitpup/src/tray.rs`.
+const WM_QUIT_REQUEST: u32 = 0x800C;
+const TRAY_CLASS: &str = "PhitPupTray";
+const SETTINGS_CLASS: &str = "PhitPupSettings";
+const CF_UNICODETEXT: u32 = 13;
+/// The settings the test copy starts with.
+const CONFIG: &str = "mode = \"suggest\"\nlearn = true\n";
+/// สวัสดี typed on a US layout.
+const SLIP: &str = "l;ylfu";
+const HELLO: &str = "\u{0E2A}\u{0E27}\u{0E31}\u{0E2A}\u{0E14}\u{0E35}";
+
+pub fn run(root: &Path) {
+    // SAFETY: plain process setting, so screenshots are full size.
+    unsafe { SetProcessDPIAware() };
+    if !unlocked() {
+        fail_early("the screen is locked; unlock it and run again");
+    }
+    let exe = build(root);
+    let dir = root.join("target-e2e");
+    let home = dir.join("home");
+    let _ = std::fs::remove_dir_all(&home);
+    std::fs::create_dir_all(&home).expect("create target-e2e/home");
+    std::fs::write(home.join("config.toml"), CONFIG).expect("write the test settings");
+    let file = dir.join("e2e.txt");
+    std::fs::write(&file, "").expect("create target-e2e/e2e.txt");
+
+    println!("Leave the keyboard and mouse alone until this finishes.");
+    let mut run = Run {
+        restart: stop_running_copy(),
+        clipboard: clipboard_text(),
+        phitpup: None,
+        notepad: None,
+        launched: None,
+        typed: false,
+        log: dir.join("phitpup.log"),
+        exe,
+        dir,
+        home,
+    };
+    let code = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run.start(&file);
+        run.cases()
+    }))
+    .unwrap_or(1);
+    run.finish();
+    std::process::exit(code);
+}
+
+fn fail_early(why: &str) -> ! {
+    eprintln!("e2e: {why}");
+    std::process::exit(2);
+}
+
+/// Builds the app and returns its exe.
+fn build(root: &Path) -> PathBuf {
+    let out = Command::new(env!("CARGO"))
+        .args([
+            "build",
+            "--release",
+            "-p",
+            "phitpup",
+            "--message-format=json",
+        ])
+        .current_dir(root)
+        .stderr(Stdio::inherit())
+        .output()
+        .expect("run cargo build");
+    if !out.status.success() {
+        fail_early("the build failed");
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    text.lines()
+        .filter(|l| l.contains("\"name\":\"phitpup\"") && l.contains("\"executable\":\""))
+        .filter_map(|l| {
+            let start = l.find("\"executable\":\"")? + 14;
+            let end = start + l[start..].find('"')?;
+            Some(PathBuf::from(l[start..end].replace("\\\\", "\\")))
+        })
+        .next_back()
+        .unwrap_or_else(|| fail_early("cargo did not say where phitpup.exe is"))
+}
+
+/// One check: Ok, or what went wrong.
+type Case = fn(&mut Run) -> Result<(), String>;
+
+struct Run {
+    /// The PhitPup that was running before, to start again at the end.
+    restart: Option<PathBuf>,
+    clipboard: Option<String>,
+    phitpup: Option<Child>,
+    notepad: Option<HWND>,
+    /// Kept only so it is not a zombie; Notepad is closed by its tab.
+    launched: Option<Child>,
+    /// A case has typed; from then on Notepad must stay in front.
+    typed: bool,
+    log: PathBuf,
+    exe: PathBuf,
+    dir: PathBuf,
+    home: PathBuf,
+}
+
+impl Run {
+    fn start(&mut self, file: &Path) {
+        let log = std::fs::File::create(&self.log).expect("create the log");
+        let child = Command::new(&self.exe)
+            .env("PHITPUP_HOME", &self.home)
+            .env("PHITPUP_DEBUG", "1")
+            .env_remove("PHITPUP_LANG")
+            .stdout(Stdio::null())
+            .stderr(log)
+            .spawn()
+            .expect("start phitpup.exe");
+        self.phitpup = Some(child);
+        wait_until("PhitPup to start", Duration::from_secs(10), || {
+            !find(TRAY_CLASS).is_null()
+        });
+        // The word lists for slips take a moment.
+        std::thread::sleep(Duration::from_secs(3));
+
+        // Not waited for: Windows 11's Notepad may hand the file to a window
+        // that is already open and stay running, or keep running itself.
+        self.launched = Some(
+            Command::new("notepad.exe")
+                .arg(file)
+                .spawn()
+                .expect("start Notepad"),
+        );
+        let name = file.file_name().unwrap().to_string_lossy().into_owned();
+        let mut hwnd: HWND = std::ptr::null_mut();
+        wait_until("Notepad to open", Duration::from_secs(10), || {
+            hwnd = window_titled(&name);
+            !hwnd.is_null()
+        });
+        self.notepad = Some(hwnd);
+        std::thread::sleep(Duration::from_millis(800));
+    }
+
+    /// Runs every case; the number that failed.
+    fn cases(&mut self) -> i32 {
+        let cases: [(&str, Case); 6] = [
+            ("Tab accepts the suggestion", |r| {
+                r.fresh()?;
+                type_text(SLIP);
+                r.accept_key(VK_TAB, "accepted:")?;
+                r.expect(HELLO)
+            }),
+            ("Esc leaves the word as typed", |r| {
+                r.fresh()?;
+                type_text(SLIP);
+                pause(500);
+                tap(VK_ESCAPE, &[]);
+                pause(300);
+                r.expect(SLIP)
+            }),
+            ("Shift+Backspace fixes the last word", |r| {
+                r.fresh()?;
+                type_text(SLIP);
+                pause(300);
+                r.accept_key_with(VK_BACK, &[VK_SHIFT], "hotkey: erase")?;
+                r.expect(HELLO)
+            }),
+            ("English is left alone", |r| {
+                r.fresh()?;
+                type_text("hello world ");
+                pause(500);
+                r.expect("hello world ")
+            }),
+            ("Esc three times stops the suggestion", |r| {
+                for _ in 0..3 {
+                    r.fresh()?;
+                    type_text(SLIP);
+                    pause(500);
+                    tap(VK_ESCAPE, &[]);
+                    pause(300);
+                }
+                pause(1500); // saved by the worker
+                let config = std::fs::read_to_string(r.home.join("config.toml"))
+                    .map_err(|e| format!("read the test settings: {e}"))?;
+                if !config.contains(&format!("ignore_words = [\"{SLIP}\"]")) {
+                    return Err(format!("{SLIP} is not in ignore_words"));
+                }
+                r.fresh()?;
+                type_text(SLIP);
+                pause(500);
+                tap(VK_TAB, &[]); // nothing to accept: a tab is typed
+                pause(300);
+                r.expect(&format!("{SLIP}\t"))
+            }),
+            ("The language switches at once", |r| r.language()),
+        ];
+        let mut failed = 0;
+        for (i, (name, case)) in cases.iter().enumerate() {
+            match case(self) {
+                Ok(()) => println!("  ok    {name}"),
+                Err(why) => {
+                    failed += 1;
+                    let shot = self.dir.join(format!("fail-{}.bmp", i + 1));
+                    screenshot(&shot);
+                    println!(
+                        "  FAIL  {name}: {why}\n        screenshot {}",
+                        shot.display()
+                    );
+                }
+            }
+        }
+        println!(
+            "{} of {} passed; PhitPup's log: {}",
+            cases.len() as i32 - failed,
+            cases.len(),
+            self.log.display()
+        );
+        failed
+    }
+
+    /// Notepad in front, empty, on the US layout.
+    fn fresh(&mut self) -> Result<(), String> {
+        let hwnd = self.notepad.ok_or("Notepad is not open")?;
+        // Someone clicked elsewhere: stop rather than type into their window.
+        // SAFETY: plain query.
+        let now = unsafe { GetForegroundWindow() };
+        if now != hwnd && self.typed {
+            panic!("another window came to the front; stopped so nothing is typed into it");
+        }
+        self.typed = true;
+        front(hwnd)?;
+        tap(b'A' as u16, &[VK_CONTROL]);
+        tap(VK_DELETE, &[]);
+        english(hwnd)?;
+        // Moving the caret makes PhitPup forget what it saw.
+        pause(200);
+        Ok(())
+    }
+
+    /// Presses `vk` and waits for PhitPup to log `line`.
+    fn accept_key(&mut self, vk: u16, line: &str) -> Result<(), String> {
+        self.accept_key_with(vk, &[], line)
+    }
+
+    fn accept_key_with(&mut self, vk: u16, mods: &[u16], line: &str) -> Result<(), String> {
+        pause(500);
+        let from = log_len(&self.log);
+        tap(vk, mods);
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < deadline {
+            if log_since(&self.log, from).contains(line) {
+                pause(400); // the keys PhitPup typed
+                return Ok(());
+            }
+            pause(50);
+        }
+        Err(format!("PhitPup did not log \"{line}\""))
+    }
+
+    /// The text in Notepad is `want`.
+    fn expect(&mut self, want: &str) -> Result<(), String> {
+        let got = self.text()?;
+        if got == want {
+            Ok(())
+        } else {
+            Err(format!("expected {want:?}, got {got:?}"))
+        }
+    }
+
+    fn text(&mut self) -> Result<String, String> {
+        front(self.notepad.ok_or("Notepad is not open")?)?;
+        set_clipboard_text("");
+        tap(b'A' as u16, &[VK_CONTROL]);
+        tap(b'C' as u16, &[VK_CONTROL]);
+        pause(300);
+        Ok(clipboard_text().unwrap_or_default().replace("\r\n", "\n"))
+    }
+
+    /// The settings window's title follows `language` in the settings file.
+    fn language(&mut self) -> Result<(), String> {
+        // Started again, PhitPup shows the running copy's settings window.
+        Command::new(&self.exe)
+            .env("PHITPUP_HOME", &self.home)
+            .spawn()
+            .map_err(|e| format!("open the settings window: {e}"))?;
+        let mut hwnd: HWND = std::ptr::null_mut();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while hwnd.is_null() && Instant::now() < deadline {
+            hwnd = find(SETTINGS_CLASS);
+            pause(100);
+        }
+        if hwnd.is_null() {
+            return Err("the settings window did not open".into());
+        }
+        let result = (|| {
+            for (lang, title) in [
+                (
+                    "th",
+                    "\u{0E15}\u{0E31}\u{0E49}\u{0E07}\u{0E04}\u{0E48}\u{0E32}\u{0E1C}\u{0E34}\u{0E14}\u{0E1B}\u{0E38}\u{0E4A}\u{0E1A}",
+                ),
+                ("en", "PhitPup Settings"),
+            ] {
+                self.set_language(lang)?;
+                let deadline = Instant::now() + Duration::from_secs(6);
+                while window_text(hwnd) != title {
+                    if Instant::now() > deadline {
+                        return Err(format!(
+                            "language = \"{lang}\": the title is {:?}, not {title:?}",
+                            window_text(hwnd)
+                        ));
+                    }
+                    pause(100);
+                }
+            }
+            Ok(())
+        })();
+        // SAFETY: posting to a window that may have closed is harmless.
+        unsafe { PostMessageW(hwnd, WM_CLOSE, 0, 0) };
+        pause(300);
+        result
+    }
+
+    fn set_language(&self, lang: &str) -> Result<(), String> {
+        let path = self.home.join("config.toml");
+        let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let mut lines: Vec<String> = text
+            .lines()
+            .filter(|l| !l.starts_with("language"))
+            .map(String::from)
+            .collect();
+        lines.push(format!("language = \"{lang}\""));
+        std::fs::write(&path, lines.join("\n") + "\n").map_err(|e| e.to_string())
+    }
+
+    /// Empties and saves the test file, closes its tab, stops the test copy,
+    /// and puts back the clipboard and the PhitPup that was running.
+    fn finish(&mut self) {
+        if let Some(hwnd) = self.notepad.take()
+            && front(hwnd).is_ok()
+        {
+            tap(b'A' as u16, &[VK_CONTROL]);
+            tap(VK_DELETE, &[]);
+            tap(b'S' as u16, &[VK_CONTROL]);
+            pause(300);
+            tap(b'W' as u16, &[VK_CONTROL]);
+            pause(300);
+        }
+        if let Some(mut child) = self.phitpup.take() {
+            quit(find(TRAY_CLASS));
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while matches!(child.try_wait(), Ok(None)) && Instant::now() < deadline {
+                pause(100);
+            }
+            let _ = child.kill();
+        }
+        set_clipboard_text(self.clipboard.as_deref().unwrap_or(""));
+        if let Some(exe) = &self.restart {
+            // Not on our output: it would keep the pipe of whoever ran us open.
+            let started = Command::new(exe)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn();
+            match started {
+                Ok(_) => println!("Started your PhitPup again ({}).", exe.display()),
+                Err(e) => println!(
+                    "Could not start your PhitPup again ({e}): {}",
+                    exe.display()
+                ),
+            }
+        }
+    }
+}
+
+// ------------------------------------------------------------ windows
+
+fn wide(s: &str) -> Vec<u16> {
+    s.encode_utf16().chain(Some(0)).collect()
+}
+
+fn find(class: &str) -> HWND {
+    // SAFETY: NUL-terminated class name.
+    unsafe { FindWindowW(wide(class).as_ptr(), std::ptr::null()) }
+}
+
+fn window_text(hwnd: HWND) -> String {
+    let mut buf = [0u16; 256];
+    // SAFETY: the buffer's length is passed.
+    let n = unsafe { GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32) };
+    String::from_utf16_lossy(&buf[..n.max(0) as usize])
+}
+
+/// The visible top-level window whose title contains `part`.
+fn window_titled(part: &str) -> HWND {
+    struct Search<'a>(&'a str, HWND);
+    unsafe extern "system" fn each(hwnd: HWND, lparam: LPARAM) -> i32 {
+        // SAFETY: lparam is the Search below, alive for the call.
+        let s = unsafe { &mut *(lparam as *mut Search) };
+        // SAFETY: plain query.
+        if unsafe { IsWindowVisible(hwnd) } != 0 && window_text(hwnd).contains(s.0) {
+            s.1 = hwnd;
+            return 0;
+        }
+        1
+    }
+    let mut s = Search(part, std::ptr::null_mut());
+    // SAFETY: the callback only runs during the call.
+    unsafe { EnumWindows(Some(each), &mut s as *mut Search as LPARAM) };
+    s.1
+}
+
+fn exe_of(hwnd: HWND) -> Option<PathBuf> {
+    if hwnd.is_null() {
+        return None;
+    }
+    let mut pid = 0;
+    // SAFETY: plain queries on a handle closed afterwards.
+    unsafe {
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if process.is_null() {
+            return None;
+        }
+        let mut buf = [0u16; 1024];
+        let mut len = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(process, 0, buf.as_mut_ptr(), &mut len);
+        CloseHandle(process);
+        (ok != 0).then(|| PathBuf::from(String::from_utf16_lossy(&buf[..len as usize])))
+    }
+}
+
+fn quit(tray: HWND) {
+    if !tray.is_null() {
+        // SAFETY: posting to PhitPup's tray window.
+        unsafe { PostMessageW(tray, WM_QUIT_REQUEST, 0, 0) };
+    }
+}
+
+/// Asks a running PhitPup to quit; its exe, to start again later.
+fn stop_running_copy() -> Option<PathBuf> {
+    let tray = find(TRAY_CLASS);
+    let exe = exe_of(tray)?;
+    println!("Stopping your PhitPup for the test ({}).", exe.display());
+    quit(tray);
+    wait_until("your PhitPup to quit", Duration::from_secs(5), || {
+        find(TRAY_CLASS).is_null()
+    });
+    pause(500);
+    Some(exe)
+}
+
+fn unlocked() -> bool {
+    // SAFETY: a desktop handle closed right away. DESKTOP_SWITCHDESKTOP.
+    unsafe {
+        let desk = OpenInputDesktop(0, 0, 0x0100);
+        if desk.is_null() {
+            return false;
+        }
+        CloseDesktop(desk);
+        true
+    }
+}
+
+/// Brings `hwnd` to the front. Windows lets a process do that only right
+/// after a key press, so an Alt tap goes first.
+fn front(hwnd: HWND) -> Result<(), String> {
+    // SAFETY: plain window calls.
+    unsafe {
+        if GetForegroundWindow() == hwnd {
+            return Ok(());
+        }
+        tap(VK_MENU, &[]);
+        SetForegroundWindow(hwnd);
+        pause(300);
+        if GetForegroundWindow() != hwnd {
+            return Err("could not bring Notepad to the front".into());
+        }
+    }
+    Ok(())
+}
+
+/// Switches `hwnd` to the US layout and waits until it has.
+fn english(hwnd: HWND) -> Result<(), String> {
+    // SAFETY: plain layout calls; 0x0409 is US English.
+    unsafe {
+        let us = LoadKeyboardLayoutW(wide("00000409").as_ptr(), 0);
+        for _ in 0..20 {
+            let thread = GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
+            if GetKeyboardLayout(thread) as usize & 0xFFFF == 0x0409 {
+                return Ok(());
+            }
+            PostMessageW(hwnd, WM_INPUTLANGCHANGEREQUEST, 0, us as LPARAM);
+            pause(150);
+        }
+    }
+    Err("Notepad did not switch to the US layout".into())
+}
+
+// ------------------------------------------------------------ keys
+
+fn key(vk: u16, up: bool) -> INPUT {
+    INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: vk,
+                wScan: 0,
+                dwFlags: if up { KEYEVENTF_KEYUP } else { 0 },
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    }
+}
+
+fn send(inputs: &[INPUT]) {
+    // SAFETY: a slice of initialised INPUTs and its length.
+    unsafe {
+        SendInput(
+            inputs.len() as u32,
+            inputs.as_ptr(),
+            size_of::<INPUT>() as i32,
+        )
+    };
+}
+
+/// Presses `vk` with `mods` held.
+fn tap(vk: u16, mods: &[u16]) {
+    let mut inputs: Vec<INPUT> = mods.iter().map(|&m| key(m, false)).collect();
+    inputs.push(key(vk, false));
+    inputs.push(key(vk, true));
+    inputs.extend(mods.iter().rev().map(|&m| key(m, true)));
+    send(&inputs);
+    pause(30);
+}
+
+/// Types `text` key by key as on a US keyboard.
+fn type_text(text: &str) {
+    // SAFETY: plain layout calls; 0x0409 is US English.
+    let us = unsafe { LoadKeyboardLayoutW(wide("00000409").as_ptr(), 0) };
+    for c in text.encode_utf16() {
+        // SAFETY: plain query.
+        let scan = unsafe { VkKeyScanExW(c, us) };
+        if scan == -1 {
+            panic!("{text:?} has a character the US layout cannot type");
+        }
+        let vk = (scan & 0xFF) as u16;
+        let mods: &[u16] = if scan & 0x100 != 0 { &[VK_SHIFT] } else { &[] };
+        tap(vk, mods);
+        pause(40);
+    }
+}
+
+fn pause(ms: u64) {
+    std::thread::sleep(Duration::from_millis(ms));
+}
+
+fn wait_until(what: &str, limit: Duration, mut done: impl FnMut() -> bool) {
+    let deadline = Instant::now() + limit;
+    while !done() {
+        if Instant::now() > deadline {
+            panic!("timed out waiting for {what}");
+        }
+        pause(100);
+    }
+}
+
+fn log_len(log: &Path) -> usize {
+    std::fs::metadata(log).map_or(0, |m| m.len() as usize)
+}
+
+fn log_since(log: &Path, from: usize) -> String {
+    let bytes = std::fs::read(log).unwrap_or_default();
+    String::from_utf8_lossy(bytes.get(from..).unwrap_or_default()).into_owned()
+}
+
+// ------------------------------------------------------------ clipboard
+
+fn clipboard_text() -> Option<String> {
+    // SAFETY: the clipboard is opened and closed here; the data is read
+    // while locked, up to its NUL.
+    unsafe {
+        if OpenClipboard(std::ptr::null_mut()) == 0 {
+            return None;
+        }
+        let data = GetClipboardData(CF_UNICODETEXT);
+        let text = if data.is_null() {
+            None
+        } else {
+            let p = GlobalLock(data) as *const u16;
+            if p.is_null() {
+                None
+            } else {
+                let mut n = 0;
+                while *p.add(n) != 0 {
+                    n += 1;
+                }
+                let s = String::from_utf16_lossy(std::slice::from_raw_parts(p, n));
+                GlobalUnlock(data);
+                Some(s)
+            }
+        };
+        CloseClipboard();
+        text
+    }
+}
+
+fn set_clipboard_text(text: &str) {
+    let w = wide(text);
+    // SAFETY: the clipboard is opened and closed here; the memory is
+    // filled while locked and then belongs to the clipboard.
+    unsafe {
+        if OpenClipboard(std::ptr::null_mut()) == 0 {
+            return;
+        }
+        EmptyClipboard();
+        let mem = GlobalAlloc(GMEM_MOVEABLE, w.len() * 2);
+        if !mem.is_null() {
+            let p = GlobalLock(mem) as *mut u16;
+            if !p.is_null() {
+                std::ptr::copy_nonoverlapping(w.as_ptr(), p, w.len());
+                GlobalUnlock(mem);
+                SetClipboardData(CF_UNICODETEXT, mem);
+            }
+        }
+        CloseClipboard();
+    }
+}
+
+// ------------------------------------------------------------ screenshot
+
+/// The whole primary screen as a 24-bit BMP.
+fn screenshot(path: &Path) {
+    // SAFETY: GDI objects made and freed here; the buffer is sized for
+    // 32-bit rows of the screen's width and height.
+    unsafe {
+        let (w, h) = (GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
+        let screen = GetDC(std::ptr::null_mut());
+        let mem = CreateCompatibleDC(screen);
+        let bmp = CreateCompatibleBitmap(screen, w, h);
+        let old = SelectObject(mem, bmp);
+        BitBlt(mem, 0, 0, w, h, screen, 0, 0, SRCCOPY);
+        let mut info: BITMAPINFO = std::mem::zeroed();
+        info.bmiHeader = BITMAPINFOHEADER {
+            biSize: size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: w,
+            biHeight: h, // bottom-up, as BMP files are
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: BI_RGB,
+            ..std::mem::zeroed()
+        };
+        let mut px = vec![0u8; (w * h * 4) as usize];
+        GetDIBits(
+            mem,
+            bmp,
+            0,
+            h as u32,
+            px.as_mut_ptr().cast(),
+            &mut info,
+            DIB_RGB_COLORS,
+        );
+        SelectObject(mem, old);
+        DeleteObject(bmp);
+        DeleteDC(mem);
+        ReleaseDC(std::ptr::null_mut(), screen);
+
+        let size = 54 + px.len();
+        let mut out = Vec::with_capacity(size);
+        out.extend(b"BM");
+        out.extend((size as u32).to_le_bytes());
+        out.extend([0u8; 4]);
+        out.extend(54u32.to_le_bytes());
+        out.extend(40u32.to_le_bytes());
+        out.extend(w.to_le_bytes());
+        out.extend(h.to_le_bytes());
+        out.extend(1u16.to_le_bytes());
+        out.extend(32u16.to_le_bytes());
+        out.extend([0u8; 24]);
+        out.extend(px);
+        let _ = std::fs::write(path, out);
+    }
+}

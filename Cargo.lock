@@ -107,4 +107,5 @@ name = "xtask"
 version = "0.3.6"
 dependencies = [
  "phitpup-core",
+ "windows-sys",
 ]

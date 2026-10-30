@@ -15,7 +15,12 @@ use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
 use crate::{APP, hook};
 
+/// The settings file. `PHITPUP_HOME` puts it, and the files kept beside it,
+/// in another folder (`cargo xtask e2e` uses this to leave yours alone).
 pub fn path() -> PathBuf {
+    if let Some(home) = std::env::var_os("PHITPUP_HOME") {
+        return PathBuf::from(home).join("config.toml");
+    }
     let base = std::env::var_os("APPDATA").map_or_else(|| PathBuf::from("."), PathBuf::from);
     base.join("PhitPup").join("config.toml")
 }
