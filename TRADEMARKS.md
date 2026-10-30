@@ -6,7 +6,7 @@ sukudone.team-dev.
 
 - **Official downloads** are only at <https://intity01.github.io/phitpup/> and
   <https://github.com/intity01/phitpup/releases>. Copies from anywhere else are not from us.
-- PhitPup is free and not for sale. Anyone charging for it is not us.
+- PhitPup is free. We never charge for it, so anyone asking you to pay for it is not us.
 - If you share a changed version, give it a different name and icon, and do not suggest it comes
   from us or that we endorse it. Saying "based on PhitPup" is fine.
 - Writing about PhitPup, linking to it and showing the logo when you talk about it is welcome.

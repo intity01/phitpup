@@ -22,7 +22,7 @@ fn main() {
             ("InternalName", "phitpup-update"),
             (
                 "LegalCopyright",
-                "\u{a9} 2026 Intity01. Free, not for sale (PolyForm Noncommercial 1.0.0).",
+                "\u{a9} 2026 Intity01. Free and open source (GPL-3.0).",
             ),
             ("OriginalFilename", "phitpup-update.exe"),
             ("ProductName", "PhitPup"),

@@ -69,11 +69,13 @@ Made by **Intity01** · sukudone.team-dev. Data sources in [THIRD_PARTY.md](THIR
 
 ## License
 
-Free to use for everyone, including at work, and not for sale. From 0.3.4 the code is under the
-[PolyForm Noncommercial License 1.0.0](LICENSE): you may read, change and share it for
-noncommercial purposes, but not sell it. The official builds may be used for any purpose. Versions
-up to 0.3.3 were released under the MIT License. The PhitPup name and logo are not licensed, and
-official downloads are only on the website and GitHub releases: see [TRADEMARKS.md](TRADEMARKS.md).
+Free to use for everyone, including at work. From 0.4.0 PhitPup is open source under the
+[GNU General Public License version 3](LICENSE): you may use, study, change and share it, and a
+changed version you share must come with its source under the same license. Versions 0.3.4 to
+0.3.6 were released under the PolyForm Noncommercial License 1.0.0, and 0.3.3 and earlier under
+the MIT License. The PhitPup name and logo are not licensed, and official downloads are only on
+the website and GitHub releases: see [TRADEMARKS.md](TRADEMARKS.md).
 
-ใช้ฟรีทุกคน รวมถึงใช้ในที่ทำงาน แต่ห้ามขาย ตั้งแต่รุ่น 0.3.4 โค้ดใช้สัญญา PolyForm Noncommercial 1.0.0
-อ่าน แก้ และแจกต่อได้เพื่อการที่ไม่ใช่การค้า รุ่น 0.3.3 ลงไปเป็น MIT
+ใช้ฟรีทุกคน รวมถึงใช้ในที่ทำงาน ตั้งแต่รุ่น 0.4.0 เป็นโอเพนซอร์สตามสัญญา GPL รุ่น 3 ใช้ ศึกษา แก้ และแจกต่อได้
+ถ้าแจกฉบับที่แก้แล้วต้องเปิดซอร์สด้วยสัญญาเดียวกัน รุ่น 0.3.4–0.3.6 เป็น PolyForm Noncommercial 1.0.0
+และรุ่น 0.3.3 ลงไปเป็น MIT

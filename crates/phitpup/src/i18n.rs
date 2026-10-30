@@ -199,7 +199,7 @@ fn thai_for(en: &str) -> Option<&'static str> {
         "Team" => "ทีม",
         "Version" => "รุ่น",
         "License" => "สัญญาอนุญาต",
-        "Free, not for sale" => "ใช้ฟรี ห้ามขาย",
+        "Free, open source (GPL-3.0)" => "ใช้ฟรี โอเพนซอร์ส (GPL-3.0)",
         "Updates" => "อัปเดต",
         "Remind me to check" => "เตือนให้เช็กอัปเดต",
         "Once this version is two months old." => "เมื่อรุ่นนี้อายุครบสองเดือน",

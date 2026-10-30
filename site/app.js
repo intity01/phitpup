@@ -25,7 +25,7 @@ const EN = {
   "hero.lead": "Forgot to switch layouts, slipped into <s>teh</s>, or left Caps Lock on? PhitPup sees what you meant to type. One <kbd>Tab</kbd> and it is right.",
   "hero.download": "Download for Windows",
   "hero.try": "Try it in the browser",
-  "hero.meta": "Windows 10 and 11 · installs without admin rights · free, not for sale",
+  "hero.meta": "Windows 10 and 11 · installs without admin rights · free and open source",
   "what.title": "What it fixes",
   "what.lead": "PhitPup looks at the word you are typing and offers the right one in a small bubble by the caret. The label on the bubble says what kind of mistake it is.",
   "what.layout.t": "Wrong layout",
@@ -98,14 +98,14 @@ const EN = {
   "footer.source": "Source code",
   "footer.changes": "What's new",
   "footer.privacy": "Privacy",
-  "footer.license": "Free, not for sale",
+  "footer.license": "Free and open source",
   "status.fixed": "Fixed",
   "status.undone": "Put back",
   "status.nothing": "Nothing to fix",
   "status.loading": "Loading PhitPup…",
   "status.failed": "The try-it box could not load in this browser.",
-  "meta.release": (v, size) => `Version ${v} · ${size} · installs without admin rights · free, not for sale`,
-  "meta.portable": (v, size) => `Version ${v} · ${size} · one file, nothing to install · free, not for sale`,
+  "meta.release": (v, size) => `Version ${v} · ${size} · installs without admin rights · free and open source`,
+  "meta.portable": (v, size) => `Version ${v} · ${size} · one file, nothing to install · free and open source`,
 };
 
 const TH_EXTRA = {
@@ -116,8 +116,8 @@ const TH_EXTRA = {
   "status.nothing": "ไม่มีอะไรต้องแก้",
   "status.loading": "กำลังโหลดผิดปุ๊บ…",
   "status.failed": "ช่องทดลองโหลดไม่ได้ในเบราว์เซอร์นี้",
-  "meta.release": (v, size) => `รุ่น ${v} · ${size} · ติดตั้งโดยไม่ต้องใช้สิทธิ์ admin · ใช้ฟรี ห้ามขาย`,
-  "meta.portable": (v, size) => `รุ่น ${v} · ${size} · ไฟล์เดียวไม่ต้องติดตั้ง · ใช้ฟรี ห้ามขาย`,
+  "meta.release": (v, size) => `รุ่น ${v} · ${size} · ติดตั้งโดยไม่ต้องใช้สิทธิ์ admin · ใช้ฟรี โอเพนซอร์ส`,
+  "meta.portable": (v, size) => `รุ่น ${v} · ${size} · ไฟล์เดียวไม่ต้องติดตั้ง · ใช้ฟรี โอเพนซอร์ส`,
 };
 
 const TH = { ...TH_EXTRA };

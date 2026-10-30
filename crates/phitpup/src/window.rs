@@ -1659,7 +1659,7 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
         (G_PERSON, t("Made by"), AUTHOR),
         (G_PEOPLE, t("Team"), TEAM),
         (G_INFO, t("Version"), version),
-        (G_DOC, t("License"), t("Free, not for sale")),
+        (G_DOC, t("License"), t("Free, open source (GPL-3.0)")),
     ];
     for (glyph, title, value) in rows {
         let (cy, _) = b.row(y, 52.0, 52.0, Some(glyph), title, "", None);
