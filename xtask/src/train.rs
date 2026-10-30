@@ -152,6 +152,24 @@ const ENGLISH_EXTRA: &[&str] = &[
     "netflix",
     "iphone",
     "thai",
+    // Chat.
+    "haha",
+    "hahaha",
+    "hehe",
+    "bruh",
+    "yeet",
+    "irl",
+    "hbu",
+    "wyd",
+    "ngl",
+    "tmr",
+    "tmrw",
+    "ikr",
+    "lmk",
+    "pfp",
+    "bff",
+    "dms",
+    "rn",
 ];
 
 /// Writes `en-words.bin` from SCOWL, unpacked into `corpus/scowl/` (from
@@ -163,8 +181,12 @@ pub fn english_words(root: &Path) {
     let model = Model::embedded().lang(Lang::English);
     let mut words: std::collections::HashMap<String, f64> = Default::default();
     for &(level, bits) in ENGLISH_LEVELS {
-        for list in ["english-words", "american-words"] {
+        for list in ["english-words", "american-words", "english-contractions"] {
             let path = dir.join(format!("{list}.{level}"));
+            // Not every level has contractions.
+            if list == "english-contractions" && !path.exists() {
+                continue;
+            }
             let bytes = std::fs::read(&path).unwrap_or_else(|e| {
                 panic!("{}: {e} (unpack SCOWL into corpus/scowl)", path.display())
             });

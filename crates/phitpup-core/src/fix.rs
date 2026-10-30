@@ -461,9 +461,19 @@ fn last_word(chars: &[char]) -> Option<usize> {
     let word = &chars[start..];
     let thai = word.iter().rposition(|&c| thai::is_thai(c));
     let latin = word.iter().rposition(char::is_ascii_alphabetic);
-    Some(match (thai, latin) {
+    let start = match (thai, latin) {
         // After the last letter of the script that came first.
         (Some(t), Some(l)) => start + t.min(l) + 1,
+        _ => start,
+    };
+    // A number from the keypad, @ or # before Thai (5โมง, @สมชาย) was typed
+    // on purpose: the Thai layout's own keys never type them.
+    let lead = chars[start..]
+        .iter()
+        .take_while(|&&c| c.is_ascii_digit() || c == '@' || c == '#')
+        .count();
+    Some(match chars.get(start + lead) {
+        Some(&c) if lead > 0 && thai::is_thai(c) => start + lead,
         _ => start,
     })
 }
@@ -770,6 +780,33 @@ mod tests {
             let mut f = Fixer::new();
             f.typed(typed);
             assert_eq!(f.suggestion(&d, &[]), None, "{typed}");
+        }
+    }
+
+    #[test]
+    fn contractions_and_chat_are_not_slips() {
+        let d = det();
+        for word in [
+            "don't", "can't", "isn't", "we'll", "you're", "they've", "haha", "hehe", "bruh",
+        ] {
+            let mut f = Fixer::new();
+            f.slips = true;
+            for c in word.chars() {
+                f.typed(&c.to_string());
+                assert_eq!(f.suggestion(&d, &[]), None, "{word} at {}", f.text());
+            }
+        }
+    }
+
+    #[test]
+    fn thai_after_a_number_or_mention_is_judged_alone() {
+        let d = Detector::new(&Layout::us_qwerty(), &Layout::pattachote());
+        for typed in ["5โมง", "3ชม.", "@สมชาย"] {
+            let mut f = Fixer::new();
+            for c in typed.chars() {
+                f.typed(&c.to_string());
+                assert_eq!(f.suggestion(&d, &[]), None, "{typed} at {}", f.text());
+            }
         }
     }
 

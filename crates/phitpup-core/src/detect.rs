@@ -60,20 +60,28 @@ impl Default for Thresholds {
 /// that spell a common Thai word on Kedmanee or Pattachote, such as cd (แก,
 /// ลง), pc (แล), fb (ดิ), ok (นา) and kha (นี้).
 pub const ABBREVIATIONS: &[&str] = &[
-    "afaik", "afk", "ai", "aka", "api", "apk", "asap", "bcc", "bkk", "brb", "bts", "btw", "ceo",
-    "covid", "cpu", "css", "csv", "cto", "diy", "dm", "dns", "doc", "docx", "dvd", "eta", "etc",
-    "eu", "exe", "faq", "fps", "ftp", "fyi", "gg", "git", "gps", "gpt", "gpu", "hdd", "hdmi", "hr",
-    "html", "http", "https", "ide", "idk", "ig", "imho", "imo", "ios", "iot", "jpeg", "jpg", "js",
-    "json", "khao", "khob", "khun", "kpi", "krab", "krap", "krub", "lan", "lcd", "lgtm", "llm",
-    "lmao", "lol", "mba", "mp3", "mp4", "mrt", "nas", "nft", "npm", "nvm", "okr", "oled", "otp",
-    "pdf", "phd", "pls", "plz", "png", "ppt", "pptx", "ps5", "qr", "ram", "rgb", "roi", "rom",
-    "sdk", "seo", "smh", "sms", "sql", "ssd", "ssh", "svg", "tba", "tbh", "thx", "todo", "tsv",
-    "tv", "txt", "ty", "uae", "uri", "url", "usa", "usb", "ux", "vpn", "vs", "wan", "wifi", "wip",
-    "wtf", "www", "xls", "xlsx", "xml", "yaml", "yt", "zip",
+    "afaik", "afk", "ai", "aka", "api", "apk", "asap", "bcc", "bff", "bkk", "brb", "bruh", "bts",
+    "btw", "ceo", "covid", "cpu", "css", "csv", "cto", "diy", "dm", "dns", "doc", "docx", "dvd",
+    "eta", "etc", "eu", "exe", "faq", "fps", "ftp", "fyi", "gg", "git", "gps", "gpt", "gpu",
+    "haha", "hahaha", "hbu", "hdd", "hdmi", "hehe", "hr", "html", "http", "https", "ide", "idk",
+    "ig", "ikr", "imho", "imo", "ios", "iot", "irl", "jpeg", "jpg", "js", "json", "khao", "khob",
+    "khun", "kpi", "krab", "krap", "krub", "lan", "lcd", "lgtm", "llm", "lmao", "lol", "mba",
+    "mp3", "mp4", "mrt", "nas", "nft", "ngl", "npm", "nvm", "okr", "oled", "otp", "pdf", "pfp",
+    "phd", "pls", "plz", "png", "ppt", "pptx", "ps5", "qr", "ram", "rgb", "roi", "rom", "sdk",
+    "seo", "smh", "sms", "sql", "ssd", "ssh", "svg", "tba", "tbh", "thx", "tmr", "tmrw", "todo",
+    "tsv", "tv", "txt", "ty", "uae", "uri", "url", "usa", "usb", "ux", "vpn", "vs", "wan", "wifi",
+    "wip", "wtf", "www", "wyd", "xls", "xlsx", "xml", "yaml", "yeet", "yt", "zip",
 ];
 
-/// Whether `word` is one of the [`ABBREVIATIONS`], in any case, or its plural.
+/// Whether `word` is one of the [`ABBREVIATIONS`] or its plural, in
+/// lowercase, capitals or Capitalised. Mixed case is not: Shift types other
+/// Thai letters, so wyD is ต่ำ, not "wyd".
 fn is_abbreviation(word: &str) -> bool {
+    let usual = word.chars().skip(1).all(|c| !c.is_ascii_uppercase())
+        || word.chars().all(|c| !c.is_ascii_lowercase());
+    if !usual {
+        return false;
+    }
     let w = word.to_ascii_lowercase();
     let known = |w: &str| ABBREVIATIONS.binary_search(&w).is_ok();
     known(&w) || w.strip_suffix('s').is_some_and(known)
@@ -121,6 +129,68 @@ fn thai_abbreviation(text: &str) -> bool {
             .iter()
             .all(|g| g.chars().count() <= 3 && g.chars().all(thai::is_thai))
         && groups[..groups.len() - 1].iter().all(|g| !g.is_empty())
+}
+
+/// Endings after a dot that make a web address or a file name.
+const DOT_ENDINGS: &[&str] = &[
+    "app", "co", "com", "dev", "edu", "gov", "info", "io", "md", "me", "net", "org", "th",
+];
+
+/// Units and the like after a number (5km, 3pm, 4k, 1080p).
+const UNITS: &[&str] = &[
+    "am", "c", "cm", "fps", "g", "gb", "h", "hr", "hz", "k", "kb", "kg", "km", "m", "mb", "mg",
+    "min", "ml", "mm", "ms", "p", "pm", "s", "tb", "x",
+];
+
+/// Latin text shaped like English rather than a word: e.g., Mr., U.S.
+/// (letters in short groups with dots), google.com, my-file.pdf, john@x,
+/// 5km, x64, v1.2.3, and faces such as -_- with hardly a letter. Thai typed
+/// on the English layout can take these shapes too (ทำให้ is me.h on
+/// Kedmanee), so the caller checks the Thai reading as well.
+fn english_shape(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    let letters = |g: &str| !g.is_empty() && g.bytes().all(|b| b.is_ascii_alphabetic());
+    let groups: Vec<&str> = lower.split('.').collect();
+    let dotted = groups.len() > 1
+        && letters(groups[0])
+        && groups
+            .iter()
+            .all(|g| g.is_empty() || (letters(g) && g.len() <= 3))
+        && groups
+            .iter()
+            .skip_while(|g| !g.is_empty())
+            .all(|g| g.is_empty());
+    let named = groups.len() > 1
+        && groups
+            .last()
+            .is_some_and(|e| DOT_ENDINGS.contains(e) || ABBREVIATIONS.binary_search(e).is_ok())
+        && !groups[0].is_empty();
+    let hyphened = lower.split('-').count() > 1 && lower.split('-').all(letters);
+    let digits = lower.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.');
+    let unit = digits.len() < lower.len()
+        && lower.starts_with(|c: char| c.is_ascii_digit())
+        && UNITS.contains(&digits);
+    let numbered = lower.len() >= 2
+        && lower.starts_with(|c: char| c.is_ascii_alphabetic())
+        && lower[1..].bytes().all(|b| b.is_ascii_digit() || b == b'.')
+        && lower[1..].starts_with(|c: char| c.is_ascii_digit());
+    dotted
+        || named
+        || hyphened
+        || unit
+        || numbered
+        || lower.contains('@')
+        || lower.starts_with('#')
+        || lower.starts_with("~/")
+        || lower.contains(":\\")
+        || lower.contains("://")
+        || lower.starts_with("www.")
+        // A face (-_-, :P, ^^): hardly a letter, and the marks faces use.
+        // " and * are the Thai dot's key: ส.ว. is l";" on Kedmanee.
+        || (lower.bytes().filter(u8::is_ascii_alphabetic).count() < 2
+            && lower.bytes().any(|b| b":;=^_<>()".contains(&b))
+            && !lower.contains(['"', '*'])
+            && lower.len() >= 2)
 }
 
 /// 555 is how Thai laughs (5 reads ห้า, "ha"); "ok55" and "lol555" are
@@ -296,9 +366,22 @@ impl Detector {
         let (margin, allowed) = match direction {
             Direction::ToThai => {
                 let margin = en_cost(word) - th_cost(&converted) - thresholds.to_thai;
+                // A Thai word in an English shape is still Thai (me.h = ทำให้).
+                // While typing, "my-" and "google." are on their way to such
+                // a shape when the part before the mark is English.
+                let stem = word.trim_end_matches(['.', '-', '\'']);
+                let on_its_way = open
+                    && stem.len() < word.len()
+                    && stem.len() >= 2
+                    && !self
+                        .judge_inner(stem, thresholds, open)
+                        .is_some_and(|v| v.flip);
+                let shaped =
+                    (english_shape(word) || on_its_way) && !self.starts_thai_word(&converted);
                 (
                     margin,
                     !looks_numeric(word)
+                        && !shaped
                         && !is_abbreviation(word)
                         && !laughs(word)
                         && check(&converted),

@@ -239,3 +239,56 @@ fn repetition_marks_stay_with_thai() {
         assert!(v.flip && v.converted == meant, "{typed} -> {}", v.converted);
     }
 }
+
+#[test]
+fn english_shaped_text_stays() {
+    for layout in [Layout::kedmanee(), Layout::pattachote()] {
+        let d = Detector::new(&Layout::us_qwerty(), &layout);
+        for w in [
+            "etc.",
+            "e.g.",
+            "i.e.",
+            "U.S.",
+            "Mr.",
+            "vs.",
+            "No...",
+            "O.o",
+            "google.com",
+            "my-file.pdf",
+            "README.md",
+            "john@gmail.com",
+            "www.google.com",
+            "#tbt",
+            "~/Documents",
+            "5km",
+            "3pm",
+            "10kg",
+            "1080p",
+            "x64",
+            "v1.2.3",
+            "re-do",
+            "-_-",
+            ":P",
+            "PDF",
+            "ikr",
+            "wyd",
+            "tmrw",
+        ] {
+            for th in [Thresholds::SUGGEST, Thresholds::AUTO] {
+                assert!(!d.judge_with(w, th).is_some_and(|v| v.flip), "{w}");
+            }
+            assert!(
+                !d.judge_typing(w, Thresholds::SUGGEST)
+                    .is_some_and(|v| v.flip),
+                "{w}"
+            );
+        }
+    }
+    // The same shapes, when they spell common Thai, are still Thai.
+    let d = kedmanee(Thresholds::SUGGEST);
+    for meant in ["ทำให้", "ไข่", "ต่ำ", "ตึง"] {
+        let typed = d.convert(meant, Direction::ToEnglish);
+        let v = d.judge(&typed).unwrap();
+        assert!(v.flip && v.converted == meant, "{meant} = {typed}");
+    }
+}
