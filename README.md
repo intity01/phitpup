@@ -18,7 +18,7 @@ Forgot to switch layouts and typed `l;ylfu`? PhitPup sees you meant **สวั�
 It also offers to fix Thai typed in an order that looks right but is not (เเ for แ, ํ า for ำ, a tone
 mark before its vowel), so search and spell checkers find the word, plus words typed with Caps Lock
 left on (hELLO → Hello) and the same word typed twice (the the → the). The settings window is in
-Thai on Thai Windows and works from the keyboard. See [what's new](https://intity01.github.io/phitpup/changes.html)
+Thai or English (following Windows unless you choose) and works from the keyboard. See [what's new](https://intity01.github.io/phitpup/changes.html)
 and the [privacy policy](https://intity01.github.io/phitpup/privacy.html).
 
 It switches the keyboard layout for you, supports Kedmanee and Pattachote, and turns itself off in

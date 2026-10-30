@@ -150,6 +150,21 @@ begin
   Result := True;
 end;
 
+// On a first install, tells PhitPup which language Setup ran in, so its
+// first run speaks it (crates/phitpup/src/settings.rs, setup-language).
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Dir: String;
+begin
+  if (CurStep <> ssPostInstall) or IsUpdate then
+    Exit;
+  Dir := ExpandConstant('{userappdata}\PhitPup');
+  if FileExists(Dir + '\config.toml') then
+    Exit;
+  ForceDirectories(Dir);
+  SaveStringToFile(Dir + '\setup-language', ActiveLanguage, False);
+end;
+
 // Removes "start with Windows" if it points at this copy, whether Setup or
 // the app's own switch wrote it. Settings in %APPDATA%\PhitPup are kept.
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

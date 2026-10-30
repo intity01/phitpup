@@ -1,27 +1,52 @@
-//! Thai or English for the settings window, the tray and the messages,
-//! following the Windows display language. `PHITPUP_LANG=th` or `en`
-//! overrides it (for previews and testing).
+//! Thai or English for the settings window, the tray and the messages:
+//! the `language` setting, which by default follows the Windows display
+//! language. `PHITPUP_LANG=th` or `en` overrides both (for previews and
+//! testing, and to tell `phitpup-update.exe` which language to use).
 //!
 //! The English text is the key: [`t`] returns the Thai for it, or the
 //! English if there is none. Placeholders like `{key}` are filled in by the
 //! caller with `str::replace`, so both languages can put them anywhere.
 
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU8, Ordering};
 
+use phitpup_core::config::Language;
 use windows_sys::Win32::Globalization::GetUserDefaultUILanguage;
+
+/// The `language` setting: 0 auto, 1 Thai, 2 English.
+static CHOSEN: AtomicU8 = AtomicU8::new(0);
+
+/// Follows the `language` setting from now on.
+pub fn set(language: Language) {
+    let n = match language {
+        Language::Auto => 0,
+        Language::Thai => 1,
+        Language::English => 2,
+    };
+    CHOSEN.store(n, Ordering::Relaxed);
+}
 
 /// Whether to speak Thai.
 pub fn thai() -> bool {
+    static FORCED: OnceLock<Option<bool>> = OnceLock::new();
+    let forced = FORCED.get_or_init(|| match std::env::var("PHITPUP_LANG").as_deref() {
+        Ok("th") => Some(true),
+        Ok("en") => Some(false),
+        _ => None,
+    });
+    match (forced, CHOSEN.load(Ordering::Relaxed)) {
+        (Some(th), _) => *th,
+        (None, 1) => true,
+        (None, 2) => false,
+        _ => windows_thai(),
+    }
+}
+
+/// Whether the Windows display language is Thai.
+pub fn windows_thai() -> bool {
     static THAI: OnceLock<bool> = OnceLock::new();
-    *THAI.get_or_init(|| match std::env::var("PHITPUP_LANG").as_deref() {
-        Ok("th") => true,
-        Ok("en") => false,
-        _ => {
-            // SAFETY: plain query. LANG_THAI is primary language 0x1E.
-            let lang = unsafe { GetUserDefaultUILanguage() };
-            lang & 0x3FF == 0x1E
-        }
-    })
+    // SAFETY: plain query. LANG_THAI is primary language 0x1E.
+    *THAI.get_or_init(|| unsafe { GetUserDefaultUILanguage() } & 0x3FF == 0x1E)
 }
 
 /// `en` in the user's language.
@@ -56,6 +81,8 @@ fn thai_for(en: &str) -> Option<&'static str> {
         "PhitPup is on" => "ผิดปุ๊บเปิดอยู่",
         "Watching for text typed in the wrong layout." => "คอยดูข้อความที่พิมพ์ผิดภาษาอยู่",
         "Paused. Every key passes through untouched." => "หยุดชั่วคราว ทุกปุ่มที่กดผ่านไปตามปกติ",
+        "The settings window, tray menu and messages." => "หน้าตั้งค่า เมนูที่ไอคอน และข้อความต่างๆ",
+        "Like Windows" => "ตาม Windows",
         "When to offer a fix" => "จะให้แก้ตอนไหน",
         "The hotkey always works." => "ปุ่มลัดใช้ได้เสมอ",
         "Suggest while typing" => "เสนอคำที่ถูกระหว่างพิมพ์",

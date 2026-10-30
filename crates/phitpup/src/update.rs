@@ -71,8 +71,13 @@ fn run(helper: PathBuf, args: Vec<String>, busy: State) {
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     set(busy);
     std::thread::spawn(move || {
+        // Setup's progress window speaks the app's language.
         let child = Command::new(helper)
             .args(&args)
+            .env(
+                "PHITPUP_LANG",
+                if crate::i18n::thai() { "th" } else { "en" },
+            )
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())

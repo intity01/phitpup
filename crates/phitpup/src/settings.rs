@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::SystemTime;
 
-use phitpup_core::config::{Config, TEMPLATE};
+use phitpup_core::config::{Config, Language, TEMPLATE};
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::System::Registry::{
     HKEY, HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_SZ, RegCloseKey, RegDeleteValueW,
@@ -63,20 +63,44 @@ pub fn modified() -> Option<SystemTime> {
     std::fs::metadata(path()).and_then(|m| m.modified()).ok()
 }
 
+/// The language Setup ran in ("th" or "en"), left by the installer for
+/// the first run.
+fn setup_language_path() -> PathBuf {
+    path().with_file_name("setup-language")
+}
+
 /// Reads the settings, writing the commented template first if there are
-/// none. The second value lists problems to show the user.
+/// none, and speaks their language from now on. The second value lists
+/// problems to show the user.
 pub fn load() -> (Config, Vec<String>) {
     let path = path();
     let out = match std::fs::read_to_string(&path) {
         Ok(text) => Config::parse(&text),
         Err(_) => {
+            let c = Config {
+                language: first_language(),
+                ..Config::default()
+            };
             let _ = std::fs::create_dir_all(path.parent().unwrap());
-            let _ = std::fs::write(&path, TEMPLATE);
-            (Config::default(), Vec::new())
+            let _ = std::fs::write(&path, c.write_to(TEMPLATE));
+            (c, Vec::new())
         }
     };
     *SEEN.lock().unwrap() = modified();
+    crate::i18n::set(out.0.language);
     out
+}
+
+/// The first run speaks the language Setup was run in, if that is not the
+/// Windows one anyway.
+fn first_language() -> Language {
+    let setup = std::fs::read_to_string(setup_language_path());
+    let _ = std::fs::remove_file(setup_language_path());
+    match (setup.as_deref().map(str::trim), crate::i18n::windows_thai()) {
+        (Ok("th"), false) => Language::Thai,
+        (Ok("en"), true) => Language::English,
+        _ => Language::Auto,
+    }
 }
 
 /// The file's modification time when we last read or wrote it, so our own
@@ -98,6 +122,7 @@ pub fn save(config: &Config) {
 pub fn apply(config: Config) {
     let Some(app) = APP.get() else { return };
     save(&config);
+    crate::i18n::set(config.language);
     *app.config.lock().unwrap() = config;
     crate::context::forget();
     hook::reset("settings changed");

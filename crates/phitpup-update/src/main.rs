@@ -122,11 +122,18 @@ fn install(version: &str, no_run: bool) -> Line {
     // PhitPup again when it is done (installer/phitpup.iss).
     match std::process::Command::new(&file)
         .args(["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/UPDATE"])
+        .args(lang())
         .spawn()
     {
         Ok(_) => Line::Started,
         Err(_) => Line::Failed("Could not start the installer.".into()),
     }
+}
+
+/// `/LANG=` for Setup: the language PhitPup passes in `PHITPUP_LANG`.
+fn lang() -> Option<String> {
+    let lang = std::env::var("PHITPUP_LANG").ok()?;
+    matches!(lang.as_str(), "th" | "en").then(|| format!("/LANG={lang}"))
 }
 
 #[cfg(windows)]

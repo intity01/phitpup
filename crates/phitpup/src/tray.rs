@@ -436,6 +436,11 @@ fn show_menu(hwnd: HWND) {
     window::refresh();
 }
 
+/// The tray tip in the language now chosen.
+pub fn relabel() {
+    update_icon(NIM_MODIFY);
+}
+
 pub fn toggle_pause() {
     let Some(app) = APP.get() else { return };
     let now = !app.paused.load(Ordering::Relaxed);
@@ -465,7 +470,11 @@ fn reload_if_changed() {
     };
     let Some(app) = APP.get() else { return };
     debug!("settings reloaded ({} problems)", problems.len());
+    let relabel = app.config.lock().unwrap().language != config.language;
     *app.config.lock().unwrap() = config;
+    if relabel {
+        window::relabel();
+    }
     crate::context::forget();
     hook::reset("settings changed");
     if !problems.is_empty() {

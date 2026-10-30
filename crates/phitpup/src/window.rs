@@ -15,7 +15,7 @@
 
 use std::cell::RefCell;
 
-use phitpup_core::config::{self, Config, Mode};
+use phitpup_core::config::{self, Config, Language, Mode};
 use phitpup_core::hotkey::{self, Hotkey, VK_ESCAPE};
 use phitpup_core::icon::{self, Tone};
 use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
@@ -52,11 +52,11 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     GetWindowLongPtrW, GetWindowTextLengthW, HICON, HTCLIENT, IDC_ARROW, IDC_IBEAM, IMAGE_ICON,
     IsIconic, IsWindowVisible, KillTimer, LoadCursorW, LoadIconW, LoadImageW, MF_GRAYED, MF_STRING,
     PostMessageW, RegisterClassExW, SM_CXSMICON, SW_RESTORE, SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER,
-    SetCursor, SetForegroundWindow, SetTimer, SetWindowPos, ShowWindow, TPM_LEFTALIGN,
-    TPM_RETURNCMD, TPM_TOPALIGN, TrackPopupMenu, WM_CHAR, WM_CLOSE, WM_DESTROY, WM_DPICHANGED,
-    WM_ERASEBKGND, WM_KEYDOWN, WM_LBUTTONDOWN, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NULL, WM_PAINT,
-    WM_SETCURSOR, WM_SETTINGCHANGE, WM_SYSCHAR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WNDCLASSEXW,
-    WS_CAPTION, WS_EX_TOOLWINDOW, WS_MINIMIZEBOX, WS_OVERLAPPED, WS_SYSMENU,
+    SetCursor, SetForegroundWindow, SetTimer, SetWindowPos, SetWindowTextW, ShowWindow,
+    TPM_LEFTALIGN, TPM_RETURNCMD, TPM_TOPALIGN, TrackPopupMenu, WM_CHAR, WM_CLOSE, WM_DESTROY,
+    WM_DPICHANGED, WM_ERASEBKGND, WM_KEYDOWN, WM_LBUTTONDOWN, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NULL,
+    WM_PAINT, WM_SETCURSOR, WM_SETTINGCHANGE, WM_SYSCHAR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER,
+    WNDCLASSEXW, WS_CAPTION, WS_EX_TOOLWINDOW, WS_MINIMIZEBOX, WS_OVERLAPPED, WS_SYSMENU,
 };
 
 use crate::i18n::{t, thai};
@@ -196,6 +196,7 @@ enum Hit {
     Nav(Page),
     On,
     Mode(Mode),
+    Language(Language),
     Startup,
     Fullscreen,
     OpenFile,
@@ -533,6 +534,21 @@ pub fn refresh() {
         // SAFETY: our own window.
         unsafe { InvalidateRect(hwnd, std::ptr::null(), 0) };
     }
+}
+
+/// Shows the window and the tray in the language now chosen: the headings'
+/// font depends on it, and so do the title and the tray tip.
+pub fn relabel() {
+    if let Some(hwnd) = hwnd() {
+        with(|w| w.fonts = Fonts::new(w.dpi));
+        let title = wide(t("PhitPup Settings"));
+        // SAFETY: our own window and a NUL-terminated string.
+        unsafe {
+            SetWindowTextW(hwnd, title.as_ptr());
+            InvalidateRect(hwnd, std::ptr::null(), 0);
+        }
+    }
+    crate::tray::relabel();
 }
 
 /// Closes the window if it is open.
@@ -1117,6 +1133,46 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
         Some(Hit::On),
     );
     b.toggle(cy, on, hovered);
+    y += 72.0;
+
+    // In both languages, for someone who cannot read the one shown.
+    let (cy, _) = b.row(
+        y,
+        68.0,
+        68.0,
+        None,
+        "ภาษา · Language",
+        t("The settings window, tray menu and messages."),
+        None,
+    );
+    let choices = [
+        (Language::Auto, t("Like Windows")),
+        (Language::Thai, "ไทย"),
+        (Language::English, "English"),
+    ];
+    let mut x = RIGHT - 8.0;
+    for &(language, label) in choices.iter().rev() {
+        let w = b.width(F::Body, label);
+        x -= w;
+        let r = R::new(x - 8.0, cy - 16.0, w + 16.0, 32.0);
+        let hovered = b.hit(r, Hit::Language(language));
+        if hovered {
+            b.fill(r, 6.0, p.card_hover);
+        }
+        let chosen = c.language == language;
+        let ink = if chosen { p.accent } else { p.text };
+        b.text(
+            R::new(x, cy - 10.0, w + 1.0, 20.0),
+            label,
+            F::Body,
+            ink,
+            LINE,
+        );
+        if chosen {
+            b.circle(R::new(x, cy - 9.0, w, 18.0));
+        }
+        x -= 24.0;
+    }
     y += 72.0;
 
     let options = [
@@ -2061,6 +2117,10 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
         }
         Hit::On => tray::toggle_pause(),
         Hit::Mode(mode) => edit(|c| c.mode = mode),
+        Hit::Language(language) => {
+            edit(|c| c.language = language);
+            relabel();
+        }
         Hit::Underline => edit(|c| c.underline = !c.underline),
         Hit::Spelling => edit(|c| c.spelling = !c.spelling),
         Hit::Typos => edit(|c| c.typos = !c.typos),

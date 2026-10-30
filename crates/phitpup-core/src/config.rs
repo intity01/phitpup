@@ -28,9 +28,38 @@ impl Mode {
     }
 }
 
+/// The language of the settings window, the tray and the messages.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Language {
+    /// The Windows display language: Thai if it is Thai, else English.
+    Auto,
+    Thai,
+    English,
+}
+
+impl Language {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Language::Auto => "auto",
+            Language::Thai => "th",
+            Language::English => "en",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Language> {
+        match s {
+            "auto" => Some(Language::Auto),
+            "th" => Some(Language::Thai),
+            "en" => Some(Language::English),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Config {
     pub mode: Mode,
+    pub language: Language,
     /// Turn off in windows that cover the whole screen (games, videos).
     pub off_in_fullscreen: bool,
     /// Programs (exe names) where PhitPup does nothing at all.
@@ -78,6 +107,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             mode: Mode::Suggest,
+            language: Language::Auto,
             off_in_fullscreen: true,
             off_apps: Vec::new(),
             quiet_apps: Vec::new(),
@@ -108,6 +138,10 @@ pub const TEMPLATE: &str = r#"# ผิดปุ๊บ PhitPup settings. The tray
 # "auto"    : like suggest, and Space fixes the word when PhitPup is sure;
 #             Shift+Backspace right after puts it back
 mode = "suggest"
+
+# The language of the settings window and messages: "auto" follows Windows,
+# "th" is Thai, "en" is English.
+language = "auto"
 
 # Mark the word with a wavy underline instead of the bubble. Apps that do not
 # say where the word is (some games and chat apps) still get the bubble.
@@ -192,6 +226,9 @@ impl Config {
                     _ => None,
                 }
                 .map(|m| c.mode = m),
+                "language" => string(value)
+                    .and_then(|s| Language::parse(&s))
+                    .map(|l| c.language = l),
                 "off_in_fullscreen" => boolean(value).map(|b| c.off_in_fullscreen = b),
                 "off_apps" => list(value).map(|a| c.off_apps = a),
                 "quiet_apps" => list(value).map(|a| c.quiet_apps = a),
@@ -234,6 +271,7 @@ impl Config {
             )
         };
         let mut t = set(text, "mode", &quoted(self.mode.as_str()));
+        t = set(&t, "language", &quoted(self.language.as_str()));
         t = set(&t, "underline", &self.underline.to_string());
         t = set(&t, "spelling", &self.spelling.to_string());
         t = set(&t, "typos", &self.typos.to_string());
@@ -438,6 +476,7 @@ accept_key = \"shift+backspace\"",
     fn write_to_round_trips() {
         let c = Config {
             mode: Mode::Manual,
+            language: Language::Thai,
             off_in_fullscreen: false,
             off_apps: vec!["game.exe".into()],
             quiet_apps: vec!["notes.exe".into(), "x # y.exe".into()],
@@ -499,6 +538,16 @@ accept_key = \"shift+backspace\"",
         }
         .write_to(TEMPLATE);
         assert_eq!(Config::parse(&text).0.mode, Mode::Auto);
+    }
+
+    #[test]
+    fn reads_the_language() {
+        assert_eq!(Config::default().language, Language::Auto);
+        let (c, problems) = Config::parse("language = \"th\"");
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(c.language, Language::Thai);
+        let (c, problems) = Config::parse("language = \"thai\"");
+        assert_eq!((c.language, problems.len()), (Language::Auto, 1));
     }
 
     #[test]
