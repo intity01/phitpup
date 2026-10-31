@@ -69,6 +69,11 @@ The installer is built with [Inno Setup](https://jrsoftware.org/isinfo.php) 6.5 
 
 Made by **Intity01** · sukudone.team-dev. Data sources in [THIRD_PARTY.md](THIRD_PARTY.md).
 
+## Code signing policy
+
+Releases are built by GitHub Actions from this repository; see the
+[code signing policy](https://intity01.github.io/phitpup/signing.html) for what is signed and by whom.
+
 ## License
 
 Free to use for everyone, including at work. From 0.4.0 PhitPup is open source under the

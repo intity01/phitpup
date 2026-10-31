@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code signing policy · ผิดปุ๊บ PhitPup</title>
+<meta name="description" content="How PhitPup releases are built and signed, and who may sign them">
+<meta name="theme-color" content="#D93A12">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="top">
+  <a class="brand" href="./">
+    <img src="logo.svg" alt="" width="32" height="32">
+    <span>PhitPup <small>ผิดปุ๊บ</small></span>
+  </a>
+  <nav>
+    <a href="./"><span data-lang="th">หน้าแรก</span><span data-lang="en">Home</span></a>
+    <a href="privacy.html"><span data-lang="th">ความเป็นส่วนตัว</span><span data-lang="en">Privacy</span></a>
+  </nav>
+  <button class="lang" id="lang" type="button" aria-label="Switch language">EN</button>
+</header>
+
+<main class="doc">
+
+<section data-lang="th">
+  <h1>Code signing policy</h1>
+  <p class="section-lead">นโยบายการเซ็นโค้ดของผิดปุ๊บ (PhitPup) · ปรับปรุงล่าสุด 31 ตุลาคม 2026</p>
+  <p>ผิดปุ๊บขอใช้บริการเซ็นโค้ดฟรีสำหรับโอเพนซอร์สจาก SignPath Foundation เมื่อได้รับอนุมัติ ไฟล์ที่ออกจะเซ็นด้วยใบรับรองของ SignPath Foundation: Free code signing provided by <a href="https://about.signpath.io/">SignPath.io</a>, certificate by <a href="https://signpath.org/">SignPath Foundation</a></p>
+
+  <h2>อะไรถูกเซ็น</h2>
+  <p>เฉพาะ <code>phitpup.exe</code>, <code>phitpup-update.exe</code> และ <code>PhitPup-Setup.exe</code> ที่ GitHub Actions สร้างจากซอร์สโค้ดใน <a href="https://github.com/intity01/phitpup">github.com/intity01/phitpup</a> ตอนติด tag รุ่นใหม่ ไม่มีการเซ็นไฟล์ที่สร้างในเครื่องของใคร</p>
+
+  <h2>ทีม</h2>
+  <ul>
+    <li>ผู้เขียนโค้ด (Committers and reviewers): <a href="https://github.com/intity01">Intity01</a></li>
+    <li>ผู้อนุมัติการเซ็น (Approvers): <a href="https://github.com/intity01">Intity01</a></li>
+  </ul>
+  <p>โค้ดที่คนนอกทีมเสนอมา ต้องผ่านการตรวจของทีมก่อนรวม ทุกคนในทีมใช้การยืนยันตัวตนหลายขั้น (MFA) ทั้งบน GitHub และ SignPath</p>
+
+  <h2>ความเป็นส่วนตัว</h2>
+  <p>ผิดปุ๊บไม่ส่งข้อมูลไปที่ไหน ยกเว้นตอนคุณกด "เช็กอัปเดต" ตัวอัปเดตจะถามเลขรุ่นล่าสุดจาก intity01.github.io และโหลดตัวติดตั้งจาก github.com ถ้าคุณกดติดตั้ง ดูรายละเอียดที่<a href="privacy.html">นโยบายความเป็นส่วนตัว</a></p>
+</section>
+
+<section data-lang="en">
+  <h1>Code signing policy</h1>
+  <p class="section-lead">PhitPup (ผิดปุ๊บ) · last updated 31 October 2026</p>
+  <p>PhitPup has applied for free open-source code signing from SignPath Foundation. Once approved, releases are signed with its certificate: Free code signing provided by <a href="https://about.signpath.io/">SignPath.io</a>, certificate by <a href="https://signpath.org/">SignPath Foundation</a>.</p>
+
+  <h2>What is signed</h2>
+  <p>Only <code>phitpup.exe</code>, <code>phitpup-update.exe</code> and <code>PhitPup-Setup.exe</code> as built by GitHub Actions from the source at <a href="https://github.com/intity01/phitpup">github.com/intity01/phitpup</a> when a release is tagged. Nothing built on anyone's own computer is signed.</p>
+
+  <h2>Team roles</h2>
+  <ul>
+    <li>Committers and reviewers: <a href="https://github.com/intity01">Intity01</a></li>
+    <li>Approvers: <a href="https://github.com/intity01">Intity01</a></li>
+  </ul>
+  <p>Changes proposed by anyone outside the team are reviewed by a team member before they are merged. Every team member uses multi-factor authentication on GitHub and SignPath.</p>
+
+  <h2>Privacy</h2>
+  <p>This program will not transfer any information to other networked systems unless specifically requested by the user: when you click "Check for updates", the updater asks intity01.github.io for the newest version number and, if you choose to install, downloads the installer from github.com. See the <a href="privacy.html">privacy policy</a>.</p>
+</section>
+
+</main>
+
+<footer>
+  <img src="logo.svg" alt="" width="24" height="24">
+  <p><b>Intity01</b> · sukudone.team-dev · <a href="https://github.com/intity01/phitpup">GitHub</a></p>
+</footer>
+
+<script src="page.js"></script>
+</body>
+</html>
