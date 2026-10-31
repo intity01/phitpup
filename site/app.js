@@ -76,6 +76,7 @@ const EN = {
   "install.1.p": "PhitPup-Setup.exe installs for your account only, with no admin rights. PhitPup then shows up in the Start menu and can be removed from Windows Settings.",
   "install.portable": "Or use the single file, nothing to install (phitpup.exe)",
   "install.1.b": "Download the latest version",
+  "install.signing": "PhitPup has applied for free code signing from SignPath Foundation. See the <a href=\"signing.html\">code signing policy</a>.",
   "install.hash": "SHA-256:",
   "install.2.t": "Run the installer",
   "install.2.p": "If a blue \"Windows protected your PC\" window appears, click <b>More info</b>, then <b>Run anyway</b>. PhitPup does not have a paid code-signing certificate yet. Then click Next until it is done.",
