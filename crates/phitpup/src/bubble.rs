@@ -17,8 +17,13 @@
 //!
 //! It lives on the worker thread; the hook posts
 //! [`WM_BUBBLE`](crate::WM_BUBBLE) whenever the suggestion changes.
+//!
+//! A word fixed on its own (`learn_auto`) gets a [`notice`]: the bubble
+//! shows the fix for a moment with the hotkey and a button that undo it.
 
 use std::cell::RefCell;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicIsize, Ordering};
 use std::time::{Duration, Instant};
 
 use phitpup_core::model::Lang;
@@ -147,6 +152,45 @@ pub fn dark_theme() -> bool {
     r == ERROR_SUCCESS && light == 0
 }
 
+/// How long a [`notice`] stays.
+const NOTICE_FOR: Duration = Duration::from_millis(2500);
+
+/// A word just fixed on its own, its badge, and when.
+static NOTICE: Mutex<Option<(String, &'static str, Instant)>> = Mutex::new(None);
+/// The bubble window, for the mouse hook.
+static HWND_NOW: AtomicIsize = AtomicIsize::new(0);
+
+/// `word` was just fixed on its own: show it with how to undo it. Any
+/// thread; post [`WM_BUBBLE`](crate::WM_BUBBLE) after.
+pub fn notice(word: String, switch_to: Lang) {
+    let badge = match switch_to {
+        Lang::Thai => "TH",
+        Lang::English => "EN",
+    };
+    *NOTICE.lock().unwrap() = Some((word, badge, Instant::now()));
+}
+
+/// Drops the notice; true if there was one. Any thread.
+pub fn end_notice() -> bool {
+    NOTICE.lock().unwrap().take().is_some()
+}
+
+/// The notice, while it lasts, and how long it has left.
+fn noticing() -> Option<(String, &'static str, Duration)> {
+    let n = NOTICE.lock().unwrap();
+    let (word, badge, at) = n.as_ref()?;
+    let left = NOTICE_FOR.checked_sub(at.elapsed())?;
+    Some((word.clone(), badge, left))
+}
+
+/// Whether the screen point (`x`, `y`) is on the bubble. Any thread.
+pub fn under(x: i32, y: i32) -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::WindowFromPoint;
+    let hwnd = HWND_NOW.load(Ordering::Relaxed);
+    // SAFETY: plain query.
+    hwnd != 0 && unsafe { WindowFromPoint(POINT { x, y }) } as isize == hwnd
+}
+
 /// What the bubble shows; a change means drawing it again.
 #[derive(Clone, PartialEq)]
 struct Look {
@@ -155,7 +199,8 @@ struct Look {
     badge: &'static str,
     /// The accept key's label.
     hint: String,
-    /// The label of the button that keeps the word as typed.
+    /// The label of the button that keeps the word as typed (or, for a
+    /// notice, undoes the fix).
     keep: &'static str,
     dpi: u32,
     dark: bool,
@@ -274,6 +319,7 @@ pub fn create() {
         );
         (hwnd, CreateCompatibleDC(std::ptr::null_mut()))
     };
+    HWND_NOW.store(hwnd as isize, Ordering::Relaxed);
     BUBBLE.with_borrow_mut(|b| {
         *b = Some(Bubble {
             hwnd,
@@ -357,6 +403,18 @@ pub fn hide() {
 
 fn settle() {
     let Some((typed, word, badge)) = current() else {
+        if let Some((word, badge, left)) = noticing() {
+            underline::hide();
+            show(word, badge, true);
+            // Hides it when the time is up.
+            BUBBLE.with_borrow(|b| {
+                if let Some(b) = b {
+                    // SAFETY: our own window.
+                    unsafe { SetTimer(b.hwnd, SETTLE, left.as_millis() as u32 + 1, None) };
+                }
+            });
+            return;
+        }
         return hide();
     };
     if underline_on() {
@@ -384,7 +442,7 @@ fn settle() {
         }
     }
     underline::hide();
-    show(word, badge)
+    show(word, badge, false)
 }
 
 fn fade_out(b: &mut Bubble) {
@@ -416,19 +474,23 @@ fn monitor_of(p: POINT) -> (RECT, u32) {
     }
 }
 
-fn show(word: String, badge: &'static str) {
+/// Shows `word`; with `undo`, as a notice of a fix already made.
+fn show(word: String, badge: &'static str, undo: bool) {
     let (anchor, caret_h) = caret();
     let (work, dpi) = monitor_of(anchor);
     let scale = dpi as f32 / 96.0;
     let hint = APP.get().map_or_else(
         || "Tab".into(),
-        |a| a.config.lock().unwrap().accept_key.label(),
+        |a| {
+            let c = a.config.lock().unwrap();
+            if undo { c.hotkey } else { c.accept_key }.label()
+        },
     );
     let look = Look {
         word,
         badge,
         hint,
-        keep: t("Leave it"),
+        keep: if undo { t("Undo") } else { t("Leave it") },
         dpi,
         dark: dark_theme(),
     };
@@ -924,7 +986,11 @@ unsafe extern "system" fn window_proc(
             1
         }
         WM_LBUTTONUP if on_keep(hwnd) => {
-            hook::keep_as_typed();
+            if current().is_none() && end_notice() {
+                hook::undo_notice();
+            } else {
+                hook::keep_as_typed();
+            }
             0
         }
         // SAFETY: default handling for everything else.

@@ -11,6 +11,8 @@ Forgot to switch layouts and typed `l;ylfu`? PhitPup sees you meant **สวั�
 
 - **Suggest** (default): a small bubble under the caret; <kbd>Tab</kbd> accepts, <kbd>Esc</kbd> hides,
   <kbd>Shift</kbd>+<kbd>Esc</kbd> (or <kbd>Esc</kbd> three times) never suggests that word again.
+  Two switches on the Words page, off unless you turn them on, learn more: a word whose fix you
+  take 5 times is then fixed on <kbd>Space</kbd>, and a word you type on past 5 times is left alone.
 - **Auto**: <kbd>Space</kbd> fixes a word PhitPup is very sure about.
 - **Hotkey**: <kbd>Shift</kbd>+<kbd>Backspace</kbd> fixes the last word (again: one word further back,
   then undo), or the selected text. Works in every mode, and right after a fix it puts the word back.

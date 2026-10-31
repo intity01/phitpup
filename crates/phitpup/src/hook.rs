@@ -11,7 +11,9 @@
 //! fixed word and the space instead.
 //!
 //! After every key it keeps what the fixer learned from the user's
-//! corrections (see [`learn`]).
+//! corrections (see [`learn`]). With `learn_auto` on, a word whose fix was
+//! taken often is fixed on Space and the bubble says so; with `learn_own`
+//! on, a word typed on past often is left alone.
 //!
 //! Where [`context::gate`] says PhitPup is off (password fields and the
 //! like), keys pass untouched and nothing is remembered.
@@ -22,20 +24,21 @@ use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyState, ToUnicodeEx, VK_BACK, VK_CAPITAL, VK_CONTROL, VK_ESCAPE,
-    VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_PACKET, VK_RCONTROL, VK_RMENU,
-    VK_RSHIFT, VK_RWIN, VK_SHIFT, VK_SPACE,
+    VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_PACKET, VK_RCONTROL, VK_RETURN,
+    VK_RMENU, VK_RSHIFT, VK_RWIN, VK_SHIFT, VK_SPACE,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, GetForegroundWindow, HC_ACTION, KBDLLHOOKSTRUCT, PostThreadMessageW,
-    SetWindowsHookExW, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN,
-    WM_MBUTTONDOWN, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_XBUTTONDOWN,
+    CallNextHookEx, GetForegroundWindow, HC_ACTION, KBDLLHOOKSTRUCT, MSLLHOOKSTRUCT,
+    PostThreadMessageW, SetWindowsHookExW, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP,
+    WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_XBUTTONDOWN,
 };
 
+use phitpup_core::Kind;
 use phitpup_core::config::Mode;
 use phitpup_core::hotkey::DoubleTap;
 
 use crate::context::{self, Gate};
-use crate::{APP, App, WM_ACCEPT, WM_BUBBLE, WM_FIX, WM_SAVE, inject, layout};
+use crate::{APP, App, WM_ACCEPT, WM_BUBBLE, WM_FIX, WM_SAVE, bubble, inject, layout};
 
 /// CapsLock as we last saw it; GetKeyState is stale for other threads' input.
 static CAPS: AtomicBool = AtomicBool::new(false);
@@ -87,6 +90,16 @@ pub fn keep_as_typed() {
     post(app, WM_BUBBLE);
 }
 
+/// The notice's undo button was clicked: the same as the hotkey right after
+/// the fix. Runs on the worker thread.
+pub fn undo_notice() {
+    let Some(app) = APP.get() else { return };
+    debug!("undo button: undoing the fix made on its own");
+    post(app, WM_BUBBLE);
+    // SAFETY: posting to the worker thread's queue.
+    unsafe { PostThreadMessageW(app.worker, WM_FIX, 1, 0) };
+}
+
 /// Forgets what was typed and hides the bubble.
 pub fn reset(why: &str) {
     if let Some(app) = APP.get() {
@@ -114,10 +127,17 @@ pub fn learn(app: &App) {
         return;
     }
     let mut c = app.config.lock().unwrap();
+    let mut changed = false;
+    if let Some(word) = &rejected
+        && c.unauto(word)
+    {
+        debug!("a fix made on its own was undone: that word will be offered again");
+        post(app, WM_SAVE);
+        return;
+    }
     if !c.learn {
         return;
     }
-    let mut changed = false;
     if let Some(word) = rejected {
         debug!("a fix was undone: that word will be left alone");
         changed |= c.ignore(&word);
@@ -147,22 +167,18 @@ fn set_suggestion(app: &App, s: Option<phitpup_core::Suggestion>) {
 
 /// Asks the fixer whether the word being typed needs fixing.
 fn refresh(app: &App, quiet: bool) {
+    if bubble::end_notice() {
+        post(app, WM_BUBBLE);
+    }
     if quiet || app.mode() == Mode::Manual {
         return;
     }
-    let (ignored, learned, extras) = {
-        let c = app.config.lock().unwrap();
-        (
-            c.ignore_words.clone(),
-            c.learned_words.clone(),
-            (c.spelling, c.typos, c.slips),
-        )
-    };
+    let config = app.config.lock().unwrap().clone();
     let mut fixer = app.fixer.lock().unwrap();
-    (fixer.spelling, fixer.typos, fixer.slips) = extras;
+    (fixer.spelling, fixer.typos, fixer.slips) = (config.spelling, config.typos, config.slips);
     let s = fixer
-        .suggestion(&app.detector, &learned)
-        .filter(|s| !ignored.contains(&s.word.to_lowercase()));
+        .suggestion(&app.detector, &config.learned_words)
+        .filter(|s| !config.leaves_alone(&s.word));
     drop(fixer);
     if s.is_none() {
         DISMISSED.store(false, Ordering::Relaxed);
@@ -291,7 +307,8 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
                 }
                 return true;
             }
-            if app.config.lock().unwrap().accepted(&s.word) {
+            let layout = s.kind == Kind::Layout;
+            if app.config.lock().unwrap().accepted(&s.word, layout) {
                 post(app, WM_SAVE);
             }
             if let Some(edit) = app.fixer.lock().unwrap().accept(&s) {
@@ -303,31 +320,51 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
         }
     }
 
-    if vk == VK_SPACE && !ctrl && !alt && !win && !quiet && app.mode() == Mode::Auto {
+    // The word the bubble offers to fix, as Space or Enter ends it.
+    let plain = !ctrl && !alt && !win;
+    let offered = if plain && matches!(vk, VK_SPACE | VK_RETURN) {
+        app.suggestion.lock().unwrap().clone()
+    } else {
+        None
+    };
+    // A word whose fix the user always takes (learn_auto).
+    let learned_fix = offered.as_ref().is_some_and(|s| {
+        s.kind == Kind::Layout
+            && (app.config.lock().unwrap().auto_words).contains(&s.word.to_lowercase())
+    });
+    let auto = app.mode() == Mode::Auto;
+
+    if vk == VK_SPACE && plain && !quiet && (auto || learned_fix) {
         let edit = {
-            let (ignored, learned, extras) = {
-                let c = app.config.lock().unwrap();
-                (
-                    c.ignore_words.clone(),
-                    c.learned_words.clone(),
-                    (c.spelling, c.typos, c.slips),
-                )
+            let config = app.config.lock().unwrap().clone();
+            let mut learned = config.learned_words.clone();
+            learned.extend(config.auto_words.iter().cloned());
+            let skip = |w: &str| {
+                config.leaves_alone(w) || (!auto && !config.auto_words.contains(&w.to_lowercase()))
             };
-            let skip = |w: &str| ignored.contains(&w.to_lowercase());
             let mut fixer = app.fixer.lock().unwrap();
-            (fixer.spelling, fixer.typos, fixer.slips) = extras;
+            (fixer.spelling, fixer.typos, fixer.slips) =
+                (config.spelling, config.typos, config.slips);
             fixer.auto(&app.detector, " ", skip, &learned)
         };
         set_suggestion(app, None);
         DISMISSED.store(false, Ordering::Relaxed);
         if let Some(edit) = edit {
-            debug!("Space: the word is fixed automatically");
+            if learned_fix && !auto {
+                debug!("Space: a word whose fix is always taken is fixed on its own");
+                bubble::notice(edit.insert.trim_end().to_string(), edit.switch_to);
+                post(app, WM_BUBBLE);
+            } else {
+                debug!("Space: the word is fixed automatically");
+            }
             *app.accepted.lock().unwrap() = Some(edit);
             post(app, WM_ACCEPT);
             return true;
         }
+        typed_past(app, offered.as_ref());
         return false; // the fixer already recorded the space
     }
+    typed_past(app, offered.as_ref());
 
     if !win && hotkey.matches(vk, ctrl, shift, alt) {
         debug!(
@@ -335,6 +372,9 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
             app.fixer.lock().unwrap().text().chars().count()
         );
         set_suggestion(app, None);
+        if bubble::end_notice() {
+            post(app, WM_BUBBLE);
+        }
         post(app, WM_FIX);
         return true;
     }
@@ -370,6 +410,19 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
         }
     }
     false
+}
+
+/// The user ended the word `offered` was for without taking its fix: with
+/// `learn_own`, count it towards their own words.
+fn typed_past(app: &App, offered: Option<&phitpup_core::Suggestion>) {
+    let Some(s) = offered else { return };
+    let mut c = app.config.lock().unwrap();
+    if c.passed(&s.word) {
+        if c.leaves_alone(&s.word) {
+            debug!("a word typed on past often is now one of the user's own");
+        }
+        post(app, WM_SAVE);
+    }
 }
 
 /// What the key types in the foreground window's current layout.
@@ -412,7 +465,12 @@ unsafe extern "system" fn mouse(code: i32, wparam: WPARAM, lparam: LPARAM) -> LR
             WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN
         )
     {
-        reset("mouse click"); // a click can move the caret anywhere
+        // SAFETY: for HC_ACTION, lparam points to an MSLLHOOKSTRUCT.
+        let m = unsafe { &*(lparam as *const MSLLHOOKSTRUCT) };
+        // A click on the bubble's button must not forget the word it is for.
+        if !bubble::under(m.pt.x, m.pt.y) {
+            reset("mouse click"); // a click can move the caret anywhere
+        }
     }
     // SAFETY: forwarding the unchanged arguments.
     unsafe { CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam) }

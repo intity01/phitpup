@@ -116,6 +116,30 @@ fn thai_for(en: &str) -> Option<&'static str> {
             "ไม่บังรายการที่เด้งใต้ช่องพิมพ์ เช่น คำค้นที่แนะนำ"
         }
         "Leave it" => "ไม่ต้องแก้",
+        "Undo" => "ย้อนกลับ",
+        "Fix on its own after 5 Tabs" => "แก้เองเมื่อกด Tab คำเดิมครบ 5 ครั้ง",
+        "A word whose fix you take 5 times is then fixed on Space." => {
+            "คำที่คุณกดแก้ครบ 5 ครั้ง จะแก้ให้เองตอนเว้นวรรค"
+        }
+        "Keeps those words and how often you took their fix on this computer only. Turning it off forgets them." => {
+            "เก็บคำเหล่านั้นและจำนวนครั้งที่กดแก้ไว้ในเครื่องนี้เท่านั้น ปิดแล้วจะลืมทั้งหมด"
+        }
+        "Learn my own words" => "จำคำของฉัน",
+        "A word you type on past 5 times is no longer offered." => {
+            "คำที่ถูกเสนอแก้แต่คุณพิมพ์ต่อครบ 5 ครั้ง จะไม่เสนออีก"
+        }
+        "Keeps only words PhitPup offered to fix, on this computer only; nothing else you type. Turning it off forgets them." => {
+            "เก็บเฉพาะคำที่ผิดปุ๊บเคยเสนอแก้ ไว้ในเครื่องนี้เท่านั้น ไม่เก็บคำอื่นที่คุณพิมพ์ ปิดแล้วจะลืมทั้งหมด"
+        }
+        "Fixed on their own ({n})" => "แก้เอง ({n})",
+        "Words whose fix you take with the accept key 5 times show up here." => {
+            "คำที่คุณกดแก้ครบ 5 ครั้งจะขึ้นที่นี่"
+        }
+        "Your words ({n})" => "คำของคุณ ({n})",
+        "Words PhitPup offered to fix that you typed on past 5 times show up here." => {
+            "คำที่ถูกเสนอแก้แต่คุณพิมพ์ต่อครบ 5 ครั้งจะขึ้นที่นี่"
+        }
+        "Forget what it learned" => "ลืมสิ่งที่เรียนรู้",
         "Start with Windows" => "เปิดพร้อม Windows",
         "Run PhitPup when you sign in." => "เปิดผิดปุ๊บเมื่อเข้าสู่ระบบ",
         "Turn off in full-screen windows" => "ปิดในหน้าต่างเต็มจอ",

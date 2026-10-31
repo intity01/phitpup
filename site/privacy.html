@@ -39,10 +39,12 @@
   <h2>สิ่งที่บันทึกในเครื่อง</h2>
   <ul>
     <li>ไฟล์ตั้งค่า <code>%APPDATA%\PhitPup\config.toml</code>: โหมด ปุ่มลัด โปรแกรมที่ให้ปิด และคำที่คุณเพิ่มหรือที่ผิดปุ๊บเรียนรู้จากการแก้ของคุณ</li>
+    <li>ถ้าเปิด "แก้เองเมื่อกด Tab คำเดิมครบ 5 ครั้ง" (ปิดไว้เป็นค่าเริ่มต้น): คำที่ผิดปุ๊บเสนอแก้แล้วคุณกด Tab และจำนวนครั้ง ในไฟล์ตั้งค่าเดียวกัน</li>
+    <li>ถ้าเปิด "จำคำของฉัน" (ปิดไว้เป็นค่าเริ่มต้น): คำที่ผิดปุ๊บเสนอแก้แต่คุณพิมพ์ต่อ และจำนวนครั้ง ในไฟล์ตั้งค่าเดียวกัน ไม่เก็บคำอื่นที่คุณพิมพ์</li>
     <li>วันที่เตือนอัปเดตครั้งล่าสุด และเลขรุ่นที่เปิดล่าสุด (เพื่อบอกว่ามีอะไรใหม่หลังอัปเดต)</li>
     <li>ถ้าเปิด "เปิดพร้อม Windows": ค่าใน Registry ที่ชี้ไปที่โปรแกรม</li>
   </ul>
-  <p>ลบได้ทั้งหมดโดยถอนการติดตั้งแล้วลบโฟลเดอร์ <code>%APPDATA%\PhitPup</code></p>
+  <p>ปิดสวิตช์เหล่านั้น หรือกด "ลืมสิ่งที่เรียนรู้" ในหน้าคำ เพื่อลบคำที่เรียนรู้ ลบได้ทั้งหมดโดยถอนการติดตั้งแล้วลบโฟลเดอร์ <code>%APPDATA%\PhitPup</code></p>
 
   <h2>การต่ออินเทอร์เน็ต</h2>
   <p>ตัวโปรแกรม <code>phitpup.exe</code> ไม่มีโค้ดต่ออินเทอร์เน็ต มีแค่ตัวอัปเดต <code>phitpup-update.exe</code> ที่แยกไว้ ซึ่งทำงานเฉพาะตอนคุณกด "เช็กอัปเดต" มันขอไฟล์ <code>release.json</code> จาก intity01.github.io เพื่อดูเลขรุ่นล่าสุด และถ้าคุณกดติดตั้ง ก็โหลดตัวติดตั้งจาก github.com คำขอเหล่านี้ไม่มีข้อมูลของคุณ แต่ GitHub ในฐานะผู้ให้บริการเว็บจะเห็นที่อยู่ IP ของคุณ ตามนโยบายของ GitHub</p>
@@ -71,10 +73,12 @@
   <h2>What is saved on your computer</h2>
   <ul>
     <li>The settings file <code>%APPDATA%\PhitPup\config.toml</code>: mode, shortcuts, programs to stay out of, and words you added or PhitPup learned from your corrections.</li>
+    <li>If "Fix on its own after 5 Tabs" is on (it is off unless you turn it on): the words PhitPup offered to fix that you took with Tab, and how many times, in the same settings file.</li>
+    <li>If "Learn my own words" is on (it is off unless you turn it on): the words PhitPup offered to fix that you typed on past, and how many times, in the same settings file. Nothing else you type is kept.</li>
     <li>The date of the last update reminder, and the version that last ran (to show what's new after an update).</li>
     <li>If "Start with Windows" is on: a registry value pointing at the program.</li>
   </ul>
-  <p>Uninstall and delete the <code>%APPDATA%\PhitPup</code> folder to remove all of it.</p>
+  <p>Turn those switches off, or click "Forget what it learned" on the Words page, to remove the words they learned. Uninstall and delete the <code>%APPDATA%\PhitPup</code> folder to remove all of it.</p>
 
   <h2>Internet connections</h2>
   <p><code>phitpup.exe</code> has no networking code. Only the separate updater, <code>phitpup-update.exe</code>, goes online, and only when you click "Check for updates": it asks intity01.github.io for <code>release.json</code> to learn the newest version number and, if you click install, downloads the installer from github.com. These requests carry nothing about you, though GitHub, as the host, sees your IP address under GitHub's own policy.</p>

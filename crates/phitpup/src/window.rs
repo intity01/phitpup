@@ -217,7 +217,13 @@ enum Hit {
     AddWord,
     RemoveWord(usize),
     RemoveLearned(usize),
+    RemoveAuto(usize),
+    RemoveOwn(usize),
     Learn,
+    LearnAuto,
+    LearnOwn,
+    /// Forgets every word PhitPup learned on its own.
+    ClearLearned,
     Change(Which),
     ResetKeys,
 }
@@ -1451,7 +1457,49 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
         Some(Hit::Learn),
     );
     b.toggle(cy, c.learn, hovered);
-    y += 84.0;
+    y += 72.0;
+
+    // Opt-in learning: each says what it keeps on this computer.
+    let (cy, hovered) = b.row(
+        y,
+        68.0,
+        68.0,
+        Some(G_BULB),
+        t("Fix on its own after 5 Tabs"),
+        t("A word whose fix you take 5 times is then fixed on Space."),
+        Some(Hit::LearnAuto),
+    );
+    b.toggle(cy, c.learn_auto, hovered);
+    y += 70.0;
+    y += b.para(
+        LEFT + 8.0,
+        y,
+        WIDTH - 16.0,
+        t("Keeps those words and how often you took their fix on this computer only. Turning it off forgets them."),
+        F::Caption,
+        p.sub,
+    );
+    y += 8.0;
+    let (cy, hovered) = b.row(
+        y,
+        68.0,
+        68.0,
+        Some(G_BULB),
+        t("Learn my own words"),
+        t("A word you type on past 5 times is no longer offered."),
+        Some(Hit::LearnOwn),
+    );
+    b.toggle(cy, c.learn_own, hovered);
+    y += 70.0;
+    y += b.para(
+        LEFT + 8.0,
+        y,
+        WIDTH - 16.0,
+        t("Keeps only words PhitPup offered to fix, on this computer only; nothing else you type. Turning it off forgets them."),
+        F::Caption,
+        p.sub,
+    );
+    y += 20.0;
 
     let field = R::new(LEFT, y, WIDTH - 108.0, 36.0);
     let hovered = b.hit(field, Hit::Input);
@@ -1543,7 +1591,52 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
     } else {
         chips(b, y + 22.0, &c.learned_words, Hit::RemoveLearned, true)
     };
-    if !c.ignore_words.is_empty() || !c.learned_words.is_empty() {
+    if c.learn_auto || !c.auto_words.is_empty() {
+        y += 20.0;
+        let n = c.auto_words.len();
+        y = b.section(
+            y,
+            &t("Fixed on their own ({n})").replace("{n}", &n.to_string()),
+        );
+        y = if n == 0 {
+            b.para(
+                LEFT,
+                y,
+                WIDTH,
+                t("Words whose fix you take with the accept key 5 times show up here."),
+                F::Caption,
+                p.faint,
+            ) + y
+        } else {
+            chips(b, y + 22.0, &c.auto_words, Hit::RemoveAuto, true)
+        };
+    }
+    if c.learn_own || !c.own_words.is_empty() {
+        y += 20.0;
+        let n = c.own_words.len();
+        y = b.section(y, &t("Your words ({n})").replace("{n}", &n.to_string()));
+        y = if n == 0 {
+            b.para(
+                LEFT,
+                y,
+                WIDTH,
+                t("Words PhitPup offered to fix that you typed on past 5 times show up here."),
+                F::Caption,
+                p.faint,
+            ) + y
+        } else {
+            chips(b, y, &c.own_words, Hit::RemoveOwn, false)
+        };
+    }
+    let any = [
+        &c.ignore_words,
+        &c.learned_words,
+        &c.auto_words,
+        &c.own_words,
+    ]
+    .iter()
+    .any(|l| !l.is_empty());
+    if any {
         y += 8.0;
         b.text(
             R::new(LEFT, y, WIDTH, 18.0),
@@ -1553,6 +1646,26 @@ fn words(b: &mut Builder, c: &Config, win: &Win, y: f32) -> f32 {
             LINE,
         );
         y += 18.0;
+    }
+    let learned = [
+        &c.dismissed_words,
+        &c.accepted_words,
+        &c.auto_words,
+        &c.passed_words,
+        &c.own_words,
+    ]
+    .iter()
+    .any(|l| !l.is_empty());
+    if learned {
+        y += 12.0;
+        b.button(
+            R::new(LEFT, y, 220.0, 32.0),
+            t("Forget what it learned"),
+            None,
+            false,
+            Hit::ClearLearned,
+        );
+        y += 40.0;
     }
     y
 }
@@ -2162,6 +2275,25 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
                 c.learned_words.remove(i);
             }
         }),
+        Hit::LearnAuto => edit(|c| c.set_learn_auto(!c.learn_auto)),
+        Hit::LearnOwn => edit(|c| c.set_learn_own(!c.learn_own)),
+        Hit::RemoveAuto(i) => edit(|c| {
+            if i < c.auto_words.len() {
+                c.auto_words.remove(i);
+            }
+        }),
+        Hit::RemoveOwn(i) => edit(|c| {
+            if i < c.own_words.len() {
+                c.own_words.remove(i);
+            }
+        }),
+        Hit::ClearLearned => edit(|c| {
+            c.dismissed_words.clear();
+            c.accepted_words.clear();
+            c.auto_words.clear();
+            c.passed_words.clear();
+            c.own_words.clear();
+        }),
         Hit::RemoveWord(i) => edit(|c| {
             if i < c.ignore_words.len() {
                 c.ignore_words.remove(i);
@@ -2720,6 +2852,10 @@ mod tests {
                 .map(String::from)
                 .to_vec(),
             learned_words: vec!["muj".into(), "ok".into()],
+            learn_auto: true,
+            auto_words: vec!["l;ylfu".into()],
+            learn_own: true,
+            own_words: vec!["jira".into(), "โจ้".into()],
             ..Config::default()
         };
         // PHITPUP_PREVIEW_UPDATE=available|downloading|failed shows that

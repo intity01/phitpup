@@ -78,6 +78,20 @@ pub struct Config {
     /// `ignore_words`, a kept hotkey fix to `learned_words`, and Esc counts
     /// in `dismissed_words`.
     pub learn: bool,
+    /// Opt in: a word whose layout fix was taken with the accept key
+    /// [`AUTO_AFTER`] times is fixed on Space from then on.
+    pub learn_auto: bool,
+    /// For `learn_auto`: words whose fix was taken, once per time.
+    pub accepted_words: Vec<String>,
+    /// Words fixed on Space without asking (`learn_auto`).
+    pub auto_words: Vec<String>,
+    /// Opt in: a word PhitPup offered to fix that the user typed on past
+    /// [`OWN_AFTER`] times is theirs and is no longer offered.
+    pub learn_own: bool,
+    /// For `learn_own`: words typed on past, once per time.
+    pub passed_words: Vec<String>,
+    /// The user's own words (`learn_own`), left alone.
+    pub own_words: Vec<String>,
     /// Show suggestions as a wavy line under the word instead of a bubble,
     /// in apps that say where the word is.
     pub underline: bool,
@@ -115,6 +129,12 @@ impl Default for Config {
             learned_words: Vec::new(),
             dismissed_words: Vec::new(),
             learn: true,
+            learn_auto: false,
+            accepted_words: Vec::new(),
+            auto_words: Vec::new(),
+            learn_own: false,
+            passed_words: Vec::new(),
+            own_words: Vec::new(),
             underline: false,
             spelling: true,
             typos: true,
@@ -188,6 +208,19 @@ learn = true
 learned_words = []
 dismissed_words = []
 
+# Off unless you turn them on; both keep only words PhitPup offered to fix.
+# learn_auto: a word whose fix you take with the accept key 5 times is fixed
+# on Space from then on (auto_words); accepted_words counts.
+# learn_own: a word PhitPup offered to fix that you type on past 5 times is
+# yours and is left alone (own_words); passed_words counts.
+# Turning one off forgets its words.
+learn_auto = false
+accepted_words = []
+auto_words = []
+learn_own = false
+passed_words = []
+own_words = []
+
 # Shortcuts: modifiers ctrl, shift, alt, then a key such as backspace, tab,
 # space, enter, insert, f1-f24, a-z.
 hotkey = "shift+backspace"
@@ -236,6 +269,12 @@ impl Config {
                 "learned_words" => list(value).map(|w| c.learned_words = w),
                 "dismissed_words" => list(value).map(|w| c.dismissed_words = w),
                 "learn" => boolean(value).map(|b| c.learn = b),
+                "learn_auto" => boolean(value).map(|b| c.learn_auto = b),
+                "accepted_words" => list(value).map(|w| c.accepted_words = w),
+                "auto_words" => list(value).map(|w| c.auto_words = w),
+                "learn_own" => boolean(value).map(|b| c.learn_own = b),
+                "passed_words" => list(value).map(|w| c.passed_words = w),
+                "own_words" => list(value).map(|w| c.own_words = w),
                 "underline" => boolean(value).map(|b| c.underline = b),
                 "spelling" => boolean(value).map(|b| c.spelling = b),
                 "typos" => boolean(value).map(|b| c.typos = b),
@@ -284,6 +323,12 @@ impl Config {
         t = set(&t, "learn", &self.learn.to_string());
         t = set(&t, "learned_words", &array(&self.learned_words));
         t = set(&t, "dismissed_words", &array(&self.dismissed_words));
+        t = set(&t, "learn_auto", &self.learn_auto.to_string());
+        t = set(&t, "accepted_words", &array(&self.accepted_words));
+        t = set(&t, "auto_words", &array(&self.auto_words));
+        t = set(&t, "learn_own", &self.learn_own.to_string());
+        t = set(&t, "passed_words", &array(&self.passed_words));
+        t = set(&t, "own_words", &array(&self.own_words));
         t = set(&t, "hotkey", &quoted(&self.hotkey.to_string()));
         t = set(&t, "double_shift", &self.double_shift.to_string());
         t = set(&t, "remind_updates", &self.remind_updates.to_string());
@@ -294,7 +339,22 @@ impl Config {
 /// How many times Esc hides a word's suggestion before it is left alone.
 pub const DISMISSALS: usize = 3;
 /// The most Esc presses `dismissed_words` remembers; older ones are dropped.
+/// `accepted_words` and `passed_words` keep as many.
 const KEEP_DISMISSED: usize = 100;
+/// How many times the fix of a word is taken before it is made on its own.
+pub const AUTO_AFTER: usize = 5;
+/// How many times a word is typed on past before it is the user's own.
+pub const OWN_AFTER: usize = 5;
+
+/// Adds `word` to `counts` and returns how many times it is there now,
+/// keeping the newest [`KEEP_DISMISSED`].
+fn count(counts: &mut Vec<String>, word: String) -> usize {
+    counts.push(word);
+    let extra = counts.len().saturating_sub(KEEP_DISMISSED);
+    counts.drain(..extra);
+    let last = counts.last().unwrap();
+    counts.iter().filter(|w| *w == last).count()
+}
 
 impl Config {
     /// Leave `word` alone from now on (it moves out of the learned words).
@@ -303,6 +363,8 @@ impl Config {
         let word = word.to_lowercase();
         self.learned_words.retain(|w| *w != word);
         self.dismissed_words.retain(|w| *w != word);
+        self.accepted_words.retain(|w| *w != word);
+        self.auto_words.retain(|w| *w != word);
         if !storable(&word) || self.ignore_words.contains(&word) {
             return false;
         }
@@ -327,13 +389,73 @@ impl Config {
         true
     }
 
-    /// The suggestion for `word` was taken: Esc presses on it so far no
-    /// longer count. False if there were none.
-    pub fn accepted(&mut self, word: &str) -> bool {
+    /// The suggestion for `word` was taken: Esc presses and times typed on
+    /// past no longer count. With `layout` (a fix of the keyboard layout)
+    /// and `learn_auto`, the [`AUTO_AFTER`]th time the word moves to
+    /// `auto_words`. False if nothing changed.
+    pub fn accepted(&mut self, word: &str, layout: bool) -> bool {
         let word = word.to_lowercase();
-        let n = self.dismissed_words.len();
+        let n = self.dismissed_words.len() + self.passed_words.len();
         self.dismissed_words.retain(|w| *w != word);
-        self.dismissed_words.len() != n
+        self.passed_words.retain(|w| *w != word);
+        let mut changed = self.dismissed_words.len() + self.passed_words.len() != n;
+        if self.learn_auto && layout && storable(&word) && !self.auto_words.contains(&word) {
+            if count(&mut self.accepted_words, word.clone()) >= AUTO_AFTER {
+                self.accepted_words.retain(|w| *w != word);
+                self.auto_words.push(word);
+            }
+            changed = true;
+        }
+        changed
+    }
+
+    /// PhitPup offered to fix `word` and the user typed on: with
+    /// `learn_own`, the [`OWN_AFTER`]th time it moves to `own_words`.
+    /// False if nothing changed.
+    pub fn passed(&mut self, word: &str) -> bool {
+        let word = word.to_lowercase();
+        if !self.learn_own || !storable(&word) || self.own_words.contains(&word) {
+            return false;
+        }
+        if count(&mut self.passed_words, word.clone()) >= OWN_AFTER {
+            self.passed_words.retain(|w| *w != word);
+            self.own_words.push(word);
+        }
+        true
+    }
+
+    /// A fix made on its own was undone: `word` goes back to being offered,
+    /// counting from zero. False if it was not one of `auto_words`.
+    pub fn unauto(&mut self, word: &str) -> bool {
+        let word = word.to_lowercase();
+        let n = self.auto_words.len();
+        self.auto_words.retain(|w| *w != word);
+        self.accepted_words.retain(|w| *w != word);
+        self.auto_words.len() != n
+    }
+
+    /// Whether the bubble leaves `word` alone.
+    pub fn leaves_alone(&self, word: &str) -> bool {
+        let word = word.to_lowercase();
+        self.ignore_words.contains(&word) || self.own_words.contains(&word)
+    }
+
+    /// Turns `learn_auto` on or off; off forgets its words.
+    pub fn set_learn_auto(&mut self, on: bool) {
+        self.learn_auto = on;
+        if !on {
+            self.accepted_words.clear();
+            self.auto_words.clear();
+        }
+    }
+
+    /// Turns `learn_own` on or off; off forgets its words.
+    pub fn set_learn_own(&mut self, on: bool) {
+        self.learn_own = on;
+        if !on {
+            self.passed_words.clear();
+            self.own_words.clear();
+        }
     }
 
     /// Fix `word` without asking from now on (it moves out of the ignored
@@ -341,6 +463,8 @@ impl Config {
     pub fn learn_word(&mut self, word: &str) -> bool {
         let word = word.to_lowercase();
         self.ignore_words.retain(|w| *w != word);
+        self.passed_words.retain(|w| *w != word);
+        self.own_words.retain(|w| *w != word);
         if !storable(&word) || word.chars().count() < 2 || self.learned_words.contains(&word) {
             return false;
         }
@@ -473,6 +597,49 @@ accept_key = \"shift+backspace\"",
     }
 
     #[test]
+    fn taking_a_fix_five_times_makes_it_automatic() {
+        let mut c = Config::default();
+        assert!(!c.accepted("l;ylfu", true), "off unless turned on");
+        assert!(c.accepted_words.is_empty());
+        c.set_learn_auto(true);
+        for _ in 1..AUTO_AFTER {
+            assert!(c.accepted("L;ylfu", true));
+        }
+        assert!(c.auto_words.is_empty());
+        assert!(!c.accepted("teh", false), "only layout fixes count");
+        assert!(c.accepted("l;ylfu", true));
+        assert_eq!(c.auto_words, ["l;ylfu"]);
+        assert!(c.accepted_words.is_empty());
+        assert!(c.unauto("l;ylfu") && !c.unauto("l;ylfu"));
+        assert!(c.auto_words.is_empty());
+        c.accepted("muj", true);
+        c.set_learn_auto(false);
+        assert!(c.accepted_words.is_empty() && c.auto_words.is_empty());
+    }
+
+    #[test]
+    fn typing_on_past_five_times_makes_it_yours() {
+        let mut c = Config::default();
+        assert!(!c.passed("jira"), "off unless turned on");
+        c.set_learn_own(true);
+        for _ in 1..OWN_AFTER {
+            assert!(c.passed("Jira"));
+        }
+        assert!(!c.leaves_alone("jira"));
+        assert!(c.accepted("jira", true), "taking the fix starts over");
+        assert!(c.passed_words.is_empty());
+        for _ in 0..OWN_AFTER {
+            c.passed("jira");
+        }
+        assert!(c.leaves_alone("JIRA") && !c.passed("jira"));
+        assert!(c.learn_word("jira"), "a kept hotkey fix wins");
+        assert!(!c.leaves_alone("jira"));
+        c.passed("gdp");
+        c.set_learn_own(false);
+        assert!(c.passed_words.is_empty() && c.own_words.is_empty());
+    }
+
+    #[test]
     fn write_to_round_trips() {
         let c = Config {
             mode: Mode::Manual,
@@ -484,6 +651,12 @@ accept_key = \"shift+backspace\"",
             learned_words: vec!["muj".into()],
             dismissed_words: vec!["เด้อ".into(), "เด้อ".into()],
             learn: false,
+            learn_auto: true,
+            accepted_words: vec!["l;ylfu".into()],
+            auto_words: vec!["muj".into()],
+            learn_own: true,
+            passed_words: vec!["ฟะืก".into()],
+            own_words: vec!["jira".into()],
             underline: true,
             spelling: false,
             typos: false,
@@ -512,7 +685,7 @@ accept_key = \"shift+backspace\"",
 
         // Taking the fix starts the count again.
         assert!(c.dismiss("teh") && c.dismiss("teh"));
-        assert!(c.accepted("teh") && !c.accepted("teh"));
+        assert!(c.accepted("teh", false) && !c.accepted("teh", false));
         assert!(c.dismiss("teh"));
         assert!(c.ignore_words == ["jira"]);
 

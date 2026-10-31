@@ -37,7 +37,7 @@ use windows_sys::Win32::System::Threading::{
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyboardLayout, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP,
     LoadKeyboardLayoutW, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEINPUT, SendInput, VK_BACK,
-    VK_CONTROL, VK_DELETE, VK_ESCAPE, VK_F24, VK_SHIFT, VK_TAB, VkKeyScanExW,
+    VK_CONTROL, VK_DELETE, VK_ESCAPE, VK_F24, VK_SHIFT, VK_SPACE, VK_TAB, VkKeyScanExW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     EnumWindows, FindWindowW, GetForegroundWindow, GetSystemMetrics, GetWindowRect, GetWindowTextW,
@@ -52,7 +52,7 @@ const TRAY_CLASS: &str = "PhitPupTray";
 const SETTINGS_CLASS: &str = "PhitPupSettings";
 const CF_UNICODETEXT: u32 = 13;
 /// The settings the test copy starts with.
-const CONFIG: &str = "mode = \"suggest\"\nlearn = true\n";
+const CONFIG: &str = "mode = \"suggest\"\nlearn = true\nlearn_auto = true\n";
 const EDGE: &str = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe";
 const PAGE_TITLE: &str = "PhitPup e2e";
 /// A text box that has the focus when the page opens.
@@ -250,7 +250,7 @@ impl Run {
 
     /// Runs the cases that fit the target; the number that failed.
     fn cases(&mut self) -> i32 {
-        let cases: [(&str, Case); 6] = [
+        let cases: [(&str, Case); 7] = [
             ("Tab accepts the suggestion", |r| {
                 r.fresh()?;
                 type_text(SLIP);
@@ -278,6 +278,35 @@ impl Run {
                 pause(500);
                 r.expect("hello world ")
             }),
+            ("A fix taken 5 times is made on Space, and undone", |r| {
+                // The first case took it once already; take it until it
+                // is learned.
+                for _ in 0..5 {
+                    if r.settings()?
+                        .contains(&format!("auto_words = [\"{SLIP}\"]"))
+                    {
+                        break;
+                    }
+                    r.fresh()?;
+                    type_text(SLIP);
+                    r.accept_key(VK_TAB, "accepted:")?;
+                    pause(800); // saved by the worker
+                }
+                r.fresh()?;
+                type_text(SLIP);
+                r.accept_key_with(VK_SPACE, &[], "fixed on its own")?;
+                // Not read back here: copying the text is a shortcut, which
+                // ends the undo.
+                r.accept_key_with(VK_BACK, &[VK_SHIFT], "hotkey: erase")?;
+                r.expect(&format!("{SLIP} "))?;
+                // Learned on the next key.
+                type_text("x");
+                pause(1500);
+                if !r.settings()?.contains("auto_words = []") {
+                    return Err("undoing did not take the word out of auto_words".into());
+                }
+                Ok(())
+            }),
             ("Esc three times stops the suggestion", |r| {
                 for _ in 0..3 {
                     r.fresh()?;
@@ -287,9 +316,10 @@ impl Run {
                     pause(300);
                 }
                 pause(1500); // saved by the worker
-                let config = std::fs::read_to_string(r.home.join("config.toml"))
-                    .map_err(|e| format!("read the test settings: {e}"))?;
-                if !config.contains(&format!("ignore_words = [\"{SLIP}\"]")) {
+                if !r
+                    .settings()?
+                    .contains(&format!("ignore_words = [\"{SLIP}\"]"))
+                {
                     return Err(format!("{SLIP} is not in ignore_words"));
                 }
                 // Nothing to accept: Notepad types a tab. Elsewhere Tab may move
@@ -311,7 +341,7 @@ impl Run {
         let wanted = |i: usize| match (&self.target, self.quiet) {
             (_, true) => i == 2 || i == 3,
             (Target::Notepad, false) => true,
-            _ => i < 5,
+            _ => i < 6,
         };
         let cases: Vec<_> = cases
             .into_iter()
@@ -387,6 +417,12 @@ impl Run {
             pause(50);
         }
         Err(format!("PhitPup did not log \"{line}\""))
+    }
+
+    /// The test settings file as saved.
+    fn settings(&self) -> Result<String, String> {
+        std::fs::read_to_string(self.home.join("config.toml"))
+            .map_err(|e| format!("read the test settings: {e}"))
     }
 
     /// The text in the window is `want`.
