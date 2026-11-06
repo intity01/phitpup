@@ -250,7 +250,7 @@ impl Run {
 
     /// Runs the cases that fit the target; the number that failed.
     fn cases(&mut self) -> i32 {
-        let cases: [(&str, Case); 7] = [
+        let cases: [(&str, Case); 8] = [
             ("Tab accepts the suggestion", |r| {
                 r.fresh()?;
                 type_text(SLIP);
@@ -272,6 +272,20 @@ impl Run {
                 r.accept_key_with(VK_BACK, &[VK_SHIFT], "hotkey: erase")?;
                 r.expect(HELLO)
             }),
+            (
+                "Shift+Backspace on a selection fixes the layout and เเ",
+                |r| {
+                    r.fresh()?;
+                    // เเล้ว สวัสดี typed with the English keyboard, เ twice for แ.
+                    type_text("gg]h; l;ylfu");
+                    pause(300);
+                    tap(VK_ESCAPE, &[]);
+                    tap(b'A' as u16, &[VK_CONTROL]);
+                    pause(300);
+                    r.accept_key_with(VK_BACK, &[VK_SHIFT], "selection: typing")?;
+                    r.expect("\u{0E41}\u{0E25}\u{0E49}\u{0E27} \u{0E2A}\u{0E27}\u{0E31}\u{0E2A}\u{0E14}\u{0E35}")
+                },
+            ),
             ("English is left alone", |r| {
                 r.fresh()?;
                 type_text("hello world ");

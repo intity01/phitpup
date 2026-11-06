@@ -154,6 +154,45 @@ fn selection_with_nothing_wrong_flips_everything() {
     assert_eq!(d.selection(" \n "), None);
 }
 
+/// Shift+Backspace on a selection also writes เเ as แ once flipped, and
+/// fixes Thai typed in the wrong order even when nothing else is wrong.
+#[test]
+fn selection_fix_respells_thai() {
+    let d = kedmanee(Thresholds::SUGGEST);
+    // A whole line typed with the English keyboard, two เ for แ, and one
+    // word (vac) typed with the Thai keyboard.
+    let line = "lk,ki5]v' ;b0yp 0kd8omujg8pmew;hwfhws, r;d อฟแ gg]h;dH9y;vnjoqgg]h;me-v'gik-7ho,k";
+    assert_eq!(
+        d.selection_fix(line, true),
+        Some((
+            Some(Direction::ToThai),
+            "สามารถลอง วิจัย จากคนที่เคยทำไว้ได้ไหม พวก vac แล้วก็ตัวอื่นๆแล้วทำของเราขึ้นมา".into()
+        ))
+    );
+    // With the spelling switch off, only the language is fixed.
+    assert_eq!(
+        d.selection_fix("gg]h;", false),
+        Some((Some(Direction::ToThai), "เเล้ว".into()))
+    );
+    // Right language, wrong order: respelled, language kept.
+    assert_eq!(
+        d.selection_fix("เเล้ว คุณเเม่", true),
+        Some((None, "แล้ว คุณแม่".into()))
+    );
+    // Neither: flipped as a whole, as before.
+    assert_eq!(
+        d.selection_fix("hello world", true),
+        d.manual("hello world").map(|(dir, s)| (Some(dir), s))
+    );
+    assert_eq!(
+        d.selection_fix(
+            " 
+ ", true
+        ),
+        None
+    );
+}
+
 #[test]
 fn manual_flips_by_script() {
     let d = kedmanee(Thresholds::SUGGEST);

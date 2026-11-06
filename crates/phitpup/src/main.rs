@@ -379,7 +379,10 @@ mod app {
         let text = clipboard::text(owner);
         clipboard::restore(owner, &saved);
 
-        let Some((direction, converted)) = text.as_deref().and_then(|t| app.detector.selection(t))
+        let spelling = app.config.lock().unwrap().spelling;
+        let Some((direction, converted)) = text
+            .as_deref()
+            .and_then(|t| app.detector.selection_fix(t, spelling))
         else {
             debug!("selection: copied, but nothing in it to convert");
             return true;
@@ -389,10 +392,13 @@ mod app {
             converted.chars().count()
         );
         inject::replace(0, &converted);
-        switch_to(match direction {
-            Direction::ToThai => Lang::Thai,
-            Direction::ToEnglish => Lang::English,
-        });
+        // Only respelled: the text kept its language, so does the keyboard.
+        if let Some(direction) = direction {
+            switch_to(match direction {
+                Direction::ToThai => Lang::Thai,
+                Direction::ToEnglish => Lang::English,
+            });
+        }
         true
     }
 

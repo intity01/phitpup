@@ -313,6 +313,35 @@ impl Detector {
     /// [`manual`](Self::manual). The direction returned is the last changed
     /// word's: the layout to keep typing in.
     pub fn selection(&self, text: &str) -> Option<(Direction, String)> {
+        self.wrong_words(text).or_else(|| self.manual(text))
+    }
+
+    /// What Shift+Backspace types over a selection. Words typed in the wrong
+    /// layout are flipped and, with `spelling`, every word is then respelled
+    /// ([`crate::thai::respell`]: เเ → แ and the like). A selection with
+    /// nothing in the wrong layout but Thai typed in the wrong order is only
+    /// respelled, keeping its language (the direction is `None`). With
+    /// neither, all of it is flipped, as [`Detector::manual`] does.
+    pub fn selection_fix(&self, text: &str, spelling: bool) -> Option<(Option<Direction>, String)> {
+        let respell = |s: String| {
+            if spelling {
+                crate::thai::respell_text(&s).unwrap_or(s)
+            } else {
+                s
+            }
+        };
+        if let Some((d, converted)) = self.wrong_words(text) {
+            return Some((Some(d), respell(converted)));
+        }
+        if let Some(fixed) = crate::thai::respell_text(text).filter(|_| spelling) {
+            return Some((None, fixed));
+        }
+        self.manual(text).map(|(d, s)| (Some(d), s))
+    }
+
+    /// The words of `text` typed in the wrong layout, flipped, with the rest
+    /// kept; `None` when no word was.
+    fn wrong_words(&self, text: &str) -> Option<(Direction, String)> {
         let mut out = String::with_capacity(text.len());
         let mut last = None;
         let mut word = String::new();
@@ -335,10 +364,7 @@ impl Detector {
             }
         }
         flush(&mut word, &mut out);
-        match last {
-            Some(d) => Some((d, out)),
-            None => self.manual(text),
-        }
+        last.map(|d| (d, out))
     }
 
     /// Judges one word (no spaces) for suggest and auto mode.

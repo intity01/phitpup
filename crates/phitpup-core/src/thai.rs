@@ -173,6 +173,34 @@ pub fn respell(word: &str) -> Option<String> {
     (fixed != word && check(&fixed).is_ok()).then_some(fixed)
 }
 
+/// [`respell`] for each word of `text` (split at whitespace, which is kept).
+/// `None` when no word needed changing.
+pub fn respell_text(text: &str) -> Option<String> {
+    let mut out = String::with_capacity(text.len());
+    let mut changed = false;
+    let mut word = String::new();
+    let mut flush = |word: &mut String, out: &mut String| {
+        match respell(word) {
+            Some(fixed) => {
+                changed = true;
+                out.push_str(&fixed);
+            }
+            None => out.push_str(word),
+        }
+        word.clear();
+    };
+    for c in text.chars() {
+        if c.is_whitespace() {
+            flush(&mut word, &mut out);
+            out.push(c);
+        } else {
+            word.push(c);
+        }
+    }
+    flush(&mut word, &mut out);
+    changed.then_some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
