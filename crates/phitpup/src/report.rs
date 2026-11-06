@@ -81,7 +81,9 @@ pub fn details() -> String {
         format!(
             "{} ({})",
             env!("CARGO_PKG_VERSION"),
-            if update::helper().is_some() {
+            if crate::store::packaged() {
+                "Microsoft Store"
+            } else if update::helper().is_some() {
                 "installed"
             } else {
                 "single file"

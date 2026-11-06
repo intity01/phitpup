@@ -260,7 +260,7 @@ fn remind_if_due() {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    if !on || !reminder_due(built, now, settings::last_reminder()) {
+    if !on || crate::store::packaged() || !reminder_due(built, now, settings::last_reminder()) {
         return;
     }
     settings::set_last_reminder(now);

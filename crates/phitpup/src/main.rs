@@ -57,6 +57,8 @@ mod report;
 #[cfg(windows)]
 mod settings;
 #[cfg(windows)]
+mod store;
+#[cfg(windows)]
 mod tray;
 #[cfg(windows)]
 mod uia;

@@ -21,6 +21,9 @@ pub fn path() -> PathBuf {
     if let Some(home) = std::env::var_os("PHITPUP_HOME") {
         return PathBuf::from(home).join("config.toml");
     }
+    if let Some(dir) = crate::store::data_dir() {
+        return dir.join("config.toml");
+    }
     let base = std::env::var_os("APPDATA").map_or_else(|| PathBuf::from("."), PathBuf::from);
     base.join("PhitPup").join("config.toml")
 }
@@ -201,6 +204,9 @@ fn run_key(access: u32) -> Option<HKEY> {
 
 /// Whether Windows starts PhitPup at sign-in.
 pub fn starts_with_windows() -> bool {
+    if crate::store::packaged() {
+        return crate::store::starts_with_windows();
+    }
     let Some(key) = run_key(KEY_QUERY_VALUE) else {
         return false;
     };
@@ -221,6 +227,9 @@ pub fn starts_with_windows() -> bool {
 
 /// Adds or removes this exe in the current user's Run key.
 pub fn set_start_with_windows(on: bool) {
+    if crate::store::packaged() {
+        return crate::store::set_start_with_windows(on);
+    }
     let Some(key) = run_key(KEY_SET_VALUE) else {
         return;
     };

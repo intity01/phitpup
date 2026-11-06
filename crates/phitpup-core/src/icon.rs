@@ -170,11 +170,16 @@ pub fn render(size: u32, tone: Tone) -> Vec<u8> {
 
 /// A PNG file of `size` × `size` RGBA pixels.
 pub fn png(rgba: &[u8], size: u32) -> Vec<u8> {
-    let row = size as usize * 4;
+    png_wh(rgba, size, size)
+}
+
+/// A PNG file of `w` × `h` RGBA pixels.
+pub fn png_wh(rgba: &[u8], w: u32, h: u32) -> Vec<u8> {
+    let row = w as usize * 4;
     // Filter "Up" for every row: flat areas and vertical gradients become
     // runs that compress well.
-    let mut raw = Vec::with_capacity(rgba.len() + size as usize);
-    for y in 0..size as usize {
+    let mut raw = Vec::with_capacity(rgba.len() + h as usize);
+    for y in 0..h as usize {
         raw.push(2);
         for x in 0..row {
             let above = if y == 0 { 0 } else { rgba[(y - 1) * row + x] };
@@ -184,8 +189,8 @@ pub fn png(rgba: &[u8], size: u32) -> Vec<u8> {
 
     let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
     let mut ihdr = Vec::new();
-    ihdr.extend(size.to_be_bytes());
-    ihdr.extend(size.to_be_bytes());
+    ihdr.extend(w.to_be_bytes());
+    ihdr.extend(h.to_be_bytes());
     ihdr.extend([8, 6, 0, 0, 0]); // 8-bit RGBA, no interlace
     chunk(&mut out, b"IHDR", &ihdr);
     chunk(&mut out, b"IDAT", &zlib(&raw));

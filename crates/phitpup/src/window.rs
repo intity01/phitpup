@@ -1322,8 +1322,11 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
     b.toggle(cy, c.off_in_fullscreen, hovered);
     y += 72.0;
 
-    let path = r"%APPDATA%\PhitPup\config.toml";
-    let (cy, _) = b.row(y, 68.0, 68.0, Some(G_FILE), t("Settings file"), path, None);
+    let path = match crate::store::family_name() {
+        Some(family) => format!(r"%LOCALAPPDATA%\Packages\{family}\LocalState\config.toml"),
+        None => r"%APPDATA%\PhitPup\config.toml".into(),
+    };
+    let (cy, _) = b.row(y, 68.0, 68.0, Some(G_FILE), t("Settings file"), &path, None);
     b.button(
         R::new(RIGHT - 20.0 - 96.0, cy - 16.0, 96.0, 32.0),
         t("Open"),
@@ -1785,17 +1788,19 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
     let r = R::new(RIGHT - 20.0 - 170.0, cy - 16.0, 170.0, 32.0);
     b.button(r, &label, None, accent, Hit::Updates);
     y += 72.0;
-    let (cy, hovered) = b.row(
-        y,
-        68.0,
-        68.0,
-        Some(G_BELL),
-        t("Remind me to check"),
-        t("Once this version is two months old."),
-        Some(Hit::Remind),
-    );
-    b.toggle(cy, c.remind_updates, hovered);
-    y += 72.0;
+    if !crate::store::packaged() {
+        let (cy, hovered) = b.row(
+            y,
+            68.0,
+            68.0,
+            Some(G_BELL),
+            t("Remind me to check"),
+            t("Once this version is two months old."),
+            Some(Hit::Remind),
+        );
+        b.toggle(cy, c.remind_updates, hovered);
+        y += 72.0;
+    }
 
     let copied = crate::report::COPIED.load(std::sync::atomic::Ordering::Relaxed);
     let caption = if copied {
@@ -1822,7 +1827,11 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
         LEFT + 24.0,
         y,
         WIDTH - 24.0,
-        t("PhitPup works offline: the part that sees your keys has no networking code. Only when you click Check for updates does the separate phitpup-update.exe ask the website for the newest version number and, if you agree, download the installer. What you type is kept in memory only until you click or switch windows, and is never sent anywhere. The only things saved are your settings file, including the words you add, and the date of the last update reminder."),
+        if crate::store::packaged() {
+            t("PhitPup works offline: it has no networking code, and the Microsoft Store does the updating. What you type is kept in memory only until you click or switch windows, and is never sent anywhere. The only thing saved is your settings file, including the words you add.")
+        } else {
+            t("PhitPup works offline: the part that sees your keys has no networking code. Only when you click Check for updates does the separate phitpup-update.exe ask the website for the newest version number and, if you agree, download the installer. What you type is kept in memory only until you click or switch windows, and is never sent anywhere. The only things saved are your settings file, including the words you add, and the date of the last update reminder.")
+        },
         F::Caption,
         p.sub,
     );
@@ -1835,6 +1844,11 @@ fn updates(state: update::State) -> (String, String, bool) {
     use update::State;
     let mb = |bytes: u64| format!("{:.1} MB", bytes as f64 / 1_048_576.0);
     match state {
+        _ if crate::store::packaged() => (
+            t("The Microsoft Store keeps PhitPup up to date.").into(),
+            t("Open the Store").into(),
+            false,
+        ),
         State::Idle if update::helper().is_none() => (
             t("Opens the download page in your browser.").into(),
             t("Check for updates").into(),

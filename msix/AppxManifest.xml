@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Microsoft Store package. `cargo xtask msix` fills in the {{...}}
+     values: the identity from Partner Center (PHITPUP_STORE_NAME,
+     PHITPUP_STORE_PUBLISHER, PHITPUP_STORE_PUBLISHER_NAME) or local test
+     values, and the version from Cargo.toml. -->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap desktop rescap">
+
+  <Identity
+    Name="{{NAME}}"
+    Publisher="{{PUBLISHER}}"
+    Version="{{VERSION}}"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>PhitPup</DisplayName>
+    <PublisherDisplayName>{{PUBLISHER_NAME}}</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <Description>Fixes text typed in the wrong keyboard layout, Thai and English.</Description>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="th-TH" />
+    <Resource Language="en-US" />
+  </Resources>
+
+  <Applications>
+    <Application Id="PhitPup" Executable="phitpup.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="PhitPup"
+        Description="Fixes text typed in the wrong keyboard layout, Thai and English."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+      </uap:VisualElements>
+      <Extensions>
+        <!-- "Start with Windows", switched from PhitPup's settings
+             (crates/phitpup/src/store.rs). On by default, like the
+             installer's checkbox; Windows runs it only after the first launch. -->
+        <desktop:Extension Category="windows.startupTask" Executable="phitpup.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="PhitPupStartup" Enabled="true" DisplayName="PhitPup" />
+        </desktop:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

@@ -44,6 +44,24 @@ jobs:
           $hash = (Get-FileHash dist/PhitPup-Setup.exe -Algorithm SHA256).Hash.ToLower()
           "$hash  PhitPup-Setup.exe" | Out-File dist/PhitPup-Setup.exe.sha256 -Encoding ascii -NoNewline
           "SHA256 $hash"
+      - name: Microsoft Store package
+        # Unsigned: Partner Center signs it. Not a release download, only a
+        # workflow artifact to upload in Partner Center. The identity is set
+        # under Settings > Secrets and variables > Actions > Variables.
+        shell: pwsh
+        env:
+          PHITPUP_STORE_NAME: ${{ vars.PHITPUP_STORE_NAME }}
+          PHITPUP_STORE_PUBLISHER: ${{ vars.PHITPUP_STORE_PUBLISHER }}
+          PHITPUP_STORE_PUBLISHER_NAME: ${{ vars.PHITPUP_STORE_PUBLISHER_NAME }}
+        run: |
+          if (-not $env:PHITPUP_STORE_NAME) { "No Store identity set yet; skipping."; exit 0 }
+          cargo run --quiet --release --package xtask -- msix --exe dist/phitpup.exe
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: ${{ vars.PHITPUP_STORE_NAME != '' }}
+        with:
+          name: PhitPup-msix
+          path: target/msix/PhitPup.msix
       - name: Publish
         shell: pwsh
         env:

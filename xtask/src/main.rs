@@ -61,6 +61,7 @@ fn main() {
         Some("english-words") => train::english_words(&root()),
         Some("icons") => icons(),
         Some("installer-art") => installer_art(),
+        Some("msix") => msix(&args[1..]),
         #[cfg(windows)]
         Some("e2e") => e2e::run(&root(), &args[1..]),
         Some("eval-detector") => {
@@ -75,7 +76,7 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: cargo xtask <gen-layouts | fetch-corpus | train-model | english-words | eval-detector | icons | installer-art | e2e>"
+                "usage: cargo xtask <gen-layouts | fetch-corpus | train-model | english-words | eval-detector | icons | installer-art | msix | e2e>"
             );
             std::process::exit(2);
         }
@@ -99,6 +100,171 @@ fn icons() {
     }
     write("phitpup-paused-32.png", &png(&render(32, Tone::Paused), 32));
     write("phitpup.svg", SVG.as_bytes());
+}
+
+/// The Microsoft Store package, `<target>/msix/PhitPup.msix`, from
+/// `<target>/release/phitpup.exe` (or `--exe <path>`) and
+/// `msix/AppxManifest.xml`. The identity comes from Partner Center through
+/// `PHITPUP_STORE_NAME`, `PHITPUP_STORE_PUBLISHER` (`CN=...`) and
+/// `PHITPUP_STORE_PUBLISHER_NAME`; without them it gets test values, for a
+/// package signed with a local test certificate. The Store signs the real
+/// one. phitpup-update.exe is left out: the Store does the updating.
+fn msix(args: &[String]) {
+    use phitpup_core::icon::{Tone, png_wh, render};
+    let root = root();
+    let exe = match args {
+        [flag, path] if flag == "--exe" => PathBuf::from(path),
+        [] => target_dir().join("release").join("phitpup.exe"),
+        _ => {
+            eprintln!("usage: cargo xtask msix [--exe <phitpup.exe>]");
+            std::process::exit(2);
+        }
+    };
+    assert!(
+        exe.is_file(),
+        "{} is missing: cargo build --release -p phitpup",
+        exe.display()
+    );
+    let out = target_dir().join("msix");
+    let layout = out.join("layout");
+    let _ = std::fs::remove_dir_all(&layout);
+    std::fs::create_dir_all(layout.join("Assets")).expect("create target/msix/layout/");
+    std::fs::copy(&exe, layout.join("phitpup.exe")).expect("copy phitpup.exe");
+
+    // The icon centred on a transparent w × h canvas, `icon` pixels wide.
+    let art = |name: &str, w: u32, h: u32, icon: u32| {
+        let src = render(icon, Tone::Active);
+        let mut px = vec![0u8; (w * h * 4) as usize];
+        let (ox, oy) = ((w - icon) / 2, (h - icon) / 2);
+        for y in 0..icon {
+            for x in 0..icon {
+                let s = ((y * icon + x) * 4) as usize;
+                let d = (((y + oy) * w + x + ox) * 4) as usize;
+                px[d..d + 4].copy_from_slice(&src[s..s + 4]);
+            }
+        }
+        std::fs::write(layout.join("Assets").join(name), png_wh(&px, w, h))
+            .expect("write package image");
+    };
+    // Scale 100/200/400% for tiles; target sizes for the taskbar and Start.
+    for (scale, f) in [(100, 1), (200, 2), (400, 4)] {
+        art(
+            &format!("Square150x150Logo.scale-{scale}.png"),
+            150 * f,
+            150 * f,
+            100 * f,
+        );
+        art(
+            &format!("Wide310x150Logo.scale-{scale}.png"),
+            310 * f,
+            150 * f,
+            100 * f,
+        );
+        art(
+            &format!("Square44x44Logo.scale-{scale}.png"),
+            44 * f,
+            44 * f,
+            44 * f,
+        );
+        art(
+            &format!("StoreLogo.scale-{scale}.png"),
+            50 * f,
+            50 * f,
+            50 * f,
+        );
+    }
+    for size in [16, 24, 32, 48, 256] {
+        art(
+            &format!("Square44x44Logo.targetsize-{size}.png"),
+            size,
+            size,
+            size,
+        );
+        art(
+            &format!("Square44x44Logo.targetsize-{size}_altform-unplated.png"),
+            size,
+            size,
+            size,
+        );
+    }
+
+    let var = |k: &str, test: &str| std::env::var(k).unwrap_or_else(|_| test.into());
+    let version = format!("{}.0", env!("CARGO_PKG_VERSION"));
+    let manifest = std::fs::read_to_string(root.join("msix").join("AppxManifest.xml"))
+        .expect("read msix/AppxManifest.xml")
+        .replace("{{NAME}}", &var("PHITPUP_STORE_NAME", "PhitPup.Test"))
+        .replace(
+            "{{PUBLISHER}}",
+            &var("PHITPUP_STORE_PUBLISHER", "CN=PhitPup Test"),
+        )
+        .replace(
+            "{{PUBLISHER_NAME}}",
+            &var("PHITPUP_STORE_PUBLISHER_NAME", "PhitPup Test"),
+        )
+        .replace("{{VERSION}}", &version);
+    std::fs::write(layout.join("AppxManifest.xml"), manifest).expect("write AppxManifest.xml");
+
+    // makeappx.exe from the newest Windows SDK, or MAKEAPPX.
+    let makeappx = std::env::var_os("MAKEAPPX").map(PathBuf::from).or_else(|| {
+        let bin = PathBuf::from(r"C:\Program Files (x86)\Windows Kits\10\bin");
+        let mut kits: Vec<_> = std::fs::read_dir(&bin)
+            .ok()?
+            .flatten()
+            .map(|e| e.path())
+            .collect();
+        kits.sort();
+        kits.into_iter()
+            .rev()
+            .map(|k| k.join("x64").join("makeappx.exe"))
+            .find(|p| p.is_file())
+    });
+    let makeappx =
+        makeappx.expect("makeappx.exe not found: install the Windows SDK or set MAKEAPPX");
+
+    // resources.pri lets Windows pick the scale-/targetsize- images.
+    let makepri = makeappx.with_file_name("makepri.exe");
+    let config = out.join("priconfig.xml");
+    let run = |cmd: &mut std::process::Command, what: &str| {
+        let r = cmd.output().unwrap_or_else(|e| panic!("run {what}: {e}"));
+        if !r.status.success() {
+            eprintln!("{}", String::from_utf8_lossy(&r.stdout));
+            panic!("{what} failed");
+        }
+    };
+    run(
+        std::process::Command::new(&makepri)
+            .args(["createconfig", "/o", "/pv", "10.0.0", "/dq", "en-US", "/cf"])
+            .arg(&config),
+        "makepri createconfig",
+    );
+    // One package, so one resources.pri: drop the split into resource packs.
+    let xml = std::fs::read_to_string(&config).expect("read priconfig.xml");
+    if let (Some(a), Some(b)) = (xml.find("<packaging>"), xml.find("</packaging>")) {
+        let xml = format!("{}{}", &xml[..a], &xml[b + "</packaging>".len()..]);
+        std::fs::write(&config, xml).expect("write priconfig.xml");
+    }
+    run(
+        std::process::Command::new(&makepri)
+            .args(["new", "/o", "/pr"])
+            .arg(&layout)
+            .arg("/cf")
+            .arg(&config)
+            .arg("/mn")
+            .arg(layout.join("AppxManifest.xml"))
+            .arg("/of")
+            .arg(layout.join("resources.pri")),
+        "makepri new",
+    );
+    let package = out.join("PhitPup.msix");
+    let status = std::process::Command::new(makeappx)
+        .args(["pack", "/o", "/d"])
+        .arg(&layout)
+        .arg("/p")
+        .arg(&package)
+        .status()
+        .expect("run makeappx");
+    assert!(status.success(), "makeappx failed");
+    println!("{} (version {version})", package.display());
 }
 
 /// The installer's images at 100–200% scaling, as 24-bit BMPs: the side
@@ -272,6 +438,21 @@ const SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 1
   </g>
 </svg>
 "##;
+
+/// Cargo's output folder: CARGO_TARGET_DIR, or `.cargo/config.toml`'s.
+fn target_dir() -> PathBuf {
+    if let Some(dir) = std::env::var_os("CARGO_TARGET_DIR") {
+        return root().join(dir);
+    }
+    let config =
+        std::fs::read_to_string(root().join(".cargo").join("config.toml")).unwrap_or_default();
+    let dir = config
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("target-dir"))
+        .and_then(|v| v.split('"').nth(1))
+        .unwrap_or("target");
+    root().join(dir)
+}
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")

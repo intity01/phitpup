@@ -49,6 +49,10 @@ pub fn helper() -> Option<PathBuf> {
 
 /// The button was clicked.
 pub fn click() {
+    if crate::store::packaged() {
+        settings::open(crate::store::STORE_UPDATES);
+        return;
+    }
     let Some(helper) = helper() else {
         settings::open(settings::RELEASES);
         return;
