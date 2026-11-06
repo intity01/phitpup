@@ -76,6 +76,7 @@ const EN = {
   "install.1.p": "PhitPup-Setup.exe installs for your account only, with no admin rights. PhitPup then shows up in the Start menu and can be removed from Windows Settings.",
   "install.portable": "Or use the single file, nothing to install (phitpup.exe)",
   "install.1.b": "Download the latest version",
+  "install.store": "Get it from the Microsoft Store",
   "install.signing": "PhitPup has applied for free code signing from SignPath Foundation. See the <a href=\"signing.html\">code signing policy</a>.",
   "install.hash": "SHA-256:",
   "install.2.t": "Run the installer",
@@ -183,6 +184,15 @@ function showRelease() {
 
 for (const id of ["download", "download-2"]) document.getElementById(id).href = PORTABLE;
 document.getElementById("portable").href = PORTABLE;
+
+// The Microsoft Store page, once PhitPup is live there
+// (https://apps.microsoft.com/detail/<Store ID>). Empty keeps the button hidden.
+const STORE = "";
+if (STORE) {
+  const store = document.getElementById("store");
+  store.href = STORE;
+  store.hidden = false;
+}
 document.getElementById("source").href = `https://github.com/${REPO}`;
 
 // Ask the server every time: a cached copy would show the previous version

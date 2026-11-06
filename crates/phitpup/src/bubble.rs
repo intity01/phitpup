@@ -1009,12 +1009,15 @@ mod tests {
     #[ignore]
     fn preview() {
         let dir = std::path::PathBuf::from(std::env::var("PHITPUP_PREVIEW_DIR").unwrap());
-        for (dark, bg) in [(false, 0xF3F3F3u32), (true, 0x202020)] {
-            for dpi in [96, 144] {
+        for (dark, bg) in [(false, 0xF3F3F3u32), (false, 0xFFFFFF), (true, 0x202020)] {
+            for (dpi, keep) in [(96, "ไม่ต้องแก้"), (144, "ไม่ต้องแก้"), (144, "Leave it")]
+            {
                 for (word, badge, name) in [
                     ("สวัสดี", "TH", "th"),
                     ("hello", "EN", "en"),
+                    ("good", "EN", "good"),
                     ("แม่", "สะกด", "spelling"),
+                    ("สวัสดี", "สะกด", "slip"),
                     ("Hello", "Aa", "caps"),
                     ("the", "×2", "doubled"),
                 ] {
@@ -1022,16 +1025,18 @@ mod tests {
                         word: word.into(),
                         badge,
                         hint: "Tab".into(),
-                        keep: "ไม่ต้องแก้",
+                        keep,
                         dpi,
                         dark,
                     };
                     let img = render(&look);
-                    let name = format!(
-                        "bubble-{}-{}-{dpi}.bmp",
-                        if dark { "dark" } else { "light" },
-                        name
-                    );
+                    let tone = match (dark, bg) {
+                        (true, _) => "dark",
+                        (false, 0xFFFFFF) => "white",
+                        _ => "light",
+                    };
+                    let lang = if keep == "Leave it" { "-en" } else { "" };
+                    let name = format!("bubble-{tone}-{name}-{dpi}{lang}.bmp");
                     write_bmp(&dir.join(name), &img, hex(bg));
                 }
             }
