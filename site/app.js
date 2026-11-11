@@ -187,7 +187,7 @@ document.getElementById("portable").href = PORTABLE;
 
 // The Microsoft Store page, once PhitPup is live there
 // (https://apps.microsoft.com/detail/<Store ID>). Empty keeps the button hidden.
-const STORE = "";
+const STORE = "https://apps.microsoft.com/detail/9pdr0bqr0ll2";
 if (STORE) {
   const store = document.getElementById("store");
   store.href = STORE;
