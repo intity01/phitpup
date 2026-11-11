@@ -25,7 +25,8 @@ use windows_sys::Win32::System::Threading::{
 use windows_sys::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, EVENT_OBJECT_FOCUS, EVENT_SYSTEM_FOREGROUND, GetClassNameW, GetMessageW,
-    GetWindowRect, GetWindowThreadProcessId, MSG, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
+    GetWindowRect, GetWindowThreadProcessId, IsZoomed, MSG, WINEVENT_OUTOFCONTEXT,
+    WINEVENT_SKIPOWNPROCESS,
 };
 
 use crate::{App, layout, uia};
@@ -211,12 +212,14 @@ fn class_of(hwnd: HWND) -> String {
     String::from_utf16_lossy(&buf[..n.max(0) as usize])
 }
 
-/// Whether `hwnd` covers its whole monitor.
+/// Whether `hwnd` covers its whole monitor as a full-screen window does. A
+/// maximised window also covers a monitor that has no taskbar on it (a
+/// second screen, or a taskbar that hides itself), and is not full screen.
 fn fullscreen(hwnd: HWND) -> bool {
     // SAFETY: plain queries into zeroed structs.
     unsafe {
         let mut r: RECT = std::mem::zeroed();
-        if GetWindowRect(hwnd, &mut r) == 0 {
+        if IsZoomed(hwnd) != 0 || GetWindowRect(hwnd, &mut r) == 0 {
             return false;
         }
         let mut mi: MONITORINFO = std::mem::zeroed();

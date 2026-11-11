@@ -37,7 +37,8 @@ use windows_sys::Win32::System::Threading::{
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyboardLayout, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP,
     LoadKeyboardLayoutW, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEINPUT, SendInput, VK_BACK,
-    VK_CONTROL, VK_DELETE, VK_ESCAPE, VK_F24, VK_SHIFT, VK_SPACE, VK_TAB, VkKeyScanExW,
+    VK_CONTROL, VK_DELETE, VK_END, VK_ESCAPE, VK_F24, VK_LEFT, VK_SHIFT, VK_SPACE, VK_TAB,
+    VkKeyScanExW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     EnumWindows, FindWindowW, GetForegroundWindow, GetSystemMetrics, GetWindowRect, GetWindowTextW,
@@ -250,7 +251,7 @@ impl Run {
 
     /// Runs the cases that fit the target; the number that failed.
     fn cases(&mut self) -> i32 {
-        let cases: [(&str, Case); 8] = [
+        let cases: [(&str, Case); 10] = [
             ("Tab accepts the suggestion", |r| {
                 r.fresh()?;
                 type_text(SLIP);
@@ -349,13 +350,44 @@ impl Run {
                 r.expect(&format!("{SLIP}\t"))
             }),
             ("The language switches at once", |r| r.language()),
+            ("A piece typed into a word is not judged", |r| {
+                r.fresh()?;
+                type_text("sh");
+                // The caret "moves" (it stays after sh), so PhitPup forgets
+                // the sh and sees only what comes next.
+                tap(VK_END, &[]);
+                let from = log_len(&r.log);
+                // By itself "ould" looks like a slip for "old".
+                type_text("ould");
+                pause(900);
+                if !log_since(&r.log, from).contains("continues a word") {
+                    return Err("PhitPup did not see that the caret was inside a word".into());
+                }
+                // No suggestion to take: Notepad types a tab.
+                tap(VK_TAB, &[]);
+                pause(300);
+                r.expect("should\t")
+            }),
+            ("Shift+Backspace fixes the word the caret was put in", |r| {
+                r.fresh()?;
+                // ความสุข typed with the English keyboard.
+                type_text("8;k,l6-");
+                pause(500);
+                tap(VK_ESCAPE, &[]);
+                tap(VK_LEFT, &[]);
+                tap(VK_LEFT, &[]);
+                pause(300);
+                r.accept_key_with(VK_BACK, &[VK_SHIFT], "fixing the word at the caret")?;
+                r.expect("\u{0E04}\u{0E27}\u{0E32}\u{0E21}\u{0E2A}\u{0E38}\u{0E02}")
+            }),
         ];
         // In a quiet app only the hotkey works; the language case needs our
         // own settings window, so it runs with Notepad only.
         let wanted = |i: usize| match (&self.target, self.quiet) {
             (_, true) => i == 2 || i == 3,
             (Target::Notepad, false) => true,
-            _ => i < 6,
+            // The last case needs no Tab, which moves the focus in a browser.
+            _ => i < 6 || i == 9,
         };
         let cases: Vec<_> = cases
             .into_iter()

@@ -135,16 +135,10 @@ pub fn start(main_thread: u32, welcome: bool, problems: Vec<String>) {
             BALLOON_LINK.set(Some(format!("{}#v{version}", settings::CHANGES)));
         }
         if welcome {
-            let (accept, hotkey) = APP.get().map_or_else(Default::default, |a| {
-                let c = a.config.lock().unwrap();
-                (c.accept_key.label(), c.hotkey.label())
-            });
-            balloon(
-                t("PhitPup is running"),
-                &t("Typed in the wrong layout? Press {accept} on the suggestion, or {hotkey}.\nClick this icon for settings.")
-                    .replace("{accept}", &accept)
-                    .replace("{hotkey}", &hotkey),
-            );
+            // A balloon is easy to miss (Windows hides new icons under ^,
+            // and quiet hours hide balloons), so the first run opens the
+            // window on how PhitPup is used.
+            window::welcome();
         }
         if !problems.is_empty() {
             warn_settings(&problems);
@@ -229,12 +223,29 @@ fn update_icon(action: u32) {
             t("PhitPup: fixes text typed in the wrong layout")
         },
     );
+    // Until the icon is in, every update is an attempt to add it.
+    let action = if ICON_ADDED.load(Ordering::Relaxed) || action == NIM_DELETE {
+        action
+    } else {
+        NIM_ADD
+    };
     // SAFETY: nid is fully initialised; the shell copies the icon.
-    unsafe {
-        Shell_NotifyIconW(action, &nid);
+    let ok = unsafe {
+        let ok = Shell_NotifyIconW(action, &nid) != 0;
         DestroyIcon(nid.hIcon);
+        ok
+    };
+    if action == NIM_ADD {
+        if !ok {
+            debug!("the notification area did not take the icon yet; trying again shortly");
+        }
+        ICON_ADDED.store(ok, Ordering::Relaxed);
     }
 }
+
+/// Whether the icon is in the notification area. Right after sign-in the
+/// taskbar may not be ready and refuses it; [`RELOAD_TIMER`] tries again.
+static ICON_ADDED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 thread_local! {
     /// Where a click on the balloon showing goes, if anywhere.
@@ -521,12 +532,16 @@ unsafe extern "system" fn window_proc(
             0
         }
         WM_TIMER if wparam == RELOAD_TIMER => {
+            if !ICON_ADDED.load(Ordering::Relaxed) {
+                update_icon(NIM_ADD);
+            }
             reload_if_changed();
             0
         }
         _ if msg != 0
             && msg == TRAY.with_borrow(|t| t.as_ref().map_or(0, |t| t.taskbar_created)) =>
         {
+            ICON_ADDED.store(false, Ordering::Relaxed);
             update_icon(NIM_ADD); // Explorer restarted
             0
         }

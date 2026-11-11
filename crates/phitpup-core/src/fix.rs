@@ -109,6 +109,15 @@ pub struct Fixer {
     pub typos: bool,
     /// Also offer [`crate::near`] fixes (suggest mode only).
     pub slips: bool,
+    /// The buffer starts inside a word that was already there (the caret
+    /// was put in the middle of it, or its end was erased), so the first
+    /// word in the buffer is only a piece of one and is not judged. Set by
+    /// [`text_before`](Fixer::text_before).
+    joined: bool,
+    /// Counts the times the text before the buffer changed unseen, so the
+    /// front end knows to look again, and a late answer is not used for
+    /// another place.
+    epoch: u64,
 }
 
 impl Fixer {
@@ -130,7 +139,12 @@ impl Fixer {
         self.pending = None; // erasing the fix is not keeping it
         self.session = None;
         self.undo = None;
-        self.buf.pop();
+        if self.buf.pop().is_none() {
+            // Erased something typed before we were watching: the text
+            // before the caret is not what it was.
+            self.joined = false;
+            self.epoch += 1;
+        }
     }
 
     /// The caret moved somewhere we cannot follow.
@@ -139,6 +153,36 @@ impl Fixer {
         self.buf.clear();
         self.session = None;
         self.undo = None;
+        self.joined = false;
+        self.epoch += 1;
+    }
+
+    /// Changes every time the caret moves somewhere we cannot follow, or
+    /// text from before the buffer is erased.
+    pub fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
+    /// The front end found the character right before the text in the
+    /// buffer (`None`: nothing, or it could not tell). A letter of the same
+    /// script as what was typed next means the caret was put inside a word:
+    /// "ื่อ" typed into "เพน" is a piece of เพื่อน, not "njv" in the wrong
+    /// layout. A letter of the other script is a switch made on purpose,
+    /// as in [`last_word`]. Returns whether the first word is now left alone.
+    pub fn text_before(&mut self, before: Option<char>) -> bool {
+        let (Some(b), Some(&first)) = (before, self.buf.first()) else {
+            return self.joined;
+        };
+        let same = (thai::is_thai(b) && thai::is_thai(first))
+            || (b.is_ascii_alphabetic() && first.is_ascii_alphabetic());
+        self.joined |= same;
+        self.joined
+    }
+
+    /// Whether the word at the end of the buffer is a piece of a word that
+    /// was already there.
+    fn piece(&self) -> bool {
+        self.joined && word_start(&self.buf, 1) == Some(0)
     }
 
     fn keep_pending(&mut self) {
@@ -171,7 +215,7 @@ impl Fixer {
     /// thresholds) says it was typed with the wrong layout. Nothing while the
     /// caret sits after whitespace: the word is finished.
     pub fn suggestion(&self, detector: &Detector, learned: &[String]) -> Option<Suggestion> {
-        if self.buf.last().is_none_or(|c| c.is_whitespace()) {
+        if self.buf.last().is_none_or(|c| c.is_whitespace()) || self.piece() {
             return None;
         }
         let start = last_word(&self.buf)?;
@@ -306,7 +350,7 @@ impl Fixer {
         learned: &[String],
     ) -> Option<Edit> {
         let fix = (|| {
-            if self.buf.last().is_none_or(|c| c.is_whitespace()) {
+            if self.buf.last().is_none_or(|c| c.is_whitespace()) || self.piece() {
                 return None;
             }
             let start = last_word(&self.buf)?;
@@ -957,6 +1001,65 @@ mod tests {
         assert_eq!(offered("ok?  Becuase").as_deref(), Some("Because"));
         assert_eq!(offered("I met Teh"), None, "a name, maybe");
         assert_eq!(offered("Done. TEh"), None);
+    }
+
+    #[test]
+    fn a_piece_typed_into_a_word_is_left_alone() {
+        let d = det();
+        // The caret was put inside เพน and ื่อ typed: by itself it reads as
+        // "njv" in the wrong layout.
+        let mut f = Fixer::new();
+        f.typed("ื่อ");
+        assert!(f.suggestion(&d, &[]).is_some(), "judged alone, it is wrong");
+        assert!(f.text_before(Some('พ')));
+        assert_eq!(f.suggestion(&d, &[]), None);
+        assert_eq!(f.auto(&d, " ", |_| false, &[]), None);
+        // The next word starts fresh.
+        f.typed("l;ylfu");
+        assert_eq!(f.suggestion(&d, &[]).unwrap().edit.insert, "สวัสดี");
+        // And so does everything after the caret moves again.
+        f.reset();
+        f.typed("l;ylfu");
+        assert!(f.suggestion(&d, &[]).is_some());
+    }
+
+    #[test]
+    fn text_before_of_the_other_script_or_none_changes_nothing() {
+        let d = det();
+        for before in [None, Some(' '), Some('.'), Some('5'), Some('ก')] {
+            let mut f = Fixer::new();
+            f.typed("l;ylfu");
+            assert!(!f.text_before(before), "{before:?}");
+            assert!(f.suggestion(&d, &[]).is_some(), "{before:?}");
+        }
+        let mut f = Fixer::new();
+        f.typed("l;ylfu");
+        assert!(f.text_before(Some('a')), "Latin right after Latin");
+        assert_eq!(f.suggestion(&d, &[]), None);
+    }
+
+    #[test]
+    fn erasing_text_from_before_asks_to_look_again() {
+        let d = det();
+        // "hello " was there; the caret is after the space.
+        let mut f = Fixer::new();
+        f.typed("l");
+        assert!(!f.text_before(Some(' ')));
+        let seen = f.epoch();
+        // The l and then the space are erased: the front end must look again.
+        f.backspace();
+        assert_eq!(
+            f.epoch(),
+            seen,
+            "erasing what was typed here changes nothing"
+        );
+        f.backspace();
+        assert_ne!(f.epoch(), seen);
+        f.typed("l;ylfu");
+        assert!(f.text_before(Some('o')), "now it continues hello");
+        assert_eq!(f.suggestion(&d, &[]), None);
+        // The hotkey still does as told.
+        assert_eq!(f.hotkey(&d).unwrap().insert, "สวัสดี");
     }
 
     #[test]

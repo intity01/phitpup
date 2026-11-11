@@ -11,11 +11,15 @@
 //! | IUIAutomation | 8 | GetFocusedElement |
 //! | IUIAutomationElement | 14 | GetCurrentPatternAs |
 //! | IUIAutomationElement | 35 | get_CurrentIsPassword |
+//! | IUIAutomationTextPattern | 5 | GetSelection |
+//! | IUIAutomationTextRangeArray | 4 | GetElement |
 //! | IUIAutomationTextPattern2 | 10 | GetCaretRange |
 //! | IUIAutomationTextRange | 3 | Clone |
 //! | IUIAutomationTextRange | 10 | GetBoundingRectangles |
 //! | IUIAutomationTextRange | 12 | GetText |
 //! | IUIAutomationTextRange | 14 | MoveEndpointByUnit |
+//! | IUIAutomationTextRange | 15 | MoveEndpointByRange |
+//! | IUIAutomationTextRange | 16 | Select |
 
 use std::ffi::c_void;
 
@@ -35,7 +39,12 @@ const CLSID_CUIAUTOMATION: GUID = GUID::from_u128(0xff48dba4_60ef_4201_aa87_5410
 const IID_IUIAUTOMATION: GUID = GUID::from_u128(0x30cbe57d_d9d0_452a_ab13_7ac5ac4825ee);
 const IID_TEXT_PATTERN2: GUID = GUID::from_u128(0x506a921a_fcc9_409f_b23b_37eb74106872);
 const UIA_TEXT_PATTERN2_ID: i32 = 10024;
+const IID_TEXT_PATTERN: GUID = GUID::from_u128(0x32eba289_3583_42c9_9c59_3b6d9a1e9b6a);
+const UIA_TEXT_PATTERN_ID: i32 = 10014;
 const ENDPOINT_START: i32 = 0;
+const ENDPOINT_END: i32 = 1;
+/// The longest word [`Automation::word_at_caret`] looks for on either side.
+const REACH: i32 = 40;
 const UNIT_CHARACTER: i32 = 0;
 
 /// An owned COM pointer, released on drop.
@@ -154,6 +163,57 @@ impl Automation {
         Vec::new()
     }
 
+    /// The character right before `typed`, which was just typed before the
+    /// caret. `None` if the app cannot say or the text there is not (yet)
+    /// `typed`; `Some(None)` if nothing comes before it.
+    pub fn char_before(&self, typed: &str) -> Option<Option<char>> {
+        let range = self.caret_range()?.get(3)?;
+        move_start(&range, -(typed.chars().count() as i32 + 1));
+        let text = text(&range)?;
+        Some(text.strip_suffix(typed)?.chars().next_back())
+    }
+
+    /// Whether the focused field can say what text is around its caret.
+    pub fn reads_text(&self) -> bool {
+        self.caret_range().is_some()
+    }
+
+    /// The word the caret is in or right after, ready to be selected.
+    pub fn word_at_caret(&self) -> Option<WordAt> {
+        let caret = self.caret_range()?;
+        let boundary = |c: char| c.is_whitespace() || c.is_control() || c == '\u{fffc}';
+        let before = caret.get(3)?;
+        move_start(&before, -REACH);
+        let before = text(&before)?;
+        let after = caret.get(3)?;
+        move_endpoint(&after, ENDPOINT_END, REACH);
+        let after = text(&after)?;
+        let left = before.rsplit(boundary).next().unwrap_or_default();
+        let right = after.split(boundary).next().unwrap_or_default();
+        let word = format!("{left}{right}");
+        let reach = REACH as usize;
+        if word.is_empty() || left.chars().count() >= reach || right.chars().count() >= reach {
+            return None;
+        }
+        // Stretch a range over exactly that word.
+        let range = caret.get(3)?;
+        let end = caret.get(3)?;
+        if !fit(&range, ENDPOINT_START, left) || !fit(&end, ENDPOINT_END, right) {
+            return None;
+        }
+        // SAFETY: slot 15 is MoveEndpointByRange(this, endpoint, range, endpoint).
+        let hr = unsafe {
+            range.slot::<unsafe extern "system" fn(Raw, i32, Raw, i32) -> HRESULT>(15)(
+                range.0,
+                ENDPOINT_END,
+                end.0,
+                ENDPOINT_END,
+            )
+        };
+        (hr >= 0 && text(&range).as_deref() == Some(word.as_str()))
+            .then_some(WordAt { text: word, range })
+    }
+
     /// The (usually empty) range at the caret of the focused text field.
     fn caret_range(&self) -> Option<Com> {
         let el = self.focused()?;
@@ -168,7 +228,7 @@ impl Automation {
             )
         };
         if hr < 0 || tp.is_null() {
-            return None;
+            return self.empty_selection(&el);
         }
         let tp = Com(tp);
         let mut active = 0i32;
@@ -183,17 +243,108 @@ impl Automation {
         };
         (hr >= 0 && !range.is_null()).then_some(Com(range))
     }
+
+    /// The caret of a field that only has the older TextPattern (Notepad):
+    /// its selection, when that is empty.
+    fn empty_selection(&self, el: &Com) -> Option<Com> {
+        let mut tp: Raw = std::ptr::null_mut();
+        // SAFETY: slot 14 is GetCurrentPatternAs(this, id, riid, *mut Raw).
+        let hr = unsafe {
+            el.slot::<unsafe extern "system" fn(Raw, i32, *const GUID, *mut Raw) -> HRESULT>(14)(
+                el.0,
+                UIA_TEXT_PATTERN_ID,
+                &IID_TEXT_PATTERN,
+                &mut tp,
+            )
+        };
+        if hr < 0 || tp.is_null() {
+            return None;
+        }
+        // Slot 5 is IUIAutomationTextPattern::GetSelection, which hands back
+        // an IUIAutomationTextRangeArray.
+        let ranges = Com(tp).get(5)?;
+        let mut range: Raw = std::ptr::null_mut();
+        // SAFETY: slot 4 is IUIAutomationTextRangeArray::GetElement(this, index, *mut Raw).
+        let hr = unsafe {
+            ranges.slot::<unsafe extern "system" fn(Raw, i32, *mut Raw) -> HRESULT>(4)(
+                ranges.0, 0, &mut range,
+            )
+        };
+        if hr < 0 || range.is_null() {
+            return None;
+        }
+        let range = Com(range);
+        text(&range).is_some_and(|t| t.is_empty()).then_some(range)
+    }
+}
+
+/// A word in the focused text field.
+pub struct WordAt {
+    pub text: String,
+    range: Com,
+}
+
+impl WordAt {
+    /// Selects the word, so that what is typed next replaces it.
+    pub fn select(&self) -> bool {
+        // SAFETY: slot 16 is Select(this).
+        let hr = unsafe {
+            self.range
+                .slot::<unsafe extern "system" fn(Raw) -> HRESULT>(16)(self.range.0)
+        };
+        hr >= 0
+    }
+}
+
+/// Moves one end of the empty `range` until it holds exactly `want`, the
+/// text on that side of it. Apps count characters differently (see
+/// [`Automation::word_rects`]), so the end is stepped until the text fits.
+fn fit(range: &Com, endpoint: i32, want: &str) -> bool {
+    let n = want.chars().count() as i32;
+    if n == 0 {
+        return true;
+    }
+    let out = if endpoint == ENDPOINT_START { -1 } else { 1 };
+    move_endpoint(range, endpoint, out * n);
+    for _ in 0..=n {
+        let Some(text) = text(range) else {
+            return false;
+        };
+        if text == want {
+            return true;
+        }
+        let (too_much, too_little) = if endpoint == ENDPOINT_START {
+            (text.ends_with(want), want.ends_with(text.as_str()))
+        } else {
+            (text.starts_with(want), want.starts_with(text.as_str()))
+        };
+        let step = if too_much {
+            -out
+        } else if too_little {
+            out
+        } else {
+            return false;
+        };
+        if move_endpoint(range, endpoint, step) == 0 {
+            return false;
+        }
+    }
+    false
 }
 
 /// Moves the start of `range` by `count` characters; returns how far it
 /// actually moved.
 fn move_start(range: &Com, count: i32) -> i32 {
+    move_endpoint(range, ENDPOINT_START, count)
+}
+
+fn move_endpoint(range: &Com, endpoint: i32, count: i32) -> i32 {
     let mut moved = 0i32;
     // SAFETY: slot 14 is MoveEndpointByUnit(this, endpoint, unit, count, *mut i32).
     unsafe {
         range.slot::<unsafe extern "system" fn(Raw, i32, i32, i32, *mut i32) -> HRESULT>(14)(
             range.0,
-            ENDPOINT_START,
+            endpoint,
             UNIT_CHARACTER,
             count,
             &mut moved,
@@ -209,7 +360,7 @@ fn text(range: &Com) -> Option<String> {
     // copied and then freed.
     unsafe {
         let hr = range.slot::<unsafe extern "system" fn(Raw, i32, *mut BSTR) -> HRESULT>(12)(
-            range.0, 64, &mut s,
+            range.0, 128, &mut s,
         );
         if hr < 0 || s.is_null() {
             return None;

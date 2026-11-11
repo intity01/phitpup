@@ -18,7 +18,7 @@
 //! Where [`context::gate`] says PhitPup is off (password fields and the
 //! like), keys pass untouched and nothing is remembered.
 
-use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU64, Ordering};
 
 use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -38,7 +38,7 @@ use phitpup_core::config::Mode;
 use phitpup_core::hotkey::DoubleTap;
 
 use crate::context::{self, Gate};
-use crate::{APP, App, WM_ACCEPT, WM_BUBBLE, WM_FIX, WM_SAVE, bubble, inject, layout};
+use crate::{APP, App, WM_ACCEPT, WM_BUBBLE, WM_FIX, WM_PROBE, WM_SAVE, bubble, inject, layout};
 
 /// CapsLock as we last saw it; GetKeyState is stale for other threads' input.
 static CAPS: AtomicBool = AtomicBool::new(false);
@@ -48,6 +48,9 @@ static LAST_FOREGROUND: AtomicIsize = AtomicIsize::new(0);
 static DISMISSED: AtomicBool = AtomicBool::new(false);
 /// The gate at the last key, to log only its changes.
 static LAST_GATE: std::sync::Mutex<Gate> = std::sync::Mutex::new(Gate::On);
+/// The [`Fixer::epoch`](phitpup_core::Fixer::epoch) the worker was last
+/// asked to look at the text before the caret for.
+static PROBED: AtomicU64 = AtomicU64::new(u64::MAX);
 /// For `double_shift`.
 static SHIFT_TAPS: std::sync::Mutex<DoubleTap> = std::sync::Mutex::new(DoubleTap::new());
 
@@ -165,6 +168,12 @@ fn set_suggestion(app: &App, s: Option<phitpup_core::Suggestion>) {
     }
 }
 
+/// The worker found that the text typed since the caret moved continues a
+/// word that was already there: take back a suggestion made for it alone.
+pub fn recheck(app: &App) {
+    refresh(app, false);
+}
+
 /// Asks the fixer whether the word being typed needs fixing.
 fn refresh(app: &App, quiet: bool) {
     if bubble::end_notice() {
@@ -172,6 +181,15 @@ fn refresh(app: &App, quiet: bool) {
     }
     if quiet || app.mode() == Mode::Manual {
         return;
+    }
+    // The first key typed somewhere new: have the worker see whether it
+    // lands inside a word that is already there.
+    let (epoch, typing) = {
+        let f = app.fixer.lock().unwrap();
+        (f.epoch(), !f.is_empty())
+    };
+    if typing && PROBED.swap(epoch, Ordering::Relaxed) != epoch {
+        post(app, WM_PROBE);
     }
     let config = app.config.lock().unwrap().clone();
     let mut fixer = app.fixer.lock().unwrap();
@@ -307,11 +325,13 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
                 }
                 return true;
             }
-            let layout = s.kind == Kind::Layout;
-            if app.config.lock().unwrap().accepted(&s.word, layout) {
-                post(app, WM_SAVE);
-            }
-            if let Some(edit) = app.fixer.lock().unwrap().accept(&s) {
+            let edit = app.fixer.lock().unwrap().accept(&s);
+            if let Some(edit) = edit {
+                // Counted only once the fix is really made.
+                let layout = s.kind == Kind::Layout;
+                if app.config.lock().unwrap().accepted(&s.word, layout) {
+                    post(app, WM_SAVE);
+                }
                 *app.accepted.lock().unwrap() = Some(edit);
                 post(app, WM_ACCEPT);
                 return true;

@@ -43,6 +43,8 @@ mod clipboard;
 #[cfg(windows)]
 mod context;
 #[cfg(windows)]
+mod edit;
+#[cfg(windows)]
 mod fonts;
 #[cfg(windows)]
 mod hook;
@@ -85,7 +87,7 @@ fn main() {
 }
 
 #[cfg(windows)]
-pub use app::{APP, App, WM_ACCEPT, WM_BUBBLE, WM_FIX, WM_SAVE};
+pub use app::{APP, App, WM_ACCEPT, WM_BUBBLE, WM_FIX, WM_PROBE, WM_SAVE};
 
 #[cfg(windows)]
 mod app {
@@ -105,12 +107,12 @@ mod app {
         DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DispatchMessageW, GetMessageW, HWND_MESSAGE, MB_ICONERROR,
-        MB_ICONINFORMATION, MB_OK, MSG, MessageBoxW, PM_NOREMOVE, PeekMessageW, TranslateMessage,
-        WM_APP,
+        CreateWindowExW, DispatchMessageW, GetForegroundWindow, GetMessageW, HWND_MESSAGE,
+        MB_ICONERROR, MB_ICONINFORMATION, MB_OK, MSG, MessageBoxW, PM_NOREMOVE, PeekMessageW,
+        TranslateMessage, WM_APP,
     };
 
-    use crate::{bubble, clipboard, context, hook, inject, layout, settings, tray};
+    use crate::{bubble, clipboard, context, edit, hook, inject, layout, settings, tray};
 
     /// Posted by the hook to the worker: the user pressed Shift+Backspace.
     pub const WM_FIX: u32 = WM_APP + 1;
@@ -123,6 +125,9 @@ mod app {
     /// Posted by the hook to the worker: write [`App::config`] to the
     /// settings file (Shift+Esc added a word).
     pub const WM_SAVE: u32 = WM_APP + 4;
+    /// Posted by the hook to the worker: typing started somewhere new; see
+    /// whether it continues a word that is already there ([`probe`]).
+    pub const WM_PROBE: u32 = WM_APP + 5;
 
     pub struct App {
         pub fixer: Mutex<Fixer>,
@@ -298,6 +303,7 @@ mod app {
                     WM_BUBBLE => bubble::schedule(),
                     WM_ACCEPT => accept(),
                     WM_SAVE => settings::save(&APP.get().unwrap().config.lock().unwrap().clone()),
+                    WM_PROBE => probe(),
                     _ => {}
                 }
             }
@@ -329,12 +335,105 @@ mod app {
                 debug!("hotkey: nothing typed since the caret moved; trying the selection");
                 // Nothing to fix: Shift+Backspace behaves like Backspace.
                 let backspace = app.config.lock().unwrap().hotkey.vk == VK_BACK && !tapped;
-                if !convert_selection(owner) && backspace {
+                if !convert_selection(owner) && !fix_at_caret() && backspace {
                     debug!("hotkey: no selection either; sent a plain Backspace");
                     inject::backspace();
                 }
             }
         }
+    }
+
+    /// Typing started where the caret was put by a click or an arrow key.
+    /// Asks the app what comes right before it (a plain edit box by window
+    /// message, others through UI Automation): a letter of the same script
+    /// means a piece is being typed into a word that was already there,
+    /// which is not judged as a word. Apps that cannot say are treated as
+    /// before.
+    fn probe() {
+        let app = APP.get().unwrap();
+        let plain = edit::Caret::focused().is_some();
+        if !plain && bubble::automation(|a| a.reads_text()) != Some(true) {
+            return;
+        }
+        // The key that woke us reaches the app after the hook returns, so
+        // the app may need a moment before its text ends with what we saw.
+        for _ in 0..4 {
+            std::thread::sleep(Duration::from_millis(25));
+            let (epoch, typed) = {
+                let f = app.fixer.lock().unwrap();
+                (f.epoch(), f.text())
+            };
+            if typed.is_empty() || typed.chars().count() > 30 {
+                return;
+            }
+            let before = if plain {
+                edit::Caret::focused().and_then(|c| c.char_before(&typed))
+            } else {
+                bubble::automation(|a| a.char_before(&typed)).flatten()
+            };
+            let Some(before) = before else {
+                continue;
+            };
+            let mut f = app.fixer.lock().unwrap();
+            if f.epoch() != epoch || !f.text().starts_with(&typed) {
+                return;
+            }
+            let piece = f.text_before(before);
+            drop(f);
+            if piece {
+                debug!("typing continues a word that was already there: not judged");
+                hook::recheck(app);
+            }
+            return;
+        }
+    }
+
+    /// The hotkey with nothing typed and nothing selected: if the caret
+    /// was put in or right after a word typed in the wrong layout, fixes
+    /// that word. Only a word the detector is sure about, so Shift+Backspace
+    /// stays a plain Backspace everywhere else. Needs an app that says what
+    /// text is around its caret: a plain edit box, or UI Automation.
+    fn fix_at_caret() -> bool {
+        let app = APP.get().unwrap();
+        // SAFETY: plain query.
+        let fg = unsafe { GetForegroundWindow() };
+        if context::gate(app, fg) != context::Gate::On {
+            return false;
+        }
+        let plain = edit::Caret::focused().and_then(|c| c.word());
+        let found = match &plain {
+            Some(_) => None,
+            None => bubble::automation(|a| a.word_at_caret()).flatten(),
+        };
+        let Some(text) = (plain.as_ref().map(|w| &w.text)).or(found.as_ref().map(|w| &w.text))
+        else {
+            return false;
+        };
+        if app.config.lock().unwrap().leaves_alone(text) {
+            return false;
+        }
+        let Some(v) = app.detector.judge(text).filter(|v| v.flip) else {
+            debug!("hotkey: the word at the caret looks right as it is");
+            return false;
+        };
+        let selected = match (&plain, &found) {
+            (Some(w), _) => w.select(),
+            (None, Some(w)) => w.select(),
+            (None, None) => false,
+        };
+        if !selected {
+            return false;
+        }
+        debug!(
+            "hotkey: fixing the word at the caret ({} chars)",
+            v.converted.chars().count()
+        );
+        inject::replace(0, &v.converted);
+        switch_to(match v.direction {
+            Direction::ToThai => Lang::Thai,
+            Direction::ToEnglish => Lang::English,
+        });
+        true
     }
 
     fn accept() {

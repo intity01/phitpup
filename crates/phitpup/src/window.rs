@@ -165,6 +165,8 @@ const DARK: Palette = Palette {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Page {
+    /// How to use PhitPup; what the first run opens on.
+    Start,
     General,
     Programs,
     Words,
@@ -172,7 +174,8 @@ enum Page {
     About,
 }
 
-const PAGES: [(Page, char, &str); 5] = [
+const PAGES: [(Page, char, &str); 6] = [
+    (Page::Start, G_BULB, "Getting started"),
     (Page::General, G_SETTINGS, "General"),
     (Page::Programs, G_APPS, "Programs"),
     (Page::Words, G_FONT, "Words"),
@@ -226,6 +229,8 @@ enum Hit {
     ClearLearned,
     Change(Which),
     ResetKeys,
+    /// Opens Notepad to try PhitPup in.
+    TryIt,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -565,9 +570,19 @@ pub fn close() {
     }
 }
 
+/// The first run: opens the window on the page that says how PhitPup is
+/// used, since nothing else shows that it started.
+pub fn welcome() {
+    open_on(Page::Start);
+}
+
 /// Opens the window on the screen with the mouse pointer, or brings it to
 /// the front if it is already open.
 pub fn open() {
+    open_on(Page::General);
+}
+
+fn open_on(page: Page) {
     // SAFETY: plain window calls on our own window and class.
     unsafe {
         if let Some(hwnd) = hwnd() {
@@ -648,7 +663,7 @@ pub fn open() {
                 dpi,
                 dark,
                 fonts: Fonts::new(dpi),
-                page: Page::General,
+                page,
                 mouse: None,
                 tracking: false,
                 scroll: 0.0,
@@ -1041,6 +1056,7 @@ fn build<'a>(win: &'a Win, c: &Config, dc: HDC) -> Builder<'a> {
     };
     let top = 28.0 - win.scroll;
     let bottom = match win.page {
+        Page::Start => start(&mut b, c, top),
         Page::General => general(&mut b, c, top),
         Page::Programs => programs_page(&mut b, c, top),
         Page::Words => words(&mut b, c, win, top),
@@ -1117,6 +1133,84 @@ fn sidebar(b: &mut Builder, page: Page) {
         p.sub,
         LINE,
     );
+}
+
+/// How PhitPup is used, in three steps, and a place to try it.
+fn start(b: &mut Builder, c: &Config, y: f32) -> f32 {
+    let p = b.pal;
+    let mut y = b.title(y, t("Getting started"));
+    y += b.para(LEFT + 8.0, y, WIDTH - 16.0, t("PhitPup is running. It has no window of its own: it waits by the clock at the bottom right of the screen (under ^ if you do not see its icon) and fixes text typed in the wrong keyboard layout."), F::Body, p.text);
+    y += 22.0;
+
+    let fix = c.hotkey.label();
+    let steps = [
+        (
+            t("While you type"),
+            t("A bubble shows the fix under the word. {key} takes it; Esc leaves the word as typed.").replace("{key}", &c.accept_key.label()),
+            c.accept_key.caps(),
+        ),
+        (
+            t("Just typed it"),
+            t("{key} fixes the last word. Press again to reach one more word back, and once more to undo.").replace("{key}", &fix),
+            c.hotkey.caps(),
+        ),
+        (
+            t("An older word"),
+            t("Click on the word, or select the text, then press {key}.").replace("{key}", &fix),
+            c.hotkey.caps(),
+        ),
+    ];
+    for (i, (title, caption, caps)) in steps.into_iter().enumerate() {
+        // The step's number, in pen.
+        b.text(
+            R::new(LEFT + 8.0, y, 28.0, 30.0),
+            &(i + 1).to_string(),
+            F::PenBig,
+            p.accent,
+            LINE,
+        );
+        let x = LEFT + 44.0;
+        let keys = b.keycaps(RIGHT - 16.0, y + 15.0, &caps, false);
+        let w = keys - 16.0 - x;
+        b.text(R::new(x, y + 4.0, w, 22.0), title, F::Strong, p.text, LINE);
+        let mut h = 30.0 + b.para(x, y + 30.0, w, &caption, F::Caption, p.sub);
+        if i == 0 {
+            // What it looks like: the slip crossed out, the fix beside it.
+            let typed = "l;ylfu";
+            let tw = b.width(F::Word, typed);
+            let ty = y + h + 8.0;
+            b.text(R::new(x, ty, tw + 4.0, 26.0), typed, F::Word, p.sub, LINE);
+            b.pen(
+                vec![(x - 3.0, ty + 15.0), (x + tw + 4.0, ty + 12.0)],
+                1.8,
+                p.accent,
+            );
+            b.text(
+                R::new(x + tw + 16.0, ty, 160.0, 26.0),
+                "สวัสดี",
+                F::Pen,
+                p.accent,
+                LINE,
+            );
+            h += 36.0;
+        }
+        y += h + 12.0;
+        b.fill(R::new(LEFT, y - 1.0, WIDTH, 1.0), 0.0, p.border);
+        y += 12.0;
+    }
+
+    y += 6.0;
+    let label = t("Try it in Notepad");
+    let r = R::new(LEFT + 8.0, y, b.width(F::Strong, label) + 44.0, 36.0);
+    b.button(r, label, None, true, Hit::TryIt);
+    b.text(
+        R::new(r.x + r.w + 16.0, y, RIGHT - r.x - r.w - 16.0, 36.0),
+        t("Type l;ylfu there and see."),
+        F::Caption,
+        p.sub,
+        LINE,
+    );
+    y + 36.0
 }
 
 fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
@@ -2324,6 +2418,7 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
             });
         }
         Hit::ResetKeys => edit(|c| (c.hotkey, c.accept_key) = (Hotkey::FIX, Hotkey::ACCEPT)),
+        Hit::TryIt => settings::open("notepad.exe"),
     }
     invalidate(hwnd);
 }

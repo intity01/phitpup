@@ -370,6 +370,12 @@ fn underline_on() -> bool {
         .is_some_and(|a| a.config.lock().unwrap().underline)
 }
 
+/// Runs `f` with this thread's UI Automation connection, if there is one.
+/// Only the worker thread should ask: the calls wait on another program.
+pub fn automation<T>(f: impl FnOnce(&uia::Automation) -> T) -> Option<T> {
+    AUTOMATION.with(|a| a.as_ref().map(f))
+}
+
 /// The suggestion changed: act on it once it settles.
 pub fn schedule() {
     let has = current().is_some();

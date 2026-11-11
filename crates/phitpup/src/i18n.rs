@@ -68,6 +68,24 @@ pub fn t_dyn(en: &str) -> String {
 fn thai_for(en: &str) -> Option<&'static str> {
     Some(match en {
         // Pages
+        "Getting started" => "เริ่มใช้งาน",
+        "PhitPup is running. It has no window of its own: it waits by the clock at the bottom right of the screen (under ^ if you do not see its icon) and fixes text typed in the wrong keyboard layout." => {
+            "ผิดปุ๊บทำงานอยู่แล้ว ไม่มีหน้าต่างของตัวเอง แต่รออยู่ข้างนาฬิกาที่มุมขวาล่างของจอ (กด ^ ถ้าไม่เห็น) คอยแก้ข้อความที่พิมพ์ผิดภาษาให้"
+        }
+        "While you type" => "ระหว่างพิมพ์",
+        "A bubble shows the fix under the word. {key} takes it; Esc leaves the word as typed." => {
+            "ป้ายจะขึ้นใต้คำ พร้อมคำที่ถูก กด {key} เพื่อรับ กด Esc ถ้าตั้งใจพิมพ์แบบนั้น"
+        }
+        "Just typed it" => "พิมพ์ไปแล้ว",
+        "{key} fixes the last word. Press again to reach one more word back, and once more to undo." => {
+            "กด {key} เพื่อแก้คำล่าสุด กดซ้ำเพื่อย้อนไปอีกคำ กดอีกครั้งเพื่อยกเลิก"
+        }
+        "An older word" => "คำเก่าที่ผ่านไปแล้ว",
+        "Click on the word, or select the text, then press {key}." => {
+            "คลิกที่คำนั้น หรือลากเลือกข้อความ แล้วกด {key}"
+        }
+        "Try it in Notepad" => "ลองใน Notepad",
+        "Type l;ylfu there and see." => "ลองพิมพ์ l;ylfu ดู",
         "General" => "ทั่วไป",
         "Programs" => "โปรแกรม",
         "Words" => "คำ",
@@ -313,6 +331,9 @@ mod tests {
     #[test]
     fn thai_keeps_placeholders() {
         let keys = [
+            "A bubble shows the fix under the word. {key} takes it; Esc leaves the word as typed.",
+            "{key} fixes the last word. Press again to reach one more word back, and once more to undo.",
+            "Click on the word, or select the text, then press {key}.",
             "A bubble shows the fix. {key} accepts it, Esc hides it.",
             "Only words it is very sure about. {key} right after undoes it.",
             "Only when I press {key}",
