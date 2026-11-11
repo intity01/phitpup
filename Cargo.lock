@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "phitpup"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "phitpup-core",
  "windows",
@@ -13,11 +13,11 @@ dependencies = [
 
 [[package]]
 name = "phitpup-core"
-version = "0.4.2"
+version = "0.4.3"
 
 [[package]]
 name = "phitpup-update"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "phitpup-core",
  "windows-sys",
@@ -25,7 +25,7 @@ dependencies = [
 
 [[package]]
 name = "phitpup-web"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "phitpup-core",
 ]
@@ -250,7 +250,7 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 
 [[package]]
 name = "xtask"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "phitpup-core",
  "windows-sys",
