@@ -50,6 +50,20 @@ const UNIT_CHARACTER: i32 = 0;
 /// An owned COM pointer, released on drop.
 struct Com(Raw);
 
+/// Takes ownership of `p`, which a call that returned `hr` handed back.
+/// `None`, with nothing released, if the call failed or gave nothing.
+///
+/// Not `then_some(Com(p))`: that builds the `Com` either way, and dropping
+/// it calls Release on a null pointer. UI Automation fails like that
+/// whenever the focused window goes away, which crashed PhitPup.
+fn owned(hr: HRESULT, p: Raw) -> Option<Com> {
+    if hr >= 0 && !p.is_null() {
+        Some(Com(p))
+    } else {
+        None
+    }
+}
+
 impl Com {
     /// The function in vtable slot `i`, typed as `F`.
     ///
@@ -70,7 +84,7 @@ impl Com {
         let hr = unsafe {
             self.slot::<unsafe extern "system" fn(Raw, *mut Raw) -> HRESULT>(i)(self.0, &mut out)
         };
-        (hr >= 0 && !out.is_null()).then_some(Com(out))
+        owned(hr, out)
     }
 }
 
@@ -241,7 +255,7 @@ impl Automation {
                 &mut range,
             )
         };
-        (hr >= 0 && !range.is_null()).then_some(Com(range))
+        owned(hr, range)
     }
 
     /// The caret of a field that only has the older TextPattern (Notepad):
@@ -424,5 +438,66 @@ fn rects(range: &Com) -> Vec<[f64; 4]> {
         }
         SafeArrayDestroy(sa);
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+    use std::mem::ManuallyDrop;
+
+    /// A stand-in COM object that counts its Releases.
+    #[repr(C)]
+    struct Fake {
+        vtbl: *const usize,
+        released: Cell<u32>,
+    }
+
+    unsafe extern "system" fn release(this: Raw) -> u32 {
+        // SAFETY: only ever called on a Fake.
+        let fake = unsafe { &*(this as *const Fake) };
+        fake.released.set(fake.released.get() + 1);
+        0
+    }
+
+    /// What UI Automation answers once the focused window is gone.
+    unsafe extern "system" fn fails(_: Raw, out: *mut Raw) -> HRESULT {
+        unsafe { *out = std::ptr::null_mut() };
+        0x8000_FFFF_u32 as HRESULT // E_UNEXPECTED
+    }
+
+    unsafe extern "system" fn succeeds_with_nothing(_: Raw, out: *mut Raw) -> HRESULT {
+        unsafe { *out = std::ptr::null_mut() };
+        0
+    }
+
+    unsafe extern "system" fn hands_back_itself(this: Raw, out: *mut Raw) -> HRESULT {
+        unsafe { *out = this };
+        0
+    }
+
+    #[test]
+    fn a_failed_call_releases_nothing() {
+        let vtbl = [
+            0,
+            0,
+            release as *const () as usize,
+            fails as *const () as usize,
+            succeeds_with_nothing as *const () as usize,
+            hands_back_itself as *const () as usize,
+        ];
+        let fake = Fake {
+            vtbl: vtbl.as_ptr(),
+            released: Cell::new(0),
+        };
+        let com = ManuallyDrop::new(Com(&fake as *const Fake as Raw));
+        assert!(com.get(3).is_none());
+        assert!(com.get(4).is_none());
+        assert_eq!(fake.released.get(), 0);
+        let got = com.get(5);
+        assert!(got.is_some());
+        drop(got);
+        assert_eq!(fake.released.get(), 1);
     }
 }

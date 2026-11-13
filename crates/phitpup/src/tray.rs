@@ -26,8 +26,8 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     ICONINFO, MB_ICONWARNING, MB_OK, MF_BYCOMMAND, MF_CHECKED, MF_SEPARATOR, MF_STRING, MSG,
     MessageBoxW, PostMessageW, PostThreadMessageW, RegisterClassExW, RegisterWindowMessageW,
     SM_CXSMICON, SetForegroundWindow, SetMenuDefaultItem, SetTimer, TPM_RETURNCMD, TPM_RIGHTBUTTON,
-    TrackPopupMenu, TranslateMessage, WM_APP, WM_CONTEXTMENU, WM_LBUTTONUP, WM_NULL, WM_QUIT,
-    WM_RBUTTONUP, WM_TIMER, WNDCLASSEXW,
+    TrackPopupMenu, TranslateMessage, WM_APP, WM_CONTEXTMENU, WM_ENDSESSION, WM_LBUTTONUP, WM_NULL,
+    WM_QUIT, WM_RBUTTONUP, WM_TIMER, WNDCLASSEXW,
 };
 
 use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -525,6 +525,17 @@ unsafe extern "system" fn window_proc(
         WM_QUIT_REQUEST => {
             debug!("asked to quit");
             quit();
+            0
+        }
+        // Windows is shutting down or signing out, or Restart Manager is
+        // closing PhitPup so that an update (the Store's, or the installer's)
+        // can replace it. Without this PhitPup stayed, the update waited 30
+        // seconds and then killed it, and Windows logged a hang.
+        WM_ENDSESSION => {
+            if wparam != 0 {
+                debug!("Windows asked PhitPup to close");
+                quit();
+            }
             0
         }
         WM_TIMER if wparam == REMIND_TIMER => {
