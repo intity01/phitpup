@@ -1,5 +1,5 @@
 ﻿PhitPup (ผิดปุ๊บ) – terms
-Made by Intity01 · sukudone.team-dev
+Made by Intity01 · sakudone.studio
 
 IN SHORT
 
@@ -9,6 +9,7 @@ IN SHORT
 • Get it only from the official places:
     https://intity01.github.io/phitpup/
     https://github.com/intity01/phitpup/releases
+    https://apps.microsoft.com/detail/9pdr0bqr0ll2 (Microsoft Store)
   Copies from anywhere else are not from us and may have been changed.
 
 • The names PhitPup and ผิดปุ๊บ and the p logo belong to the authors. A changed version must use
@@ -27,7 +28,7 @@ IN SHORT
 
 THE LICENSE
 
-Copyright (C) 2026 Intity01 (sukudone.team-dev) and PhitPup contributors
+Copyright (C) 2026 Intity01 (sakudone.studio) and PhitPup contributors
 https://github.com/intity01/phitpup
 
 PhitPup 0.4.0 and later are free software: you can redistribute them and/or modify them under the

@@ -1,14 +1,15 @@
 ﻿ผิดปุ๊บ (PhitPup) – ข้อตกลง
-พัฒนาโดย Intity01 · sukudone.team-dev
+พัฒนาโดย Intity01 · sakudone.studio
 
 สรุปสั้น ๆ
 
 • ผิดปุ๊บใช้ฟรีทุกคน รวมถึงใช้ในที่ทำงาน เราไม่เคยเก็บเงินค่าโปรแกรมนี้ ถ้ามีใครให้คุณจ่ายเงินเพื่อได้ผิดปุ๊บ
   คนนั้นไม่ใช่เรา
 
-• ดาวน์โหลดของแท้ได้จากสองที่นี้เท่านั้น
+• ดาวน์โหลดของแท้ได้จากสามที่นี้เท่านั้น
     https://intity01.github.io/phitpup/
     https://github.com/intity01/phitpup/releases
+    https://apps.microsoft.com/detail/9pdr0bqr0ll2 (Microsoft Store)
   ไฟล์จากที่อื่นไม่ได้มาจากเรา และอาจถูกแก้ไข
 
 • ชื่อ PhitPup และ ผิดปุ๊บ กับโลโก้ p เป็นของผู้พัฒนา ถ้าเอาโค้ดไปแก้แล้วแจกต่อ ต้องใช้ชื่อและไอคอนอื่น
@@ -27,7 +28,7 @@
 
 สัญญาอนุญาต
 
-Copyright (C) 2026 Intity01 (sukudone.team-dev) and PhitPup contributors
+Copyright (C) 2026 Intity01 (sakudone.studio) and PhitPup contributors
 https://github.com/intity01/phitpup
 
 PhitPup 0.4.0 and later are free software: you can redistribute them and/or modify them under the

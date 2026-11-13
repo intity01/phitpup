@@ -67,7 +67,7 @@ The installer is built with [Inno Setup](https://jrsoftware.org/isinfo.php) 6.5 
 
 ## Credits
 
-Made by **Intity01** · sukudone.team-dev. Data sources in [THIRD_PARTY.md](THIRD_PARTY.md).
+Made by **Intity01** · sakudone.studio. Data sources in [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ## Code signing policy
 
@@ -81,7 +81,7 @@ Free to use for everyone, including at work. From 0.4.0 PhitPup is open source u
 changed version you share must come with its source under the same license. Versions 0.3.4 to
 0.3.6 were released under the PolyForm Noncommercial License 1.0.0, and 0.3.3 and earlier under
 the MIT License. The PhitPup name and logo are not licensed, and official downloads are only on
-the website and GitHub releases: see [TRADEMARKS.md](TRADEMARKS.md).
+the website, GitHub releases and the Microsoft Store: see [TRADEMARKS.md](TRADEMARKS.md).
 
 ใช้ฟรีทุกคน รวมถึงใช้ในที่ทำงาน ตั้งแต่รุ่น 0.4.0 เป็นโอเพนซอร์สตามสัญญา GPL รุ่น 3 ใช้ ศึกษา แก้ และแจกต่อได้
 ถ้าแจกฉบับที่แก้แล้วต้องเปิดซอร์สด้วยสัญญาเดียวกัน รุ่น 0.3.4–0.3.6 เป็น PolyForm Noncommercial 1.0.0

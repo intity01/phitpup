@@ -23,7 +23,7 @@ fn main() {
     let info = version_info(
         version,
         &[
-            ("CompanyName", "sukudone.team-dev"),
+            ("CompanyName", "sakudone.studio"),
             (
                 "FileDescription",
                 "PhitPup - fixes text typed in the wrong keyboard layout",

@@ -13,7 +13,7 @@ fn main() {
     let info = version_info(
         version,
         &[
-            ("CompanyName", "sukudone.team-dev"),
+            ("CompanyName", "sakudone.studio"),
             (
                 "FileDescription",
                 "PhitPup updater - downloads and installs new PhitPup versions when asked",

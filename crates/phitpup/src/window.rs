@@ -185,7 +185,7 @@ const PAGES: [(Page, char, &str); 6] = [
 
 /// Who makes PhitPup, for the About page.
 const AUTHOR: &str = "Intity01";
-const TEAM: &str = "sukudone.team-dev";
+const TEAM: &str = "sakudone.studio";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Which {
