@@ -260,6 +260,19 @@ fn thai_for(en: &str) -> Option<&'static str> {
         "You have the newest version." => "เป็นรุ่นล่าสุดแล้ว",
         "Check again" => "เช็กอีกครั้ง",
         "Version {v} is out ({size})." => "มีรุ่น {v} แล้ว ({size})",
+        "Version {v} is out." => "มีรุ่น {v} แล้ว",
+        "Installing. If PhitPup closes, open it again from Start." => {
+            "กำลังติดตั้ง ถ้าผิดปุ๊บปิดไป เปิดใหม่ได้จากเมนู Start"
+        }
+        "Could not reach the Microsoft Store. Check your internet connection." => {
+            "ติดต่อ Microsoft Store ไม่ได้ ตรวจดูการต่ออินเทอร์เน็ต"
+        }
+        "The Store will install it once your PC is plugged in or on Wi-Fi." => {
+            "Store จะติดตั้งให้เมื่อเสียบสายชาร์จหรือต่อ Wi-Fi"
+        }
+        "The Microsoft Store could not install it, so its Downloads page is open." => {
+            "Microsoft Store ติดตั้งไม่สำเร็จ จึงเปิดหน้าดาวน์โหลดของ Store ให้แล้ว"
+        }
         "Install {v}" => "ติดตั้ง {v}",
         "Downloading\u{2026} {pct}%" => "กำลังโหลด\u{2026} {pct}%",
         "Downloading\u{2026}" => "กำลังโหลด\u{2026}",
@@ -342,6 +355,7 @@ mod tests {
             "Always fix ({n})",
             "Words you convert with {key} and then keep typing after show up here.",
             "Version {v} is out ({size}).",
+            "Version {v} is out.",
             "Install {v}",
             "Downloading\u{2026} {pct}%",
             "Version {v}",

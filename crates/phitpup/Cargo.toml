@@ -25,6 +25,7 @@ features = [
     "Win32_System_LibraryLoader",
     "Win32_System_Memory",
     "Win32_System_Ole",
+    "Win32_System_Recovery",
     "Win32_System_Registry",
     "Win32_Storage_Packaging_Appx",
     "Win32_System_Threading",
@@ -36,7 +37,23 @@ features = [
 ]
 
 # Only the Microsoft Store (MSIX) build uses this: "Start with Windows" there
-# is a StartupTask, which only the WinRT API can switch.
+# is a StartupTask, and "Check for updates" asks the Store; only the WinRT API
+# does either.
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.62.2"
-features = ["ApplicationModel", "Foundation"]
+features = [
+    "ApplicationModel",
+    "Foundation",
+    "Foundation_Collections",
+    "Services_Store",
+    "Win32_Foundation",
+    "Win32_UI_Shell",
+]
+
+# The Store's list of updates and its download's progress handler; `windows`
+# uses these crates but does not re-export them.
+[target.'cfg(windows)'.dependencies.windows-collections]
+version = "0.3.2"
+
+[target.'cfg(windows)'.dependencies.windows-future]
+version = "0.3.2"

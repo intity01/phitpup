@@ -8,6 +8,8 @@ version = "0.4.3"
 dependencies = [
  "phitpup-core",
  "windows",
+ "windows-collections",
+ "windows-future",
  "windows-sys",
 ]
 

@@ -1937,10 +1937,11 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
 fn updates(state: update::State) -> (String, String, bool) {
     use update::State;
     let mb = |bytes: u64| format!("{:.1} MB", bytes as f64 / 1_048_576.0);
+    let store = crate::store::packaged();
     match state {
-        _ if crate::store::packaged() => (
+        State::Idle if store => (
             t("The Microsoft Store keeps PhitPup up to date.").into(),
-            t("Open the Store").into(),
+            t("Check for updates").into(),
             false,
         ),
         State::Idle if update::helper().is_none() => (
@@ -1963,6 +1964,12 @@ fn updates(state: update::State) -> (String, String, bool) {
             t("Check again").into(),
             false,
         ),
+        // The Store does not say how big an update is until it downloads.
+        State::Available(v, 0) => (
+            t("Version {v} is out.").replace("{v}", &v),
+            t("Install {v}").replace("{v}", &v),
+            true,
+        ),
         State::Available(v, size) => (
             t("Version {v} is out ({size}).")
                 .replace("{v}", &v)
@@ -1978,6 +1985,11 @@ fn updates(state: update::State) -> (String, String, bool) {
                 false,
             )
         }
+        State::Installing if store => (
+            t("Installing. If PhitPup closes, open it again from Start.").into(),
+            t("Installing\u{2026}").into(),
+            false,
+        ),
         State::Installing => (
             t("Installing. PhitPup will start again by itself.").into(),
             t("Installing\u{2026}").into(),
@@ -2351,8 +2363,9 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
         Hit::Startup => settings::set_start_with_windows(!settings::starts_with_windows()),
         Hit::Fullscreen => edit(|c| c.off_in_fullscreen = !c.off_in_fullscreen),
         Hit::OpenFile => settings::open_file(),
-        // phitpup-update.exe does the checking: PhitPup has no networking code.
-        Hit::Updates => update::click(),
+        // phitpup-update.exe or the Microsoft Store does the checking:
+        // PhitPup has no networking code.
+        Hit::Updates => update::click(hwnd),
         Hit::Report => crate::report::copy_and_open(hwnd),
         Hit::Remind => edit(|c| c.remind_updates = !c.remind_updates),
         Hit::AddProgram => add_program(hwnd),

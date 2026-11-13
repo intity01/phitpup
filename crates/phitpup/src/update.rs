@@ -2,6 +2,7 @@
 //! it runs `phitpup-update.exe`, which the installer puts next to it, and
 //! shows the lines that prints (`phitpup_core::update::Line`). Without the
 //! helper (the single-file download) the button opens the download page.
+//! The Store build asks the Microsoft Store instead (`crate::store`).
 
 use std::io::{BufRead, BufReader};
 use std::os::windows::process::CommandExt;
@@ -10,6 +11,7 @@ use std::process::{Command, Stdio};
 use std::sync::Mutex;
 
 use phitpup_core::update::Line;
+use windows_sys::Win32::Foundation::HWND;
 
 use crate::{settings, tray};
 
@@ -47,11 +49,10 @@ pub fn helper() -> Option<PathBuf> {
     Some(exe.with_file_name("phitpup-update.exe")).filter(|p| p.is_file())
 }
 
-/// The button was clicked.
-pub fn click() {
+/// The button was clicked in the settings window `hwnd`.
+pub fn click(hwnd: HWND) {
     if crate::store::packaged() {
-        settings::open(crate::store::STORE_UPDATES);
-        return;
+        return store_click(hwnd as isize);
     }
     let Some(helper) = helper() else {
         settings::open(settings::RELEASES);
@@ -69,6 +70,56 @@ pub fn click() {
         State::Checking | State::Downloading(..) | State::Installing => {}
     }
 }
+
+/// The Store build: the Store's own update service checks and installs.
+/// The calls start here, on the settings window's thread as the Store
+/// requires, and finish on threads of their own.
+fn store_click(hwnd: isize) {
+    use crate::store::{Installed, check_update, install_update};
+    match state() {
+        State::Idle | State::Current | State::Failed(_) => {
+            set(State::Checking);
+            check_update(hwnd, |found| {
+                set(match found {
+                    Some(Some(version)) => State::Available(version, 0),
+                    Some(None) => State::Current,
+                    None => State::Failed(STORE_UNREACHABLE.into()),
+                })
+            });
+        }
+        State::Available(version, _) => {
+            set(State::Downloading(0, 0));
+            install_update(
+                |done, total, installing| {
+                    set(if installing {
+                        State::Installing
+                    } else {
+                        State::Downloading(done, total)
+                    })
+                },
+                move |end| {
+                    set(match end {
+                        Installed::Done => State::Current,
+                        Installed::Declined => State::Available(version, 0),
+                        Installed::Waiting => State::Failed(STORE_WAITING.into()),
+                        Installed::Failed => {
+                            // The Store app itself may still manage it.
+                            settings::open(crate::store::STORE_UPDATES);
+                            State::Failed(STORE_FAILED.into())
+                        }
+                    })
+                },
+            );
+        }
+        State::Checking | State::Downloading(..) | State::Installing => {}
+    }
+}
+
+const STORE_UNREACHABLE: &str =
+    "Could not reach the Microsoft Store. Check your internet connection.";
+const STORE_WAITING: &str = "The Store will install it once your PC is plugged in or on Wi-Fi.";
+const STORE_FAILED: &str =
+    "The Microsoft Store could not install it, so its Downloads page is open.";
 
 /// Starts the helper and follows its output on a thread of its own.
 fn run(helper: PathBuf, args: Vec<String>, busy: State) {
