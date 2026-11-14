@@ -49,12 +49,12 @@ fn cases() -> Vec<(&'static str, &'static str, Vec<&'static str>, usize)> {
     let words = |s: &'static str| s.split(' ').collect::<Vec<_>>();
     let doubles = DOUBLES.split('|').collect::<Vec<_>>();
     vec![
-        ("Kedmanee", "Thai chat", words(THAI_CHAT), 1),
-        ("Kedmanee", "English tech", words(EN_WORDS), 3),
+        ("Kedmanee", "Thai chat", words(THAI_CHAT), 0),
+        ("Kedmanee", "English tech", words(EN_WORDS), 1),
         ("Kedmanee", "capitals", words(CAPS), 2),
         ("Kedmanee", "doubles", doubles.clone(), 1),
         ("Pattachote", "Thai chat", words(THAI_CHAT), 1),
-        ("Pattachote", "English tech", words(EN_WORDS), 10),
+        ("Pattachote", "English tech", words(EN_WORDS), 8),
         ("Pattachote", "capitals", words(CAPS), 2),
         ("Pattachote", "doubles", doubles, 1),
     ]
@@ -114,4 +114,98 @@ fn auto_mode_leaves_them_alone() {
         gone.is_empty(),
         "no longer fixed, remove from KNOWN_AUTO: {gone:?}"
     );
+}
+
+/// Short words typed every day, in chat and at work.
+const EN_EVERYDAY: &str = "lol lmao omg btw idk tbh imo fyi asap brb afk nvm thx pls plz okay yep nope sup bro dude haha cool nice cya noob meme emoji cpu gpu ram ssd usb hdmi wifi vpn dns http https html css php sql api sdk ide cli gui ios json yaml xml csv pdf png jpg gif svg zip exe msi dll url git npm repo admin login email inbox online app apps faq todo fps ping lag got fix zoom gmail cloud";
+
+/// How many of `words`, typed in the other layout, auto mode fixes back.
+fn fixed_back(d: &Detector, words: &[&str], to: phitpup_core::Direction) -> (usize, Vec<String>) {
+    use phitpup_core::Direction;
+    let back = match to {
+        Direction::ToThai => Direction::ToEnglish,
+        Direction::ToEnglish => Direction::ToThai,
+    };
+    let (mut n, mut missed) = (0, Vec::new());
+    for w in words {
+        let typed = d.convert(w, back);
+        let mut f = Fixer::new();
+        (f.typos, f.spelling) = (true, true);
+        f.typed(&typed);
+        match f.auto(d, " ", |_| false, &[]) {
+            Some(e) if e.insert.trim_end() == *w => n += 1,
+            _ => missed.push(format!("{w} ({typed})")),
+        }
+    }
+    (n, missed)
+}
+
+/// Everyday words typed in the wrong layout are fixed in auto mode. The
+/// floors may only go up: when a change raises a count, raise it here too.
+#[test]
+fn everyday_words_in_the_wrong_layout_are_fixed() {
+    use phitpup_core::Direction;
+    let words = |s: &'static str| {
+        s.split(' ')
+            .filter(|w| w.chars().count() >= 3)
+            .collect::<Vec<_>>()
+    };
+    let mut under = Vec::new();
+    for (layout, list, items, to, floor) in [
+        (
+            "Kedmanee",
+            "Thai chat",
+            words(THAI_CHAT),
+            Direction::ToThai,
+            118,
+        ),
+        (
+            "Kedmanee",
+            "English tech",
+            words(EN_WORDS),
+            Direction::ToEnglish,
+            143,
+        ),
+        (
+            "Kedmanee",
+            "English everyday",
+            words(EN_EVERYDAY),
+            Direction::ToEnglish,
+            79,
+        ),
+        (
+            "Pattachote",
+            "Thai chat",
+            words(THAI_CHAT),
+            Direction::ToThai,
+            114,
+        ),
+        (
+            "Pattachote",
+            "English tech",
+            words(EN_WORDS),
+            Direction::ToEnglish,
+            144,
+        ),
+        (
+            "Pattachote",
+            "English everyday",
+            words(EN_EVERYDAY),
+            Direction::ToEnglish,
+            82,
+        ),
+    ] {
+        let (n, missed) = fixed_back(&detector(layout), &items, to);
+        println!(
+            "{layout} {list}: {n} of {} fixed; missed {}",
+            items.len(),
+            missed.join(" ")
+        );
+        if n < floor {
+            under.push(format!("{layout} {list}: {n} fixed, floor {floor}"));
+        } else if n > floor {
+            println!("  {n} > floor {floor}; raise it");
+        }
+    }
+    assert!(under.is_empty(), "\n{}", under.join("\n"));
 }

@@ -213,11 +213,14 @@ fn abbreviations_stay_english() {
     use phitpup_core::Converter;
     use phitpup_core::detect::ABBREVIATIONS;
     assert!(ABBREVIATIONS.is_sorted(), "kept sorted for the lookup");
-    let thai: std::collections::HashSet<&str> = Model::embedded()
+    // The 10,000 most common Thai words: rarer ones (กอก for dvd) give way.
+    let mut lexicon: Vec<(&str, u16)> = Model::embedded()
         .lang(phitpup_core::model::Lang::Thai)
         .lexicon()
-        .map(|(w, _)| w)
         .collect();
+    lexicon.sort_by_key(|&(w, cost)| (cost, w));
+    let thai: std::collections::HashSet<&str> =
+        lexicon.iter().take(10_000).map(|&(w, _)| w).collect();
     for layout in [Layout::kedmanee(), Layout::pattachote()] {
         let d = Detector::new(&Layout::us_qwerty(), &layout);
         let to_th = Converter::new(&Layout::us_qwerty(), &layout);

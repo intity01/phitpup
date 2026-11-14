@@ -12,7 +12,7 @@ use crate::corpus::{self, Word};
 const MIN_TRIGRAM_THAI: f64 = 2.0;
 const MIN_TRIGRAM_ENGLISH: f64 = 2.0;
 /// Most frequent Thai words kept as a lexicon in the shipped model.
-pub const THAI_LEXICON: usize = 10_000;
+pub const THAI_LEXICON: usize = 20_000;
 
 /// Trigrams come from the train split only unless `include_test`. The lexicon
 /// always comes from the whole corpus: it stands for "words the user will
@@ -44,7 +44,19 @@ pub fn build(dir: &Path, include_test: bool, thai_lexicon: usize) -> Model {
             en.add(&w.text, 1.0);
         }
     }
-    Model::new(th, en.finish(MIN_TRIGRAM_ENGLISH))
+    let mut en = en.finish(MIN_TRIGRAM_ENGLISH);
+    // Words typed every day that the trigrams alone take for odd English
+    // (cpu, pdf, idk): as common as the dictionary's most common words.
+    let p = (-ENGLISH_LEXICON_BITS).exp2();
+    let mut lexicon: std::collections::HashMap<String, f64> = scowl(dir, ENGLISH_LEXICON_LEVELS)
+        .into_iter()
+        .map(|(w, bits)| (w, (-bits).exp2()))
+        .collect();
+    for w in ENGLISH_COMMON {
+        lexicon.insert((*w).to_owned(), p);
+    }
+    en.set_lexicon(lexicon);
+    Model::new(th, en)
 }
 
 /// SCOWL size levels kept for English slips, and what a word at each level
@@ -172,6 +184,249 @@ const ENGLISH_EXTRA: &[&str] = &[
     "rn",
 ];
 
+/// Words typed every day in chat and at work that dictionaries leave out or
+/// rank as rare: taken as common English, so that typed on the Thai layout
+/// they are fixed, not only left alone when typed right.
+const ENGLISH_COMMON: &[&str] = &[
+    // Chat.
+    "lol",
+    "lmao",
+    "rofl",
+    "omg",
+    "btw",
+    "idk",
+    "tbh",
+    "imo",
+    "fyi",
+    "asap",
+    "brb",
+    "afk",
+    "nvm",
+    "thx",
+    "pls",
+    "plz",
+    "ok",
+    "okay",
+    "yep",
+    "yup",
+    "nope",
+    "sup",
+    "bro",
+    "dude",
+    "haha",
+    "hahaha",
+    "xd",
+    "wtf",
+    "dm",
+    "dms",
+    "ngl",
+    "irl",
+    "lmk",
+    "ikr",
+    "tmr",
+    "cya",
+    "noob",
+    "meme",
+    "memes",
+    "emoji",
+    "emojis",
+    "selfie",
+    "vlog",
+    "podcast",
+    "hashtag",
+    // Work and computers.
+    "cpu",
+    "gpu",
+    "ram",
+    "ssd",
+    "hdd",
+    "usb",
+    "hdmi",
+    "wifi",
+    "vpn",
+    "dns",
+    "ip",
+    "lan",
+    "http",
+    "https",
+    "html",
+    "css",
+    "js",
+    "ts",
+    "jsx",
+    "tsx",
+    "php",
+    "sql",
+    "api",
+    "apis",
+    "sdk",
+    "ide",
+    "cli",
+    "gui",
+    "os",
+    "ios",
+    "json",
+    "yaml",
+    "toml",
+    "xml",
+    "csv",
+    "pdf",
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "svg",
+    "mp3",
+    "mp4",
+    "zip",
+    "exe",
+    "msi",
+    "dll",
+    "url",
+    "urls",
+    "git",
+    "github",
+    "gitlab",
+    "npm",
+    "repo",
+    "repos",
+    "config",
+    "async",
+    "await",
+    "admin",
+    "login",
+    "logout",
+    "signup",
+    "username",
+    "email",
+    "emails",
+    "inbox",
+    "online",
+    "offline",
+    "website",
+    "app",
+    "apps",
+    "ui",
+    "ux",
+    "faq",
+    "todo",
+    "fps",
+    "ping",
+    "lag",
+    "localhost",
+    "backend",
+    "frontend",
+    "devops",
+    "deploy",
+    "debug",
+    "docker",
+    "linux",
+    "ubuntu",
+    "python",
+    "javascript",
+    "typescript",
+    "kotlin",
+    "rust",
+    "golang",
+    // Names typed in lowercase all the time.
+    "google",
+    "gmail",
+    "youtube",
+    "facebook",
+    "instagram",
+    "tiktok",
+    "twitter",
+    "reddit",
+    "discord",
+    "zoom",
+    "canva",
+    "figma",
+    "notion",
+    "netflix",
+    "spotify",
+    "shopee",
+    "lazada",
+    "grab",
+    "line",
+    "chatgpt",
+    "openai",
+    "claude",
+    "gemini",
+    "copilot",
+    "chrome",
+    "brave",
+    "firefox",
+    "iphone",
+    "ipad",
+    "samsung",
+    "windows",
+    "excel",
+    "powerpoint",
+    "outlook",
+    // Brands and tools.
+    "xiaomi",
+    "oppo",
+    "vivo",
+    "huawei",
+    "lenovo",
+    "nvidia",
+    "amd",
+    "uber",
+    "roblox",
+    "dota",
+    "csgo",
+    "rov",
+    "miro",
+    "nginx",
+    "ruby",
+    "zsh",
+    "dev",
+    "pnpm",
+    "regex",
+    "vue",
+    "svelte",
+    "nextjs",
+    "nuxt",
+    "chatbot",
+    "faq",
+    "gif",
+];
+
+/// SCOWL levels whose words go into the detector's English lexicon, with
+/// their cost in bits for the whole word.
+const ENGLISH_LEXICON_LEVELS: &[(u32, f64)] = &[(10, 11.0), (20, 13.0)];
+
+/// Plain lowercase words of the given SCOWL levels, each with its level's
+/// bits (the lowest level a word is in wins).
+fn scowl(corpus: &Path, levels: &[(u32, f64)]) -> Vec<(String, f64)> {
+    let dir = corpus.join("scowl/final");
+    let mut words: std::collections::HashMap<String, f64> = Default::default();
+    for &(level, bits) in levels {
+        for list in ["english-words", "american-words"] {
+            let path = dir.join(format!("{list}.{level}"));
+            let bytes = std::fs::read(&path).unwrap_or_else(|e| {
+                panic!("{}: {e} (unpack SCOWL into corpus/scowl)", path.display())
+            });
+            let text: String = bytes.iter().map(|&b| char::from(b)).collect();
+            for w in text.lines() {
+                if w.len() >= 2 && w.bytes().all(|b| b.is_ascii_lowercase()) {
+                    let e = words.entry(w.to_owned()).or_insert(f64::MAX);
+                    *e = e.min(bits);
+                }
+            }
+        }
+    }
+    words.into_iter().collect()
+}
+
+/// What one of [`ENGLISH_COMMON`] costs in the detector's English model,
+/// in bits for the whole word.
+const ENGLISH_LEXICON_BITS: f64 = 10.0;
+
+/// The cost in bits given to [`ENGLISH_COMMON`]: as the dictionary's
+/// everyday words (level 20).
+const COMMON_BITS: f64 = 12.5;
+
 /// Writes `en-words.bin` from SCOWL, unpacked into `corpus/scowl/` (from
 /// <http://wordlist.aspell.net/>; only its `final/` lists are read).
 /// Within a level, a word spelt the usual way (by the English trigrams)
@@ -211,6 +466,12 @@ pub fn english_words(root: &Path) {
         .filter(|w| w.bytes().all(|b| b.is_ascii_lowercase()));
     for w in ENGLISH_EXTRA.iter().chain(abbreviations) {
         words.entry((*w).to_owned()).or_insert(rare);
+    }
+    for w in ENGLISH_COMMON {
+        let symbols = (w.len() + 1) as f64;
+        let cost = COMMON_BITS + 0.2 * f64::from(model.cost(w)) * symbols;
+        let e = words.entry((*w).to_owned()).or_insert(f64::MAX);
+        *e = e.min(cost);
     }
     let mut words: Vec<(String, u16)> = words
         .into_iter()
