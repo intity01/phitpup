@@ -43,6 +43,8 @@ mod clipboard;
 #[cfg(windows)]
 mod context;
 #[cfg(windows)]
+mod crash;
+#[cfg(windows)]
 mod edit;
 #[cfg(windows)]
 mod fonts;
@@ -59,7 +61,11 @@ mod report;
 #[cfg(windows)]
 mod settings;
 #[cfg(windows)]
+mod stamp;
+#[cfg(windows)]
 mod store;
+#[cfg(windows)]
+mod switch_key;
 #[cfg(windows)]
 mod tray;
 #[cfg(windows)]
@@ -201,7 +207,11 @@ mod app {
         }
         // SAFETY: plain process setting; the bubble then sizes itself per monitor.
         unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
-        let welcome = !settings::path().exists();
+        // The first run, or the one Setup starts when it finishes (when an
+        // update restarts PhitPup quietly, it does not pass this): open the
+        // window on how PhitPup is used, so it does not just vanish into
+        // the notification area.
+        let welcome = !settings::path().exists() || std::env::args().any(|a| a == "--welcome");
         let (config, problems) = settings::load();
         let (english, thai) = layout::find_pair()?;
         let detector = Detector::new(&english.layout, &thai.layout);
@@ -243,6 +253,7 @@ mod app {
             accepted: Mutex::new(None),
         };
         APP.set(app).map_err(|_| "already running")?;
+        crate::switch_key::refresh();
         hook::install()?;
         context::watch_focus();
         // SAFETY: plain query.
@@ -287,6 +298,7 @@ mod app {
         };
         bubble::create();
         crate::underline::create();
+        crate::stamp::create();
         // SAFETY: plain query.
         let _ = tx.send(unsafe { GetCurrentThreadId() });
 
@@ -301,7 +313,7 @@ mod app {
                     }
                     WM_FIX => fix(owner, msg.wParam == 1),
                     WM_BUBBLE => bubble::schedule(),
-                    WM_ACCEPT => accept(),
+                    WM_ACCEPT => accept(msg.wParam == 1),
                     WM_SAVE => settings::save(&APP.get().unwrap().config.lock().unwrap().clone()),
                     WM_PROBE => probe(),
                     _ => {}
@@ -330,6 +342,7 @@ mod app {
                 );
                 inject::replace(e.delete, &e.insert);
                 switch_to(e.switch_to);
+                settings::count_fix();
             }
             None => {
                 debug!("hotkey: nothing typed since the caret moved; trying the selection");
@@ -433,10 +446,12 @@ mod app {
             Direction::ToThai => Lang::Thai,
             Direction::ToEnglish => Lang::English,
         });
+        settings::count_fix();
         true
     }
 
-    fn accept() {
+    /// Types the fix taken; `on_its_own` when nobody pressed a key for it.
+    fn accept(on_its_own: bool) {
         bubble::hide();
         let app = APP.get().unwrap();
         if let Some(e) = app.accepted.lock().unwrap().take() {
@@ -448,6 +463,10 @@ mod app {
             );
             inject::replace(e.delete, &e.insert);
             switch_to(e.switch_to);
+            settings::count_fix();
+            if on_its_own {
+                crate::stamp::fixed(e.switch_to);
+            }
         }
     }
 
@@ -458,6 +477,7 @@ mod app {
             Lang::English => app.english,
         };
         if layout::lang_of(layout::foreground()) != Some(lang) {
+            crate::stamp::own_switch();
             layout::activate(hkl);
         }
     }
@@ -491,6 +511,7 @@ mod app {
             converted.chars().count()
         );
         inject::replace(0, &converted);
+        settings::count_fix();
         // Only respelled: the text kept its language, so does the keyboard.
         if let Some(direction) = direction {
             switch_to(match direction {

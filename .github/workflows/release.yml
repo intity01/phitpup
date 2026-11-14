@@ -31,6 +31,8 @@ jobs:
           $hash = (Get-FileHash dist/phitpup.exe -Algorithm SHA256).Hash.ToLower()
           "$hash  phitpup.exe" | Out-File dist/phitpup.exe.sha256 -Encoding ascii -NoNewline
           "SHA256 $hash"
+          # The debug symbols of exactly these exes, for reading crash dumps.
+          Compress-Archive -Path target/release/phitpup.pdb, target/release/phitpup_update.pdb -DestinationPath dist/phitpup-symbols.zip
       - name: Installer
         shell: pwsh
         run: |
@@ -82,8 +84,9 @@ jobs:
 
           Windows may say "Windows protected your PC": click **More info**, then **Run anyway**.
           This build was made by GitHub Actions from the source at this tag.
+          phitpup-symbols.zip holds its debug symbols, for reading crash reports; PhitPup does not need it.
           "@
-          gh release create $tag dist/PhitPup-Setup.exe dist/PhitPup-Setup.exe.sha256 dist/phitpup.exe dist/phitpup.exe.sha256 --title "PhitPup $($tag.TrimStart('v'))" --notes $notes
+          gh release create $tag dist/PhitPup-Setup.exe dist/PhitPup-Setup.exe.sha256 dist/phitpup.exe dist/phitpup.exe.sha256 dist/phitpup-symbols.zip --title "PhitPup $($tag.TrimStart('v'))" --notes $notes
       - name: Update the website
         env:
           GH_TOKEN: ${{ github.token }}

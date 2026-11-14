@@ -87,6 +87,8 @@ fn thai_for(en: &str) -> Option<&'static str> {
         "Try it in Notepad" => "ลองใน Notepad",
         "Type l;ylfu there and see." => "ลองพิมพ์ l;ylfu ดู",
         "General" => "ทั่วไป",
+        // The pill beside the caret after a word was fixed on its own.
+        "Fixed" => "แก้แล้ว",
         "Programs" => "โปรแกรม",
         "Words" => "คำ",
         "Shortcuts" => "ปุ่มลัด",
@@ -108,8 +110,8 @@ fn thai_for(en: &str) -> Option<&'static str> {
             "ป้ายเล็ก ๆ บอกคำที่ถูก กด {key} เพื่อใช้ หรือ Esc เพื่อซ่อน"
         }
         "Fix automatically when I press Space" => "แก้ให้เองเมื่อกด Space",
-        "Only words it is very sure about. {key} right after undoes it." => {
-            "เฉพาะคำที่มั่นใจมาก กด {key} ทันทีเพื่อคืนคำเดิม"
+        "Only words it is very sure about. A note shows each fix; {key} right after undoes it." => {
+            "เฉพาะคำที่มั่นใจมาก มีป้ายบอกทุกครั้งที่แก้ กด {key} ทันทีเพื่อคืนคำเดิม"
         }
         "Only when I press {key}" => "เฉพาะตอนกด {key}",
         "Fixes the last word; press again to reach further back." => {
@@ -134,7 +136,6 @@ fn thai_for(en: &str) -> Option<&'static str> {
             "ไม่บังรายการที่เด้งใต้ช่องพิมพ์ เช่น คำค้นที่แนะนำ"
         }
         "Leave it" => "ไม่ต้องแก้",
-        "Undo" => "ย้อนกลับ",
         "Fix on its own after 5 Tabs" => "แก้เองเมื่อกด Tab คำเดิมครบ 5 ครั้ง",
         "A word whose fix you take 5 times is then fixed on Space." => {
             "คำที่คุณกดแก้ครบ 5 ครั้ง จะแก้ให้เองตอนเว้นวรรค"
@@ -242,14 +243,15 @@ fn thai_for(en: &str) -> Option<&'static str> {
         "Version" => "รุ่น",
         "License" => "สัญญาอนุญาต",
         "Free, open source (GPL-3.0)" => "ใช้ฟรี โอเพนซอร์ส (GPL-3.0)",
+        "Words fixed for you" => "คำที่แก้ให้แล้ว",
         "Updates" => "อัปเดต",
         "Remind me to check" => "เตือนให้เช็กอัปเดต",
         "Once this version is two months old." => "เมื่อรุ่นนี้อายุครบสองเดือน",
-        "PhitPup works offline: it has no networking code, and the Microsoft Store does the updating. What you type is kept in memory only until you click or switch windows, and is never sent anywhere. The only thing saved is your settings file, including the words you add." => {
-            "ผิดปุ๊บทำงานในเครื่อง ไม่มีโค้ดต่ออินเทอร์เน็ตเลย การอัปเดตเป็นหน้าที่ของ Microsoft Store สิ่งที่คุณพิมพ์อยู่ในหน่วยความจำจนกว่าจะคลิกหรือสลับหน้าต่างเท่านั้น และไม่ถูกส่งไปไหน สิ่งที่บันทึกมีแค่ไฟล์ตั้งค่า (รวมคำที่คุณเพิ่ม)"
+        "PhitPup works offline: it has no networking code, and the Microsoft Store does the updating. What you type is kept in memory only until you click or switch windows, and is never sent anywhere. Saved are only your settings file, including the words you add, and small notes beside it: how many words were fixed (never which), the last version that ran, when it last crashed and whether it asked for a review." => {
+            "ผิดปุ๊บทำงานในเครื่อง ไม่มีโค้ดต่ออินเทอร์เน็ตเลย การอัปเดตเป็นหน้าที่ของ Microsoft Store สิ่งที่คุณพิมพ์อยู่ในหน่วยความจำจนกว่าจะคลิกหรือสลับหน้าต่างเท่านั้น และไม่ถูกส่งไปไหน สิ่งที่บันทึกมีแค่ไฟล์ตั้งค่า (รวมคำที่คุณเพิ่ม) กับบันทึกเล็ก ๆ ข้างกัน: จำนวนคำที่แก้ (ไม่เก็บว่าคำอะไร) รุ่นที่เปิดล่าสุด เวลาที่ปิดไปเองครั้งล่าสุด และเคยขอรีวิวแล้วหรือยัง"
         }
-        "PhitPup works offline: the part that sees your keys has no networking code. Only when you click Check for updates does the separate phitpup-update.exe ask the website for the newest version number and, if you agree, download the installer. What you type is kept in memory only until you click or switch windows, and is never sent anywhere. The only things saved are your settings file, including the words you add, and the date of the last update reminder." => {
-            "ผิดปุ๊บทำงานในเครื่อง ส่วนที่เห็นปุ่มที่คุณกดไม่มีโค้ดต่ออินเทอร์เน็ตเลย มีแค่ phitpup-update.exe ที่แยกไว้ ซึ่งต่อเน็ตเฉพาะตอนคุณกดเช็กอัปเดต เพื่อถามเลขรุ่นล่าสุด และโหลดตัวติดตั้งถ้าคุณตกลง สิ่งที่คุณพิมพ์อยู่ในหน่วยความจำจนกว่าจะคลิกหรือสลับหน้าต่างเท่านั้น และไม่ถูกส่งไปไหน สิ่งที่บันทึกมีแค่ไฟล์ตั้งค่า (รวมคำที่คุณเพิ่ม) และวันที่เตือนอัปเดตครั้งล่าสุด"
+        "PhitPup works offline: the part that sees your keys has no networking code. Only when you click Check for updates does the separate phitpup-update.exe ask the website for the newest version number and, if you agree, download the installer. What you type is kept in memory only until you click or switch windows, and is never sent anywhere. The only things saved are your settings file, including the words you add, and small notes beside it: how many words were fixed (never which), the last version that ran, when it last crashed and the date of the last update reminder." => {
+            "ผิดปุ๊บทำงานในเครื่อง ส่วนที่เห็นปุ่มที่คุณกดไม่มีโค้ดต่ออินเทอร์เน็ตเลย มีแค่ phitpup-update.exe ที่แยกไว้ ซึ่งต่อเน็ตเฉพาะตอนคุณกดเช็กอัปเดต เพื่อถามเลขรุ่นล่าสุด และโหลดตัวติดตั้งถ้าคุณตกลง สิ่งที่คุณพิมพ์อยู่ในหน่วยความจำจนกว่าจะคลิกหรือสลับหน้าต่างเท่านั้น และไม่ถูกส่งไปไหน สิ่งที่บันทึกมีแค่ไฟล์ตั้งค่า (รวมคำที่คุณเพิ่ม) กับบันทึกเล็ก ๆ ข้างกัน: จำนวนคำที่แก้ (ไม่เก็บว่าคำอะไร) รุ่นที่เปิดล่าสุด เวลาที่ปิดไปเองครั้งล่าสุด และวันที่เตือนอัปเดตครั้งล่าสุด"
         }
         "Opens the download page in your browser." => "เปิดหน้าดาวน์โหลดในเบราว์เซอร์",
         "Check for updates" => "เช็กอัปเดต",
@@ -308,6 +310,27 @@ fn thai_for(en: &str) -> Option<&'static str> {
         // Tray
         "PhitPup is running" => "ผิดปุ๊บทำงานอยู่",
         "PhitPup was updated to {v}" => "อัปเดตผิดปุ๊บเป็นรุ่น {v} แล้ว",
+        "Switch language with ~" => "สลับภาษาด้วยปุ่ม ~",
+        "Bubble on here too." => "แสดงฟองที่นี่ด้วย",
+        "No bubble. Turn it on if you also chat or write here." => {
+            "ไม่มีฟอง เปิดได้ถ้าใช้แชตหรือเขียนข้อความที่นี่ด้วย"
+        }
+        "Show the language at the cursor" => "แสดงภาษาที่เคอร์เซอร์",
+        "A small TH or EN for a moment when it changes." => "ป้าย TH หรือ EN เล็ก ๆ ครู่หนึ่งเมื่อเปลี่ยนภาษา",
+        "The key above Tab switches Thai and English." => "ปุ่มเหนือ Tab ใช้สลับภาษาไทย-อังกฤษ",
+        "Is PhitPup helping?" => "ผิดปุ๊บช่วยคุณได้ไหม",
+        "It has fixed {n} words for you so far. Click here to rate it in the Microsoft Store; a few words help others find it." => {
+            "ผิดปุ๊บแก้ให้แล้ว {n} คำ คลิกตรงนี้เพื่อให้คะแนนใน Microsoft Store รีวิวสั้น ๆ ช่วยให้คนอื่นเจอผิดปุ๊บ"
+        }
+        "Rate PhitPup" => "ให้คะแนนผิดปุ๊บ",
+        "A review in the Microsoft Store helps others find it." => {
+            "รีวิวใน Microsoft Store ช่วยให้คนอื่นเจอผิดปุ๊บ"
+        }
+        "Rate it" => "ให้คะแนน",
+        "PhitPup closed unexpectedly last time" => "ครั้งก่อนผิดปุ๊บปิดไปเองโดยไม่ตั้งใจ",
+        "Sorry about that. Click here to report it: the details are copied for you to paste, and nothing is sent by itself." => {
+            "ขออภัยด้วย คลิกตรงนี้เพื่อแจ้งปัญหา รายละเอียดจะถูกคัดลอกไว้ให้วาง ผิดปุ๊บไม่ส่งอะไรออกไปเอง"
+        }
         "Click here to see what's new." => "คลิกตรงนี้เพื่อดูว่ามีอะไรใหม่",
         "Typed in the wrong layout? Press {accept} on the suggestion, or {hotkey}.\nClick this icon for settings." => {
             "พิมพ์ผิดภาษา? กด {accept} ตอนป้ายขึ้น หรือกด {hotkey}\nคลิกไอคอนนี้เพื่อเปิดหน้าตั้งค่า"
@@ -348,7 +371,7 @@ mod tests {
             "{key} fixes the last word. Press again to reach one more word back, and once more to undo.",
             "Click on the word, or select the text, then press {key}.",
             "A bubble shows the fix. {key} accepts it, Esc hides it.",
-            "Only words it is very sure about. {key} right after undoes it.",
+            "Only words it is very sure about. A note shows each fix; {key} right after undoes it.",
             "Only when I press {key}",
             "No bubble: only {key} works here.",
             "Leave alone ({n})",
@@ -356,6 +379,7 @@ mod tests {
             "Words you convert with {key} and then keep typing after show up here.",
             "Version {v} is out ({size}).",
             "Version {v} is out.",
+            "It has fixed {n} words for you so far. Click here to rate it in the Microsoft Store; a few words help others find it.",
             "Install {v}",
             "Downloading\u{2026} {pct}%",
             "Version {v}",

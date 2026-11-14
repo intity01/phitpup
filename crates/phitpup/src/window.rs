@@ -99,6 +99,7 @@ const G_CLOSE: char = '\u{E711}';
 const G_ADD: char = '\u{E710}';
 const G_HIDE: char = '\u{ED1A}';
 const G_BLOCK: char = '\u{F140}';
+const G_STAR: char = '\u{E734}';
 
 type Rgb = [f32; 3];
 
@@ -212,9 +213,13 @@ enum Hit {
     BubbleAbove,
     Updates,
     Report,
+    /// The Store build's "Rate it".
+    Rate,
     AddProgram,
     /// Program `i` of [`programs`]: off (true) or no bubble (false).
     Kind(usize, bool),
+    /// Built-in editor `i` of [`editors`]: bubble on or off.
+    EditorBubble(usize),
     RemoveProgram(usize),
     Input,
     AddWord,
@@ -231,6 +236,9 @@ enum Hit {
     ResetKeys,
     /// Opens Notepad to try PhitPup in.
     TryIt,
+    /// Whether ~ switches between Thai and English (a Windows setting).
+    GraveSwitch,
+    ShowLanguage,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -539,6 +547,11 @@ fn hwnd() -> Option<HWND> {
     WIN.with(|w| w.try_borrow().ok()?.as_ref().map(|w| w.hwnd))
 }
 
+/// Whether the settings window is open.
+pub fn is_open() -> bool {
+    hwnd().is_some()
+}
+
 /// Redraws the window if it is open, to show settings changed elsewhere.
 pub fn refresh() {
     if let Some(hwnd) = hwnd() {
@@ -732,6 +745,32 @@ fn paused() -> bool {
 }
 
 /// The user's programs: off ones first, then the ones with no bubble.
+/// The built-in terminals and editors to offer the bubble in: those open
+/// now and those it is already on in, sorted. Looked up at most every two
+/// seconds, so a paint and the click after it see the same list.
+fn editors(c: &Config) -> Vec<String> {
+    thread_local! {
+        static OPEN: RefCell<Option<(std::time::Instant, Vec<String>)>> = const { RefCell::new(None) };
+    }
+    let open = OPEN.with_borrow_mut(|o| {
+        if o.as_ref().is_none_or(|(at, _)| at.elapsed().as_secs() >= 2) {
+            *o = Some((
+                std::time::Instant::now(),
+                crate::context::quiet_programs_open(),
+            ));
+        }
+        o.as_ref().unwrap().1.clone()
+    });
+    let mut list = open;
+    for a in &c.bubble_apps {
+        if !list.contains(a) {
+            list.push(a.clone());
+        }
+    }
+    list.sort();
+    list
+}
+
 fn programs(c: &Config) -> Vec<(String, bool)> {
     let off = c.off_apps.iter().map(|a| (a.clone(), true));
     off.chain(c.quiet_apps.iter().map(|a| (a.clone(), false)))
@@ -1199,6 +1238,20 @@ fn start(b: &mut Builder, c: &Config, y: f32) -> f32 {
         y += 12.0;
     }
 
+    // Windows 11 starts with Win+Space and Alt+Shift, and hides the key
+    // most Thai typists know; it is a Windows setting, changed only here.
+    let (cy, hovered) = b.row(
+        y,
+        68.0,
+        68.0,
+        None,
+        t("Switch language with ~"),
+        t("The key above Tab switches Thai and English."),
+        Some(Hit::GraveSwitch),
+    );
+    b.toggle(cy, crate::switch_key::grave(), hovered);
+    y += 72.0;
+
     y += 6.0;
     let label = t("Try it in Notepad");
     let r = R::new(LEFT + 8.0, y, b.width(F::Strong, label) + 44.0, 36.0);
@@ -1285,7 +1338,7 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
         (
             Mode::Auto,
             t("Fix automatically when I press Space").to_string(),
-            t("Only words it is very sure about. {key} right after undoes it.")
+            t("Only words it is very sure about. A note shows each fix; {key} right after undoes it.")
                 .replace("{key}", &c.hotkey.label()),
         ),
         (
@@ -1353,6 +1406,18 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
         Some(Hit::BubbleAbove),
     );
     b.toggle(cy, c.bubble_above, hovered);
+    y += 72.0;
+
+    let (cy, hovered) = b.row(
+        y,
+        68.0,
+        68.0,
+        Some(G_KEYBOARD),
+        t("Show the language at the cursor"),
+        t("A small TH or EN for a moment when it changes."),
+        Some(Hit::ShowLanguage),
+    );
+    b.toggle(cy, c.show_language, hovered);
     y += 72.0;
 
     let (cy, hovered) = b.row(
@@ -1527,6 +1592,30 @@ fn programs_page(b: &mut Builder, c: &Config, y: f32) -> f32 {
         F::Caption,
         p.sub,
     );
+    // The ones open now: some are used for chat too, where the bubble helps.
+    let list = editors(c);
+    if !list.is_empty() {
+        y += 12.0;
+    }
+    for (i, name) in list.iter().enumerate() {
+        let on = c.bubble_apps.contains(name);
+        let caption = if on {
+            t("Bubble on here too.")
+        } else {
+            t("No bubble. Turn it on if you also chat or write here.")
+        };
+        let (cy, hovered) = b.row(
+            y,
+            64.0,
+            64.0,
+            Some(G_HIDE),
+            name,
+            caption,
+            Some(Hit::EditorBubble(i)),
+        );
+        b.toggle(cy, on, hovered);
+        y += 68.0;
+    }
     y
 }
 
@@ -1865,11 +1954,13 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
     y += 16.0;
 
     let version = env!("CARGO_PKG_VERSION");
+    let fixed = group_digits(settings::words_fixed());
     let rows = [
         (G_PERSON, t("Made by"), AUTHOR),
         (G_PEOPLE, t("Team"), TEAM),
         (G_INFO, t("Version"), version),
         (G_DOC, t("License"), t("Free, open source (GPL-3.0)")),
+        (G_EDIT, t("Words fixed for you"), fixed.as_str()),
     ];
     for (glyph, title, value) in rows {
         let (cy, _) = b.row(y, 52.0, 52.0, Some(glyph), title, "", None);
@@ -1893,6 +1984,19 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
             Some(Hit::Remind),
         );
         b.toggle(cy, c.remind_updates, hovered);
+        y += 72.0;
+    } else {
+        let (cy, _) = b.row(
+            y,
+            68.0,
+            68.0,
+            Some(G_STAR),
+            t("Rate PhitPup"),
+            t("A review in the Microsoft Store helps others find it."),
+            None,
+        );
+        let r = R::new(RIGHT - 20.0 - 170.0, cy - 16.0, 170.0, 32.0);
+        b.button(r, t("Rate it"), None, false, Hit::Rate);
         y += 72.0;
     }
 
@@ -1922,14 +2026,27 @@ fn about(b: &mut Builder, c: &Config, y: f32) -> f32 {
         y,
         WIDTH - 24.0,
         if crate::store::packaged() {
-            t("PhitPup works offline: it has no networking code, and the Microsoft Store does the updating. What you type is kept in memory only until you click or switch windows, and is never sent anywhere. The only thing saved is your settings file, including the words you add.")
+            t("PhitPup works offline: it has no networking code, and the Microsoft Store does the updating. What you type is kept in memory only until you click or switch windows, and is never sent anywhere. Saved are only your settings file, including the words you add, and small notes beside it: how many words were fixed (never which), the last version that ran, when it last crashed and whether it asked for a review.")
         } else {
-            t("PhitPup works offline: the part that sees your keys has no networking code. Only when you click Check for updates does the separate phitpup-update.exe ask the website for the newest version number and, if you agree, download the installer. What you type is kept in memory only until you click or switch windows, and is never sent anywhere. The only things saved are your settings file, including the words you add, and the date of the last update reminder.")
+            t("PhitPup works offline: the part that sees your keys has no networking code. Only when you click Check for updates does the separate phitpup-update.exe ask the website for the newest version number and, if you agree, download the installer. What you type is kept in memory only until you click or switch windows, and is never sent anywhere. The only things saved are your settings file, including the words you add, and small notes beside it: how many words were fixed (never which), the last version that ran, when it last crashed and the date of the last update reminder.")
         },
         F::Caption,
         p.sub,
     );
     y
+}
+
+/// 12345 as "12,345".
+pub fn group_digits(n: u64) -> String {
+    let s = n.to_string();
+    let mut out = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// The Updates row's caption, button label and whether the button is the
@@ -2359,6 +2476,7 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
         Hit::Typos => edit(|c| c.typos = !c.typos),
         Hit::Slips => edit(|c| c.slips = !c.slips),
         Hit::BubbleAbove => edit(|c| c.bubble_above = !c.bubble_above),
+        Hit::ShowLanguage => edit(|c| c.show_language = !c.show_language),
         Hit::DoubleShift => edit(|c| c.double_shift = !c.double_shift),
         Hit::Startup => settings::set_start_with_windows(!settings::starts_with_windows()),
         Hit::Fullscreen => edit(|c| c.off_in_fullscreen = !c.off_in_fullscreen),
@@ -2367,8 +2485,18 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
         // PhitPup has no networking code.
         Hit::Updates => update::click(hwnd),
         Hit::Report => crate::report::copy_and_open(hwnd),
+        Hit::Rate => settings::open(crate::store::REVIEW),
         Hit::Remind => edit(|c| c.remind_updates = !c.remind_updates),
         Hit::AddProgram => add_program(hwnd),
+        Hit::EditorBubble(i) => edit(|c| {
+            if let Some(name) = editors(c).get(i).cloned() {
+                if c.bubble_apps.contains(&name) {
+                    c.bubble_apps.retain(|a| *a != name);
+                } else {
+                    c.bubble_apps.push(name);
+                }
+            }
+        }),
         Hit::Kind(i, off) => edit(|c| {
             let mut list = programs(c);
             if let Some(item) = list.get_mut(i) {
@@ -2432,6 +2560,7 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
         }
         Hit::ResetKeys => edit(|c| (c.hotkey, c.accept_key) = (Hotkey::FIX, Hotkey::ACCEPT)),
         Hit::TryIt => settings::open("notepad.exe"),
+        Hit::GraveSwitch => crate::switch_key::set_grave(!crate::switch_key::grave()),
     }
     invalidate(hwnd);
 }
@@ -2881,6 +3010,14 @@ unsafe extern "system" fn window_proc(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn groups_digits() {
+        assert_eq!(super::group_digits(0), "0");
+        assert_eq!(super::group_digits(999), "999");
+        assert_eq!(super::group_digits(1000), "1,000");
+        assert_eq!(super::group_digits(1234567), "1,234,567");
+    }
+
     use super::*;
 
     /// A window that is never shown, with each page's interesting state.
@@ -2970,6 +3107,7 @@ mod tests {
         let c = Config {
             off_apps: vec!["eldenring.exe".into()],
             quiet_apps: vec!["obsidian.exe".into()],
+            bubble_apps: vec!["antigravity.exe".into()],
             ignore_words: ["gdp", "mvp", "lcd", "แหก", "rust", "phitpup"]
                 .map(String::from)
                 .to_vec(),

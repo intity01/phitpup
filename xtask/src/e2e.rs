@@ -16,6 +16,9 @@
 //! The keyboard and mouse must be left alone while it runs (about a minute),
 //! and the screen must not be locked. Your clipboard text is put back.
 
+mod soak;
+pub use soak::run as soak;
+
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -214,7 +217,10 @@ impl Run {
             Target::Notepad => {
                 let child = Command::new("notepad.exe").arg(file).spawn();
                 self.launched = Some(child.map_err(|e| format!("Notepad: {e}"))?);
-                "e2e.txt".to_string()
+                // Notepad's title starts with the file's name.
+                file.file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .ok_or("the test file has no name")?
             }
             Target::Edge => {
                 let page = self.dir.join("e2e.html");

@@ -6,7 +6,7 @@
 //!   fields, password managers, remote desktop, full-screen windows, and
 //!   `off_apps` from the settings.
 //! - **Quiet** (Shift+Backspace works, no bubble): terminals and code
-//!   editors, and `quiet_apps`.
+//!   editors, and `quiet_apps`; but not the ones in `bubble_apps`.
 //!
 //! Password fields drawn by the app itself (browsers, Electron) are found
 //! with UI Automation on a thread of their own, woken by focus changes, so
@@ -15,7 +15,7 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use windows_sys::Win32::Foundation::{CloseHandle, HWND, RECT};
+use windows_sys::Win32::Foundation::{CloseHandle, HWND, LPARAM, RECT};
 use windows_sys::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
 };
@@ -24,9 +24,9 @@ use windows_sys::Win32::System::Threading::{
 };
 use windows_sys::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    DispatchMessageW, EVENT_OBJECT_FOCUS, EVENT_SYSTEM_FOREGROUND, GetClassNameW, GetMessageW,
-    GetWindowRect, GetWindowThreadProcessId, IsZoomed, MSG, WINEVENT_OUTOFCONTEXT,
-    WINEVENT_SKIPOWNPROCESS,
+    DispatchMessageW, EVENT_OBJECT_FOCUS, EVENT_SYSTEM_FOREGROUND, EnumWindows, GetClassNameW,
+    GetMessageW, GetWindowRect, GetWindowThreadProcessId, IsWindowVisible, IsZoomed, MSG,
+    WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
 };
 
 use crate::{App, layout, uia};
@@ -162,14 +162,36 @@ fn judge(app: &App, exe: &str, class: &str) -> Gate {
     let named = |a: &str| a == exe || exe.strip_suffix(".exe") == Some(a);
     if OFF_APPS.iter().any(|a| named(a)) || config.off_apps.iter().any(|a| named(a)) {
         Gate::Off("this program is on the off list")
-    } else if QUIET_CLASSES.contains(&class)
-        || QUIET_APPS.iter().any(|a| named(a))
-        || config.quiet_apps.iter().any(|a| named(a))
+    } else if config.quiet_apps.iter().any(|a| named(a))
+        || (QUIET_CLASSES.contains(&class) || QUIET_APPS.iter().any(|a| named(a)))
+            && !config.bubble_apps.iter().any(|a| named(a))
     {
         Gate::Quiet("terminal or code editor")
     } else {
         Gate::On
     }
+}
+
+/// The built-in terminals and code editors that have a window open now,
+/// by exe name, sorted: the Programs page offers the bubble in them.
+pub fn quiet_programs_open() -> Vec<String> {
+    unsafe extern "system" fn each(hwnd: HWND, lparam: LPARAM) -> i32 {
+        // SAFETY: lparam is the Vec below, alive for the call.
+        let found = unsafe { &mut *(lparam as *mut Vec<String>) };
+        // SAFETY: plain query.
+        if unsafe { IsWindowVisible(hwnd) } != 0 {
+            let exe = exe_of(hwnd);
+            if QUIET_APPS.contains(&exe.as_str()) && !found.contains(&exe) {
+                found.push(exe);
+            }
+        }
+        1
+    }
+    let mut found: Vec<String> = Vec::new();
+    // SAFETY: the callback only runs during the call.
+    unsafe { EnumWindows(Some(each), &mut found as *mut Vec<String> as LPARAM) };
+    found.sort();
+    found
 }
 
 fn pid_of(hwnd: HWND) -> u32 {

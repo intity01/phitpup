@@ -24,8 +24,8 @@ use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyState, ToUnicodeEx, VK_BACK, VK_CAPITAL, VK_CONTROL, VK_ESCAPE,
-    VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_PACKET, VK_RCONTROL, VK_RETURN,
-    VK_RMENU, VK_RSHIFT, VK_RWIN, VK_SHIFT, VK_SPACE,
+    VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_OEM_3, VK_PACKET, VK_RCONTROL,
+    VK_RETURN, VK_RMENU, VK_RSHIFT, VK_RWIN, VK_SHIFT, VK_SPACE,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetForegroundWindow, HC_ACTION, KBDLLHOOKSTRUCT, MSLLHOOKSTRUCT,
@@ -93,16 +93,6 @@ pub fn keep_as_typed() {
     post(app, WM_BUBBLE);
 }
 
-/// The notice's undo button was clicked: the same as the hotkey right after
-/// the fix. Runs on the worker thread.
-pub fn undo_notice() {
-    let Some(app) = APP.get() else { return };
-    debug!("undo button: undoing the fix made on its own");
-    post(app, WM_BUBBLE);
-    // SAFETY: posting to the worker thread's queue.
-    unsafe { PostThreadMessageW(app.worker, WM_FIX, 1, 0) };
-}
-
 /// Forgets what was typed and hides the bubble.
 pub fn reset(why: &str) {
     if let Some(app) = APP.get() {
@@ -163,6 +153,9 @@ fn post(app: &App, msg: u32) {
 fn set_suggestion(app: &App, s: Option<phitpup_core::Suggestion>) {
     let mut current = app.suggestion.lock().unwrap();
     if *current != s {
+        if current.is_none() && s.is_some() {
+            debug!("a fix is offered");
+        }
         *current = s;
         post(app, WM_BUBBLE);
     }
@@ -176,9 +169,6 @@ pub fn recheck(app: &App) {
 
 /// Asks the fixer whether the word being typed needs fixing.
 fn refresh(app: &App, quiet: bool) {
-    if bubble::end_notice() {
-        post(app, WM_BUBBLE);
-    }
     if quiet || app.mode() == Mode::Manual {
         return;
     }
@@ -372,13 +362,14 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
         if let Some(edit) = edit {
             if learned_fix && !auto {
                 debug!("Space: a word whose fix is always taken is fixed on its own");
-                bubble::notice(edit.insert.trim_end().to_string(), edit.switch_to);
-                post(app, WM_BUBBLE);
             } else {
                 debug!("Space: the word is fixed automatically");
             }
+            // Either way, say so with a small "Fixed · TH" by the caret
+            // (wParam 1), so nothing changes behind the person's back.
             *app.accepted.lock().unwrap() = Some(edit);
-            post(app, WM_ACCEPT);
+            // SAFETY: posting to the worker thread's queue.
+            unsafe { PostThreadMessageW(app.worker, WM_ACCEPT, 1, 0) };
             return true;
         }
         typed_past(app, offered.as_ref());
@@ -392,11 +383,15 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
             app.fixer.lock().unwrap().text().chars().count()
         );
         set_suggestion(app, None);
-        if bubble::end_notice() {
-            post(app, WM_BUBBLE);
-        }
         post(app, WM_FIX);
         return true;
+    }
+
+    // With ~ as Windows' switch key, it types nothing: it switches the
+    // language, and the word ends there.
+    if vk == VK_OEM_3 && plain && !shift && crate::switch_key::grave() {
+        reset("switched the language with ~");
+        return false;
     }
 
     match vk {

@@ -57,6 +57,12 @@ const DAY: u64 = 24 * 60 * 60;
 const REMIND_AFTER: u64 = 60 * DAY;
 /// How long to wait before showing it again.
 const REMIND_EVERY: u64 = 30 * DAY;
+/// How many words must be fixed before the Store build asks for a review,
+/// so the person has seen it work.
+const REVIEW_AFTER: u64 = 30;
+/// How long PhitPup must have been running, so the question is not one
+/// more thing at sign-in.
+const REVIEW_UPTIME: u64 = 20 * 60;
 
 const CMD_PAUSE: usize = 1;
 // The three modes need consecutive ids for CheckMenuRadioItem.
@@ -133,6 +139,23 @@ pub fn start(main_thread: u32, welcome: bool, problems: Vec<String>) {
                 t("Click here to see what's new."),
             );
             BALLOON_LINK.set(Some(format!("{}#v{version}", settings::CHANGES)));
+        }
+        // Offer once to report a crash of this version since the last start.
+        // A crash of an older version was before an update, which may well
+        // have fixed it, so it only counts as seen.
+        if let Some(crash) = crate::crash::unseen()
+            && !welcome
+            && crash.this_version()
+            && before.as_deref() == Some(version)
+        {
+            debug!("PhitPup crashed last time: {}", crash.describe());
+            balloon(
+                t("PhitPup closed unexpectedly last time"),
+                t(
+                    "Sorry about that. Click here to report it: the details are copied for you to paste, and nothing is sent by itself.",
+                ),
+            );
+            BALLOON_REPORT.set(true);
         }
         if welcome {
             // A balloon is easy to miss (Windows hides new icons under ^,
@@ -250,6 +273,8 @@ static ICON_ADDED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool
 thread_local! {
     /// Where a click on the balloon showing goes, if anywhere.
     static BALLOON_LINK: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+    /// Whether a click on the balloon showing reports a crash.
+    static BALLOON_REPORT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Whether the update reminder should show: this build is old enough, and
@@ -285,8 +310,49 @@ fn remind_if_due() {
     BALLOON_LINK.set(Some(settings::RELEASES.into()));
 }
 
+/// Whether to ask for a review: the Store build, which has fixed enough
+/// words, has been running a while, and has never asked. It asks once;
+/// "Rate PhitPup" on the About page stays for later.
+fn review_due(packaged: bool, fixed: u64, uptime: u64, asked: Option<u64>) -> bool {
+    packaged && fixed >= REVIEW_AFTER && uptime >= REVIEW_UPTIME && asked.is_none()
+}
+
+/// Asks for a Store review if it is due, at most once a run.
+fn ask_review_if_due() {
+    static STARTED: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let uptime = STARTED
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_secs();
+    if DONE.load(Ordering::Relaxed) {
+        return;
+    }
+    let packaged = crate::store::packaged();
+    if !packaged || settings::review_asked().is_some() {
+        DONE.store(true, Ordering::Relaxed);
+        return;
+    }
+    let fixed = settings::words_fixed();
+    if !review_due(packaged, fixed, uptime, None) || window::is_open() {
+        return;
+    }
+    DONE.store(true, Ordering::Relaxed);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    settings::set_review_asked(now);
+    balloon(
+        t("Is PhitPup helping?"),
+        &t("It has fixed {n} words for you so far. Click here to rate it in the Microsoft Store; a few words help others find it.")
+            .replace("{n}", &crate::window::group_digits(fixed)),
+    );
+    BALLOON_LINK.set(Some(crate::store::REVIEW.into()));
+}
+
 fn balloon(title: &str, text: &str) {
     BALLOON_LINK.set(None);
+    BALLOON_REPORT.set(false);
     let mut nid = notify_data();
     nid.uFlags = NIF_INFO;
     nid.dwInfoFlags = NIIF_INFO;
@@ -509,7 +575,9 @@ unsafe extern "system" fn window_proc(
             match lparam as u32 {
                 WM_LBUTTONUP => window::open(),
                 NIN_BALLOONUSERCLICK => {
-                    if let Some(link) = BALLOON_LINK.with_borrow(Clone::clone) {
+                    if BALLOON_REPORT.get() {
+                        crate::report::copy_and_open(hwnd);
+                    } else if let Some(link) = BALLOON_LINK.with_borrow(Clone::clone) {
                         settings::open(&link);
                     }
                 }
@@ -547,6 +615,8 @@ unsafe extern "system" fn window_proc(
                 update_icon(NIM_ADD);
             }
             reload_if_changed();
+            crate::switch_key::refresh();
+            ask_review_if_due();
             0
         }
         _ if msg != 0
@@ -564,6 +634,22 @@ unsafe extern "system" fn window_proc(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn review_asks_once_after_real_use() {
+        let up = REVIEW_UPTIME;
+        assert!(review_due(true, REVIEW_AFTER, up, None));
+        assert!(
+            !review_due(false, 1_000, up, None),
+            "not the installer build"
+        );
+        assert!(
+            !review_due(true, REVIEW_AFTER - 1, up, None),
+            "too few fixes"
+        );
+        assert!(!review_due(true, 1_000, up - 1, None), "just started");
+        assert!(!review_due(true, 1_000, up, Some(1)), "already asked");
+    }
 
     #[test]
     fn update_reminder_timing() {

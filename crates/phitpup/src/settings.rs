@@ -67,6 +67,69 @@ pub fn set_last_version(v: &str) {
     let _ = std::fs::write(last_version_path(), v);
 }
 
+/// How many words PhitPup has fixed, kept next to the settings. Only the
+/// number: never which words.
+fn fixed_path() -> PathBuf {
+    path().with_file_name("words-fixed")
+}
+
+static FIXED: std::sync::OnceLock<std::sync::atomic::AtomicU64> = std::sync::OnceLock::new();
+
+fn fixed_counter() -> &'static std::sync::atomic::AtomicU64 {
+    FIXED.get_or_init(|| {
+        let n = std::fs::read_to_string(fixed_path())
+            .ok()
+            .and_then(|s| s.trim().parse().ok())
+            .unwrap_or(0);
+        std::sync::atomic::AtomicU64::new(n)
+    })
+}
+
+/// How many words PhitPup has fixed so far.
+pub fn words_fixed() -> u64 {
+    fixed_counter().load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// One more word (or selection) fixed.
+pub fn count_fix() {
+    let n = fixed_counter().fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+    let _ = std::fs::write(fixed_path(), n.to_string());
+}
+
+/// When the newest crash the person was told about happened (as Windows
+/// logged it), kept next to the settings so it is offered for reporting
+/// once.
+fn last_crash_path() -> PathBuf {
+    path().with_file_name("last-crash")
+}
+
+pub fn last_crash_seen() -> Option<String> {
+    let t = std::fs::read_to_string(last_crash_path()).ok()?;
+    Some(t.trim().to_string())
+}
+
+pub fn set_last_crash_seen(time: &str) {
+    let _ = std::fs::write(last_crash_path(), time);
+}
+
+/// When the Store build last asked for a review, in Unix seconds, kept
+/// next to the settings so it asks once.
+fn review_path() -> PathBuf {
+    path().with_file_name("review-asked")
+}
+
+pub fn review_asked() -> Option<u64> {
+    std::fs::read_to_string(review_path())
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+}
+
+pub fn set_review_asked(secs: u64) {
+    let _ = std::fs::write(review_path(), secs.to_string());
+}
+
 pub fn modified() -> Option<SystemTime> {
     std::fs::metadata(path()).and_then(|m| m.modified()).ok()
 }

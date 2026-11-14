@@ -105,7 +105,7 @@ Name: "{userdesktop}\PhitPup"; Filename: "{app}\phitpup.exe"; Tasks: desktopicon
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "PhitPup"; ValueData: """{app}\phitpup.exe"""; Tasks: startup; Check: not IsUpdate
 
 [Run]
-Filename: "{app}\phitpup.exe"; Description: "{cm:Launch}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\phitpup.exe"; Parameters: "--welcome"; Description: "{cm:Launch}"; Flags: nowait postinstall skipifsilent
 Filename: "{app}\phitpup.exe"; Flags: nowait; Check: IsUpdate
 
 [Code]

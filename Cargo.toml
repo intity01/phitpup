@@ -14,3 +14,7 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+# Function names and line numbers go to phitpup.pdb, beside the exe, not into
+# it; each release attaches the PDBs (phitpup-symbols.zip) so that a crash
+# dump from any copy can be read back to a line of code.
+debug = "line-tables-only"

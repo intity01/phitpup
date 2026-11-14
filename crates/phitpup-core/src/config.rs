@@ -66,6 +66,9 @@ pub struct Config {
     pub off_apps: Vec<String>,
     /// Programs where only the bubble is off; Shift+Backspace still works.
     pub quiet_apps: Vec<String>,
+    /// Terminals and code editors (normally without the bubble) where the
+    /// bubble shows anyway, such as an editor used for chat.
+    pub bubble_apps: Vec<String>,
     /// Words (as typed) the bubble never suggests fixing, lowercased.
     pub ignore_words: Vec<String>,
     /// Words (as typed) fixed without asking: the user converted them with
@@ -107,6 +110,9 @@ pub struct Config {
     pub slips: bool,
     /// Show the bubble above the line instead of under the caret.
     pub bubble_above: bool,
+    /// A small TH or EN by the caret for a moment when the keyboard
+    /// language changes.
+    pub show_language: bool,
     /// Tapping Shift twice also fixes the last word.
     pub double_shift: bool,
     /// A tray reminder to look for a new version once this one is old.
@@ -125,6 +131,7 @@ impl Default for Config {
             off_in_fullscreen: true,
             off_apps: Vec::new(),
             quiet_apps: Vec::new(),
+            bubble_apps: Vec::new(),
             ignore_words: Vec::new(),
             learned_words: Vec::new(),
             dismissed_words: Vec::new(),
@@ -140,6 +147,7 @@ impl Default for Config {
             typos: true,
             slips: true,
             bubble_above: false,
+            show_language: true,
             double_shift: false,
             remind_updates: true,
             hotkey: Hotkey::FIX,
@@ -184,6 +192,10 @@ slips = true
 # the text (search suggestions, the address bar).
 bubble_above = false
 
+# A small TH or EN by the text cursor for a moment when the keyboard
+# language changes, so you know which one you are typing in.
+show_language = true
+
 # Turn PhitPup off in windows that cover the whole screen (games, videos).
 off_in_fullscreen = true
 
@@ -195,6 +207,10 @@ off_apps = []
 # Programs where only the bubble is off (Shift+Backspace still works).
 # Terminals and code editors are already included.
 quiet_apps = []
+
+# Terminals and code editors where the bubble shows anyway, e.g.
+# ["antigravity.exe"] for an editor you also chat in.
+bubble_apps = []
 
 # Words the bubble never offers to fix, as you type them, e.g. ["gdp"].
 # Shift+Esc on the bubble adds the word it shows.
@@ -265,6 +281,7 @@ impl Config {
                 "off_in_fullscreen" => boolean(value).map(|b| c.off_in_fullscreen = b),
                 "off_apps" => list(value).map(|a| c.off_apps = a),
                 "quiet_apps" => list(value).map(|a| c.quiet_apps = a),
+                "bubble_apps" => list(value).map(|a| c.bubble_apps = a),
                 "ignore_words" => list(value).map(|w| c.ignore_words = w),
                 "learned_words" => list(value).map(|w| c.learned_words = w),
                 "dismissed_words" => list(value).map(|w| c.dismissed_words = w),
@@ -280,6 +297,7 @@ impl Config {
                 "typos" => boolean(value).map(|b| c.typos = b),
                 "slips" => boolean(value).map(|b| c.slips = b),
                 "bubble_above" => boolean(value).map(|b| c.bubble_above = b),
+                "show_language" => boolean(value).map(|b| c.show_language = b),
                 "double_shift" => boolean(value).map(|b| c.double_shift = b),
                 "remind_updates" => boolean(value).map(|b| c.remind_updates = b),
                 "hotkey" => shortcut(value).map(|k| c.hotkey = k),
@@ -316,9 +334,11 @@ impl Config {
         t = set(&t, "typos", &self.typos.to_string());
         t = set(&t, "slips", &self.slips.to_string());
         t = set(&t, "bubble_above", &self.bubble_above.to_string());
+        t = set(&t, "show_language", &self.show_language.to_string());
         t = set(&t, "off_in_fullscreen", &self.off_in_fullscreen.to_string());
         t = set(&t, "off_apps", &array(&self.off_apps));
         t = set(&t, "quiet_apps", &array(&self.quiet_apps));
+        t = set(&t, "bubble_apps", &array(&self.bubble_apps));
         t = set(&t, "ignore_words", &array(&self.ignore_words));
         t = set(&t, "learn", &self.learn.to_string());
         t = set(&t, "learned_words", &array(&self.learned_words));
@@ -647,6 +667,7 @@ accept_key = \"shift+backspace\"",
             off_in_fullscreen: false,
             off_apps: vec!["game.exe".into()],
             quiet_apps: vec!["notes.exe".into(), "x # y.exe".into()],
+            bubble_apps: vec!["antigravity.exe".into()],
             ignore_words: vec!["gdp".into()],
             learned_words: vec!["muj".into()],
             dismissed_words: vec!["เด้อ".into(), "เด้อ".into()],
@@ -662,6 +683,7 @@ accept_key = \"shift+backspace\"",
             typos: false,
             slips: false,
             bubble_above: true,
+            show_language: false,
             double_shift: true,
             remind_updates: false,
             hotkey: Hotkey::parse("ctrl+backslash").unwrap(),

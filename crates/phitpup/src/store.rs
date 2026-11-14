@@ -30,8 +30,12 @@ use windows_sys::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUn
 /// The StartupTask's id in `msix/AppxManifest.xml`.
 const TASK: &str = "PhitPupStartup";
 
-/// The Store page; `ms-windows-store://pdp/?ProductId=` once it has an id.
+/// The Store's Downloads page, where updates can be installed by hand.
 pub const STORE_UPDATES: &str = "ms-windows-store://downloadsandupdates";
+
+/// The Store's "rate and review" box for PhitPup. Microsoft asks that
+/// every rating go there, whatever the stars.
+pub const REVIEW: &str = "ms-windows-store://review/?ProductId=9PDR0BQR0LL2";
 
 /// The package family name, if PhitPup runs from its MSIX package.
 pub fn family_name() -> Option<&'static str> {
@@ -57,6 +61,11 @@ pub fn family_name() -> Option<&'static str> {
 }
 
 pub fn packaged() -> bool {
+    // The settings preview can draw the Store build's pages.
+    #[cfg(test)]
+    if std::env::var_os("PHITPUP_PREVIEW_STORE").is_some() {
+        return true;
+    }
     family_name().is_some()
 }
 

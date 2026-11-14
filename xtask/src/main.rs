@@ -9,7 +9,8 @@
 //! `assets/icon/` for the website and README: an `.ico`, PNGs and a preview.
 //!
 //! `cargo xtask e2e` checks the built app in a real Notepad with real key
-//! presses (see `e2e.rs`).
+//! presses (see `e2e.rs`); `cargo xtask soak` leaves it running for hours
+//! under use and looks for crashes and leaks (see `e2e/soak.rs`).
 //!
 //! `cargo xtask installer-art` draws the installer's side and corner images
 //! (red pen on ruled paper, as in the app) into `target/installer-art/`, where
@@ -64,6 +65,7 @@ fn main() {
         Some("msix") => msix(&args[1..]),
         #[cfg(windows)]
         Some("e2e") => e2e::run(&root(), &args[1..]),
+        Some("soak") => e2e::soak(&root(), &args[1..]),
         Some("eval-detector") => {
             let lexicon = match args.get(1).map(String::as_str) {
                 Some("--lexicon") => args
@@ -76,7 +78,7 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: cargo xtask <gen-layouts | fetch-corpus | train-model | english-words | eval-detector | icons | installer-art | msix | e2e>"
+                "usage: cargo xtask <gen-layouts | fetch-corpus | train-model | english-words | eval-detector | icons | installer-art | msix | e2e | soak>"
             );
             std::process::exit(2);
         }

@@ -2,7 +2,8 @@
 //! copy of PhitPup to the clipboard and opens a new GitHub issue, where the
 //! person pastes it. Nothing is sent by PhitPup itself, and the text never
 //! holds anything typed: version, Windows, keyboard layouts and settings,
-//! with the word lists given only as counts.
+//! with the word lists given only as counts, and where PhitPup last crashed
+//! (from Windows' log, see `crash`).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -119,9 +120,11 @@ pub fn details() -> String {
         line(
             "Switches",
             format!(
-                "underline {}, bubble above {}, spelling {}, typos {}, slips {}, double Shift {}, learn {}, off in full screen {}, update reminder {}",
+                "underline {}, bubble above {}, language at the cursor {}, ~ switches {}, spelling {}, typos {}, slips {}, double Shift {}, learn {}, off in full screen {}, update reminder {}",
                 c.underline,
                 c.bubble_above,
+                c.show_language,
+                crate::switch_key::grave(),
                 c.spelling,
                 c.typos,
                 c.slips,
@@ -134,9 +137,10 @@ pub fn details() -> String {
         line(
             "Programs",
             format!(
-                "off: {}; no bubble: {}",
+                "off: {}; no bubble: {}; bubble in editors: {}",
                 list(&c.off_apps),
-                list(&c.quiet_apps)
+                list(&c.quiet_apps),
+                list(&c.bubble_apps)
             ),
         );
         line(
@@ -151,6 +155,10 @@ pub fn details() -> String {
     line(
         "Start with Windows",
         settings::starts_with_windows().to_string(),
+    );
+    line(
+        "Last crash (30 days)",
+        crate::crash::newest().map_or_else(|| "none".into(), |c| c.describe()),
     );
     out
 }

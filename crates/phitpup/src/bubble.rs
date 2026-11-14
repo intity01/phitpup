@@ -17,12 +17,8 @@
 //!
 //! It lives on the worker thread; the hook posts
 //! [`WM_BUBBLE`](crate::WM_BUBBLE) whenever the suggestion changes.
-//!
-//! A word fixed on its own (`learn_auto`) gets a [`notice`]: the bubble
-//! shows the fix for a moment with the hotkey and a button that undo it.
 
 use std::cell::RefCell;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::time::{Duration, Instant};
 
@@ -152,36 +148,8 @@ pub fn dark_theme() -> bool {
     r == ERROR_SUCCESS && light == 0
 }
 
-/// How long a [`notice`] stays.
-const NOTICE_FOR: Duration = Duration::from_millis(2500);
-
-/// A word just fixed on its own, its badge, and when.
-static NOTICE: Mutex<Option<(String, &'static str, Instant)>> = Mutex::new(None);
 /// The bubble window, for the mouse hook.
 static HWND_NOW: AtomicIsize = AtomicIsize::new(0);
-
-/// `word` was just fixed on its own: show it with how to undo it. Any
-/// thread; post [`WM_BUBBLE`](crate::WM_BUBBLE) after.
-pub fn notice(word: String, switch_to: Lang) {
-    let badge = match switch_to {
-        Lang::Thai => "TH",
-        Lang::English => "EN",
-    };
-    *NOTICE.lock().unwrap() = Some((word, badge, Instant::now()));
-}
-
-/// Drops the notice; true if there was one. Any thread.
-pub fn end_notice() -> bool {
-    NOTICE.lock().unwrap().take().is_some()
-}
-
-/// The notice, while it lasts, and how long it has left.
-fn noticing() -> Option<(String, &'static str, Duration)> {
-    let n = NOTICE.lock().unwrap();
-    let (word, badge, at) = n.as_ref()?;
-    let left = NOTICE_FOR.checked_sub(at.elapsed())?;
-    Some((word.clone(), badge, left))
-}
 
 /// Whether the screen point (`x`, `y`) is on the bubble. Any thread.
 pub fn under(x: i32, y: i32) -> bool {
@@ -199,8 +167,7 @@ struct Look {
     badge: &'static str,
     /// The accept key's label.
     hint: String,
-    /// The label of the button that keeps the word as typed (or, for a
-    /// notice, undoes the fix).
+    /// The label of the button that keeps the word as typed.
     keep: &'static str,
     dpi: u32,
     dark: bool,
@@ -395,6 +362,11 @@ pub fn schedule() {
     });
 }
 
+/// Whether the bubble or the underline is on screen. Worker thread.
+pub fn showing() -> bool {
+    underline::visible() || BUBBLE.with_borrow(|b| b.as_ref().is_some_and(|b| b.visible))
+}
+
 /// Fades the bubble out now (a suggestion was accepted).
 pub fn hide() {
     underline::hide();
@@ -409,18 +381,6 @@ pub fn hide() {
 
 fn settle() {
     let Some((typed, word, badge)) = current() else {
-        if let Some((word, badge, left)) = noticing() {
-            underline::hide();
-            show(word, badge, true);
-            // Hides it when the time is up.
-            BUBBLE.with_borrow(|b| {
-                if let Some(b) = b {
-                    // SAFETY: our own window.
-                    unsafe { SetTimer(b.hwnd, SETTLE, left.as_millis() as u32 + 1, None) };
-                }
-            });
-            return;
-        }
         return hide();
     };
     if underline_on() {
@@ -448,7 +408,7 @@ fn settle() {
         }
     }
     underline::hide();
-    show(word, badge, false)
+    show(word, badge)
 }
 
 fn fade_out(b: &mut Bubble) {
@@ -465,7 +425,8 @@ fn start_frames(b: &Bubble) {
     unsafe { SetTimer(b.hwnd, FRAME, FRAME_MS, None) };
 }
 
-fn monitor_of(p: POINT) -> (RECT, u32) {
+/// The work area of the monitor at `p`, and its DPI.
+pub(crate) fn monitor_of(p: POINT) -> (RECT, u32) {
     // SAFETY: plain queries into zeroed structs.
     unsafe {
         let monitor = MonitorFromPoint(p, MONITOR_DEFAULTTONEAREST);
@@ -480,8 +441,8 @@ fn monitor_of(p: POINT) -> (RECT, u32) {
     }
 }
 
-/// Shows `word`; with `undo`, as a notice of a fix already made.
-fn show(word: String, badge: &'static str, undo: bool) {
+/// Shows `word`.
+fn show(word: String, badge: &'static str) {
     let (anchor, caret_h) = caret();
     let (work, dpi) = monitor_of(anchor);
     let scale = dpi as f32 / 96.0;
@@ -489,14 +450,14 @@ fn show(word: String, badge: &'static str, undo: bool) {
         || "Tab".into(),
         |a| {
             let c = a.config.lock().unwrap();
-            if undo { c.hotkey } else { c.accept_key }.label()
+            c.accept_key.label()
         },
     );
     let look = Look {
         word,
         badge,
         hint,
-        keep: if undo { t("Undo") } else { t("Leave it") },
+        keep: t("Leave it"),
         dpi,
         dark: dark_theme(),
     };
@@ -906,6 +867,25 @@ fn render(look: &Look) -> Image {
 /// their own caret (browsers, Electron) are asked through UI Automation; if
 /// that fails too, the mouse pointer stands in for it.
 fn caret() -> (POINT, i32) {
+    caret_found().unwrap_or_else(|| {
+        debug!("bubble: by the mouse pointer; the app does not say where its caret is");
+        let mut p = POINT { x: 0, y: 0 };
+        // SAFETY: a plain query into a local.
+        unsafe { GetCursorPos(&mut p) };
+        // Clear the pointer itself.
+        (
+            POINT {
+                x: p.x,
+                y: p.y + 16,
+            },
+            16,
+        )
+    })
+}
+
+/// Bottom-left of the caret and its height, if the app says where it is.
+/// Worker thread (it may ask through UI Automation).
+pub(crate) fn caret_found() -> Option<(POINT, i32)> {
     // SAFETY: plain queries.
     unsafe {
         let fg = GetForegroundWindow();
@@ -919,27 +899,96 @@ fn caret() -> (POINT, i32) {
                 y: r.bottom,
             };
             ClientToScreen(info.hwndCaret, &mut p);
-            return (p, r.bottom - r.top);
+            return Some((p, r.bottom - r.top));
         }
-        if let Some(r) = AUTOMATION.with(|a| a.as_ref().and_then(uia::Automation::caret)) {
-            return (
+    }
+    AUTOMATION
+        .with(|a| a.as_ref().and_then(uia::Automation::caret))
+        .map(|r| {
+            (
                 POINT {
                     x: r.left,
                     y: r.bottom,
                 },
                 r.bottom - r.top,
-            );
+            )
+        })
+}
+
+/// Draws the language stamp: `text` on a pill of red pen, with a soft
+/// shadow. Returns the bitmap's size, its premultiplied pixels and where
+/// the pill sits in it.
+pub(crate) fn render_stamp(text: &str, dpi: u32, dark: bool) -> (i32, i32, Vec<u32>, RECT) {
+    let s = dpi as f32 / 96.0;
+    let px = |v: f32| (v * s).round() as i32;
+    let pal = if dark { &DARK } else { &LIGHT };
+    let label = wide(text);
+    // SAFETY: as in `render`: GDI objects are created, selected, restored
+    // and deleted here; the mask is read only after GdiFlush.
+    unsafe {
+        let dc = CreateCompatibleDC(std::ptr::null_mut());
+        fonts::load();
+        let f = font(fonts::SANS_MEDIUM, 9, FW_SEMIBOLD, dpi);
+        SelectObject(dc, f);
+        let mut ts = SIZE { cx: 0, cy: 0 };
+        GetTextExtentPoint32W(dc, label.as_ptr(), label.len() as i32, &mut ts);
+        let m = px(10.0);
+        let (pill_w, pill_h) = (ts.cx + px(14.0), ts.cy + px(6.0));
+        let (w, h) = (pill_w + 2 * m, pill_h + 2 * m);
+        let (mask_bmp, mask) = dib(dc, w, h);
+        let old = SelectObject(dc, mask_bmp);
+        SetBkMode(dc, TRANSPARENT as i32);
+        SetTextColor(dc, 0x00FF_FFFF);
+        TextOutW(
+            dc,
+            m + (pill_w - ts.cx) / 2,
+            m + (pill_h - ts.cy) / 2,
+            label.as_ptr(),
+            label.len() as i32,
+        );
+        GdiFlush();
+        let mask = std::slice::from_raw_parts(mask, (w * h) as usize).to_vec();
+        SelectObject(dc, old);
+        DeleteObject(mask_bmp);
+        DeleteObject(f);
+        DeleteDC(dc);
+
+        let pill = Box2::new(m, m, pill_w, pill_h);
+        let radius = pill_h as f32 / 2.0;
+        let (blur, drop) = (8.0 * s, 2.0 * s);
+        let shadow_box = Box2 {
+            t: pill.t + drop,
+            b: pill.b + drop,
+            ..pill
+        };
+        let mut out = vec![0u32; (w * h) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let i = (y * w + x) as usize;
+                let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+                let body = coverage(pill.distance(fx, fy, radius));
+                let t = (shadow_box.distance(fx, fy, radius) / blur).clamp(0.0, 1.0);
+                let shade = pal.shadow * (1.0 - t) * (1.0 - t);
+                if body <= 0.0 && shade <= 0.0 {
+                    continue;
+                }
+                let ink = (mask[i] & 0xFF) as f32 / 255.0;
+                let c = mix(pal.accent, pal.on_accent, ink);
+                let a = body + shade * (1.0 - body);
+                let to8 = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u32;
+                out[i] = to8(c[2] * body)
+                    | to8(c[1] * body) << 8
+                    | to8(c[0] * body) << 16
+                    | to8(a) << 24;
+            }
         }
-        let mut p = POINT { x: 0, y: 0 };
-        GetCursorPos(&mut p);
-        // Clear the pointer itself.
-        (
-            POINT {
-                x: p.x,
-                y: p.y + 16,
-            },
-            16,
-        )
+        let card = RECT {
+            left: m,
+            top: m,
+            right: m + pill_w,
+            bottom: m + pill_h,
+        };
+        (w, h, out, card)
     }
 }
 
@@ -992,11 +1041,7 @@ unsafe extern "system" fn window_proc(
             1
         }
         WM_LBUTTONUP if on_keep(hwnd) => {
-            if current().is_none() && end_notice() {
-                hook::undo_notice();
-            } else {
-                hook::keep_as_typed();
-            }
+            hook::keep_as_typed();
             0
         }
         // SAFETY: default handling for everything else.
@@ -1045,6 +1090,38 @@ mod tests {
                     let name = format!("bubble-{tone}-{name}-{dpi}{lang}.bmp");
                     write_bmp(&dir.join(name), &img, hex(bg));
                 }
+            }
+            // The language stamp.
+            for (n, (text, dpi)) in [
+                ("TH", 96),
+                ("EN", 96),
+                ("TH", 144),
+                ("แก้แล้ว · TH", 144),
+                ("Fixed · EN", 144),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let (w, h, px, card) = render_stamp(text, dpi, dark);
+                let img = Image {
+                    w,
+                    h,
+                    px,
+                    card,
+                    keep: card,
+                };
+                let tone = if dark {
+                    "dark"
+                } else if bg == 0xFFFFFF {
+                    "white"
+                } else {
+                    "light"
+                };
+                write_bmp(
+                    &dir.join(format!("stamp-{tone}-{n}-{dpi}.bmp")),
+                    &img,
+                    hex(bg),
+                );
             }
         }
     }
