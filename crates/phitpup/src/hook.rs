@@ -53,6 +53,13 @@ static LAST_GATE: std::sync::Mutex<Gate> = std::sync::Mutex::new(Gate::On);
 static PROBED: AtomicU64 = AtomicU64::new(u64::MAX);
 /// For `double_shift`.
 static SHIFT_TAPS: std::sync::Mutex<DoubleTap> = std::sync::Mutex::new(DoubleTap::new());
+/// The layout a fix partway through a word just switched to, and when. The
+/// app takes a moment to switch; the next keys are read in this layout
+/// meanwhile, as the app will read them.
+static SWITCHING: std::sync::Mutex<Option<(isize, std::time::Instant)>> =
+    std::sync::Mutex::new(None);
+/// How long [`SWITCHING`] is believed over what the app says.
+const SWITCH_GRACE: std::time::Duration = std::time::Duration::from_millis(600);
 
 /// ToUnicodeEx: leave the keyboard state (dead keys) alone. Windows 10 1607+.
 const NO_STATE_CHANGE: u32 = 0x4;
@@ -418,6 +425,8 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
             let text = translate(k.vkCode, k.scanCode, shift);
             if text.is_empty() {
                 reset("a key that moves the caret or types nothing (arrows, Enter, Tab…)");
+            } else if !quiet && auto && midword(app, &text) {
+                return true;
             } else {
                 app.fixer.lock().unwrap().typed(&text);
                 refresh(app, quiet);
@@ -425,6 +434,61 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
         }
     }
     false
+}
+
+/// Auto mode: `text` was just typed. If the word with it is surely in the
+/// wrong layout, fixes it now and switches the language for the rest of it;
+/// true means the key is swallowed (the fix types its character).
+fn midword(app: &App, text: &str) -> bool {
+    let config = app.config.lock().unwrap();
+    if !config.switch_midword {
+        return false;
+    }
+    // A word the user keeps as typed, or one that starts like it (only
+    // its start has been typed so far).
+    let skip = |w: &str| {
+        let w = w.to_lowercase();
+        config.leaves_alone(&w)
+            || config
+                .ignore_words
+                .iter()
+                .chain(&config.own_words)
+                .any(|i| i.starts_with(&w) || (i.chars().count() >= 4 && w.starts_with(i.as_str())))
+    };
+    let edit = app
+        .fixer
+        .lock()
+        .unwrap()
+        .auto_midword(&app.detector, text, skip);
+    drop(config);
+    let Some(edit) = edit else { return false };
+    debug!("partway through a word: fixed and switched the language");
+    let hkl = match edit.switch_to {
+        phitpup_core::model::Lang::Thai => app.thai,
+        phitpup_core::model::Lang::English => app.english,
+    };
+    *SWITCHING.lock().unwrap() = Some((hkl, std::time::Instant::now()));
+    set_suggestion(app, None);
+    DISMISSED.store(false, Ordering::Relaxed);
+    *app.accepted.lock().unwrap() = Some(edit);
+    // SAFETY: posting to the worker thread's queue; wParam 1 shows the
+    // small "Fixed" note, as for a fix on Space.
+    unsafe { PostThreadMessageW(app.worker, WM_ACCEPT, 1, 0) };
+    true
+}
+
+/// The layout the next key is read in: the foreground window's, or the one
+/// just switched to while the app catches up.
+fn reading_layout() -> isize {
+    let now = layout::foreground();
+    let mut s = SWITCHING.lock().unwrap();
+    match *s {
+        Some((hkl, at)) if hkl != now && at.elapsed() < SWITCH_GRACE => hkl,
+        _ => {
+            *s = None;
+            now
+        }
+    }
 }
 
 /// The user ended the word `offered` was for without taking its fix: with
@@ -459,7 +523,7 @@ fn translate(vk: u32, scan: u32, shift: bool) -> String {
             buf.as_mut_ptr(),
             8,
             NO_STATE_CHANGE,
-            layout::foreground() as _,
+            reading_layout() as _,
         )
     };
     if n <= 0 {

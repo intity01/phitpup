@@ -46,6 +46,15 @@ impl Thresholds {
         to_english: 1.5,
         min_chars: 3,
     };
+    /// For auto-fix partway through a word, switching the language for the
+    /// rest of it: stricter still, as the word is not finished. In
+    /// `cargo xtask eval-detector` no word typed right is switched on
+    /// Kedmanee at this setting.
+    pub const MIDWORD: Thresholds = Thresholds {
+        to_thai: 2.5,
+        to_english: 2.5,
+        min_chars: 4,
+    };
 }
 
 impl Default for Thresholds {

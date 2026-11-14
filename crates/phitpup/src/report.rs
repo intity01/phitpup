@@ -120,10 +120,11 @@ pub fn details() -> String {
         line(
             "Switches",
             format!(
-                "underline {}, bubble above {}, language at the cursor {}, ~ switches {}, spelling {}, typos {}, slips {}, double Shift {}, learn {}, off in full screen {}, update reminder {}",
+                "underline {}, bubble above {}, language at the cursor {}, switch while typing {}, ~ switches {}, spelling {}, typos {}, slips {}, double Shift {}, learn {}, off in full screen {}, update reminder {}",
                 c.underline,
                 c.bubble_above,
                 c.show_language,
+                c.switch_midword,
                 crate::switch_key::grave(),
                 c.spelling,
                 c.typos,

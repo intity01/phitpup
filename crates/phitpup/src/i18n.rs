@@ -316,6 +316,8 @@ fn thai_for(en: &str) -> Option<&'static str> {
             "ไม่มีฟอง เปิดได้ถ้าใช้แชตหรือเขียนข้อความที่นี่ด้วย"
         }
         "Show the language at the cursor" => "แสดงภาษาที่เคอร์เซอร์",
+        "Switch while I type" => "สลับภาษาให้ระหว่างพิมพ์",
+        "Fixes a word, and the language, before you finish it." => "แก้คำและสลับภาษาให้ ก่อนพิมพ์จบคำ",
         "A small TH or EN for a moment when it changes." => "ป้าย TH หรือ EN เล็ก ๆ ครู่หนึ่งเมื่อเปลี่ยนภาษา",
         "The key above Tab switches Thai and English." => "ปุ่มเหนือ Tab ใช้สลับภาษาไทย-อังกฤษ",
         "Is PhitPup helping?" => "ผิดปุ๊บช่วยคุณได้ไหม",

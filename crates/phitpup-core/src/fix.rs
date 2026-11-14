@@ -102,6 +102,9 @@ pub struct Fixer {
     pending: Option<String>,
     learned: Option<String>,
     rejected: Option<String>,
+    /// Where the word starts whose fix was just undone: it is left alone
+    /// until it ends, however it goes on.
+    kept: Option<usize>,
     /// Also offer [`thai::respell`] fixes (suggest and auto mode).
     pub spelling: bool,
     /// Also offer [`typo`] fixes: Caps Lock slips (suggest and auto mode)
@@ -129,6 +132,9 @@ impl Fixer {
         self.keep_pending();
         self.session = None;
         self.undo = None;
+        if text.chars().any(char::is_whitespace) {
+            self.kept = None;
+        }
         self.buf.extend(text.chars());
         if self.buf.len() > MAX_CHARS {
             self.buf.drain(..self.buf.len() - MAX_CHARS);
@@ -139,6 +145,9 @@ impl Fixer {
         self.pending = None; // erasing the fix is not keeping it
         self.session = None;
         self.undo = None;
+        if self.kept.is_some_and(|k| self.buf.len() <= k + 1) {
+            self.kept = None;
+        }
         if self.buf.pop().is_none() {
             // Erased something typed before we were watching: the text
             // before the caret is not what it was.
@@ -150,6 +159,7 @@ impl Fixer {
     /// The caret moved somewhere we cannot follow.
     pub fn reset(&mut self) {
         self.keep_pending();
+        self.kept = None;
         self.buf.clear();
         self.session = None;
         self.undo = None;
@@ -355,7 +365,7 @@ impl Fixer {
             }
             let start = last_word(&self.buf)?;
             let word: String = self.buf[start..].iter().collect();
-            if skip(&word) {
+            if skip(&word) || self.kept == Some(start) {
                 return None;
             }
             if let Some((direction, converted)) =
@@ -392,11 +402,63 @@ impl Fixer {
         Some(edit)
     }
 
+    /// Auto mode, partway through a word: `text` is the key just pressed,
+    /// not yet recorded. If the word with it is surely typed in the wrong
+    /// layout ([`Thresholds::MIDWORD`]) and `skip` does not exempt it,
+    /// returns the edit that types the word so far in the right layout, the
+    /// key's character included, and switches the language for the rest; the
+    /// caller then must not let the key through. Otherwise records nothing
+    /// and returns `None`: the caller goes on to [`typed`](Self::typed).
+    /// The hotkey right after undoes it, as after [`auto`](Self::auto).
+    pub fn auto_midword(
+        &mut self,
+        detector: &Detector,
+        text: &str,
+        skip: impl Fn(&str) -> bool,
+    ) -> Option<Edit> {
+        if text.is_empty() || text.chars().any(char::is_whitespace) || self.piece() {
+            return None;
+        }
+        let mut with: Vec<char> = self.buf.clone();
+        with.extend(text.chars());
+        let start = last_word(&with)?;
+        // The word must have been in the buffer before this key.
+        if start >= self.buf.len() || self.kept == Some(start) {
+            return None;
+        }
+        let word: String = with[start..].iter().collect();
+        if skip(&word) {
+            return None;
+        }
+        let v = detector
+            .judge_typing(&word, Thresholds::MIDWORD)
+            .filter(|v| v.flip)?;
+        self.keep_pending();
+        let edit = Edit {
+            delete: self.buf.len() - start,
+            insert: v.converted,
+            switch_to: target(v.direction),
+        };
+        self.buf = with[..start]
+            .iter()
+            .copied()
+            .chain(edit.insert.chars())
+            .collect();
+        self.session = None;
+        self.undo = Some(Undo {
+            original: with,
+            start,
+            back_to: back_to(&edit, Kind::Layout),
+        });
+        Some(edit)
+    }
+
     /// The edit for one hotkey press, or `None` if there is no word to fix.
     pub fn hotkey(&mut self, detector: &Detector) -> Option<Edit> {
         if let Some(u) = self.undo.take() {
             let word: String = u.original[u.start..].iter().collect();
             self.rejected = Some(word.trim_end().to_lowercase());
+            self.kept = Some(u.start);
             let edit = Edit {
                 delete: self.buf.len() - u.start,
                 insert: u.original[u.start..].iter().collect(),
@@ -616,6 +678,73 @@ mod tests {
         apply(&mut screen, &f.hotkey(&d).unwrap());
         // ครับ is already Thai; converting toward Thai leaves it alone.
         assert_eq!(screen, "ครับ สวัสดี");
+    }
+
+    /// Types `keys` (as the English layout gives them) one at a time the
+    /// way the hook does in auto mode; once switched, the rest come out of
+    /// the Thai layout. Returns the screen and how many keys were in.
+    fn type_midword(d: &Detector, f: &mut Fixer, screen: &mut String, keys: &str) -> Option<usize> {
+        let mut switched_at = None;
+        for (i, k) in keys.chars().enumerate() {
+            let k = if switched_at.is_some() {
+                d.convert(&k.to_string(), Direction::ToThai)
+            } else {
+                k.to_string()
+            };
+            match f.auto_midword(d, &k, |_| false) {
+                Some(e) => {
+                    assert_eq!(e.switch_to, Lang::Thai);
+                    apply(screen, &e);
+                    switched_at = Some(i + 1);
+                }
+                None => {
+                    f.typed(&k);
+                    screen.push_str(&k);
+                }
+            }
+            assert_eq!(f.text(), *screen);
+        }
+        switched_at
+    }
+
+    #[test]
+    fn auto_switches_partway_through_a_word() {
+        let d = det();
+        let mut f = Fixer::new();
+        let mut screen = String::from("hello ");
+        f.typed(&screen);
+        let at = type_midword(&d, &mut f, &mut screen, "l;ylfu");
+        assert!(at.is_some_and(|n| (4..6).contains(&n)), "{at:?}");
+        assert_eq!(screen, "hello สวัสดี");
+        // Words typed right are never switched.
+        let mut f = Fixer::new();
+        let mut screen = String::new();
+        assert_eq!(type_midword(&d, &mut f, &mut screen, "hello world"), None);
+    }
+
+    #[test]
+    fn undoing_a_switch_partway_leaves_the_word_alone() {
+        let d = det();
+        let mut f = Fixer::new();
+        let mut screen = String::new();
+        for k in "l;yl".chars() {
+            f.typed(&k.to_string());
+            screen.push(k);
+        }
+        let e = f.auto_midword(&d, "f", |_| false).expect("switched");
+        apply(&mut screen, &e);
+        apply(&mut screen, &f.hotkey(&d).unwrap());
+        assert_eq!(screen, "l;ylf");
+        assert_eq!(f.text(), screen);
+        // Back in English: the rest of it, and Space, change nothing.
+        assert!(f.auto_midword(&d, "u", |_| false).is_none());
+        f.typed("u");
+        assert!(f.auto(&d, " ", |_| false, &[]).is_none());
+        // The next word is judged again.
+        for k in "l;yl".chars() {
+            f.typed(&k.to_string());
+        }
+        assert!(f.auto_midword(&d, "f", |_| false).is_some());
     }
 
     #[test]

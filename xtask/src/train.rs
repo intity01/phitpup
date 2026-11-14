@@ -618,6 +618,64 @@ pub fn eval(root: &Path, thai_lexicon: usize) {
 
         report("ToThai", &score(&thai_on_en), &score(&en_ok));
         report("ToEnglish", &score(&en_on_th), &score(&thai_ok));
+        midword(&det, &thai_on_en, &en_ok, "ToThai");
+        midword(&det, &en_on_th, &thai_ok, "ToEnglish");
+    }
+}
+
+/// Switching partway through a word: for each setting, how many words typed
+/// in the wrong layout are fixed before they end (with the right text so
+/// far), and how many typed right would be switched at some point.
+fn midword(det: &Detector, positives: &[Case], negatives: &[Case], name: &str) {
+    let first_flip = |typed: &str, t: Thresholds| -> Option<(usize, String)> {
+        let chars: Vec<char> = typed.chars().collect();
+        (1..=chars.len()).find_map(|n| {
+            let p: String = chars[..n].iter().collect();
+            det.judge_typing(&p, t)
+                .filter(|v| v.flip)
+                .map(|v| (n, v.converted))
+        })
+    };
+    println!("{name} mid-word: min  thr   fixed  fixed(freq)  wrong  wrong(freq)");
+    for min_chars in [3usize, 4, 5] {
+        for thr in [1.5f32, 2.0, 2.5, 3.0, 4.0] {
+            let t = Thresholds {
+                to_thai: thr,
+                to_english: thr,
+                min_chars,
+            };
+            let (mut hit, mut hit_w, mut all_w) = (0usize, 0.0, 0.0);
+            for c in positives {
+                all_w += c.weight;
+                if let Some((n, conv)) = first_flip(&c.typed, t)
+                    && c.meant.chars().take(n).collect::<String>() == conv
+                {
+                    hit += 1;
+                    hit_w += c.weight;
+                }
+            }
+            let (mut bad, mut bad_w, mut neg_w) = (0usize, 0.0, 0.0);
+            let mut examples = Vec::new();
+            for c in negatives {
+                neg_w += c.weight;
+                if let Some((n, conv)) = first_flip(&c.typed, t) {
+                    bad += 1;
+                    bad_w += c.weight;
+                    if examples.len() < 8 {
+                        let p: String = c.typed.chars().take(n).collect();
+                        examples.push(format!("{}:{p}→{conv}", c.typed));
+                    }
+                }
+            }
+            println!(
+                "              {min_chars}  {thr:.1}  {:6.2}%  {:6.2}%   {:6.3}%  {:7.4}%  {}",
+                100.0 * hit as f64 / positives.len() as f64,
+                100.0 * hit_w / all_w,
+                100.0 * bad as f64 / negatives.len() as f64,
+                100.0 * bad_w / neg_w,
+                examples.join(" ")
+            );
+        }
     }
 }
 

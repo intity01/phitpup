@@ -239,6 +239,7 @@ enum Hit {
     /// Whether ~ switches between Thai and English (a Windows setting).
     GraveSwitch,
     ShowLanguage,
+    SwitchMidword,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -1384,6 +1385,20 @@ fn general(b: &mut Builder, c: &Config, y: f32) -> f32 {
     }
     y += h + 4.0;
 
+    if c.mode == Mode::Auto {
+        let (cy, hovered) = b.row(
+            y,
+            68.0,
+            68.0,
+            Some(G_KEYBOARD),
+            t("Switch while I type"),
+            t("Fixes a word, and the language, before you finish it."),
+            Some(Hit::SwitchMidword),
+        );
+        b.toggle(cy, c.switch_midword, hovered);
+        y += 72.0;
+    }
+
     let (cy, hovered) = b.row(
         y,
         68.0,
@@ -2477,6 +2492,7 @@ fn click(hwnd: HWND, hit: Option<Hit>) {
         Hit::Slips => edit(|c| c.slips = !c.slips),
         Hit::BubbleAbove => edit(|c| c.bubble_above = !c.bubble_above),
         Hit::ShowLanguage => edit(|c| c.show_language = !c.show_language),
+        Hit::SwitchMidword => edit(|c| c.switch_midword = !c.switch_midword),
         Hit::DoubleShift => edit(|c| c.double_shift = !c.double_shift),
         Hit::Startup => settings::set_start_with_windows(!settings::starts_with_windows()),
         Hit::Fullscreen => edit(|c| c.off_in_fullscreen = !c.off_in_fullscreen),
@@ -3116,6 +3132,12 @@ mod tests {
             auto_words: vec!["l;ylfu".into()],
             learn_own: true,
             own_words: vec!["jira".into(), "โจ้".into()],
+            // PHITPUP_PREVIEW_AUTO=1 shows the General page in auto mode.
+            mode: if std::env::var("PHITPUP_PREVIEW_AUTO").is_ok() {
+                config::Mode::Auto
+            } else {
+                Config::default().mode
+            },
             ..Config::default()
         };
         // PHITPUP_PREVIEW_UPDATE=available|downloading|failed shows that

@@ -113,6 +113,9 @@ pub struct Config {
     /// A small TH or EN by the caret for a moment when the keyboard
     /// language changes.
     pub show_language: bool,
+    /// Auto mode: fix a word partway through when its start is surely in
+    /// the wrong layout, and switch the language for the rest of it.
+    pub switch_midword: bool,
     /// Tapping Shift twice also fixes the last word.
     pub double_shift: bool,
     /// A tray reminder to look for a new version once this one is old.
@@ -148,6 +151,7 @@ impl Default for Config {
             slips: true,
             bubble_above: false,
             show_language: true,
+            switch_midword: true,
             double_shift: false,
             remind_updates: true,
             hotkey: Hotkey::FIX,
@@ -166,6 +170,10 @@ pub const TEMPLATE: &str = r#"# ผิดปุ๊บ PhitPup settings. The tray
 # "auto"    : like suggest, and Space fixes the word when PhitPup is sure;
 #             Shift+Backspace right after puts it back
 mode = "suggest"
+
+# With mode = "auto": when the start of a word is clearly in the wrong
+# language, fix it and switch the language before the word ends.
+switch_midword = true
 
 # The language of the settings window and messages: "auto" follows Windows,
 # "th" is Thai, "en" is English.
@@ -298,6 +306,7 @@ impl Config {
                 "slips" => boolean(value).map(|b| c.slips = b),
                 "bubble_above" => boolean(value).map(|b| c.bubble_above = b),
                 "show_language" => boolean(value).map(|b| c.show_language = b),
+                "switch_midword" => boolean(value).map(|b| c.switch_midword = b),
                 "double_shift" => boolean(value).map(|b| c.double_shift = b),
                 "remind_updates" => boolean(value).map(|b| c.remind_updates = b),
                 "hotkey" => shortcut(value).map(|k| c.hotkey = k),
@@ -335,6 +344,7 @@ impl Config {
         t = set(&t, "slips", &self.slips.to_string());
         t = set(&t, "bubble_above", &self.bubble_above.to_string());
         t = set(&t, "show_language", &self.show_language.to_string());
+        t = set(&t, "switch_midword", &self.switch_midword.to_string());
         t = set(&t, "off_in_fullscreen", &self.off_in_fullscreen.to_string());
         t = set(&t, "off_apps", &array(&self.off_apps));
         t = set(&t, "quiet_apps", &array(&self.quiet_apps));
@@ -684,6 +694,7 @@ accept_key = \"shift+backspace\"",
             slips: false,
             bubble_above: true,
             show_language: false,
+            switch_midword: false,
             double_shift: true,
             remind_updates: false,
             hotkey: Hotkey::parse("ctrl+backslash").unwrap(),
