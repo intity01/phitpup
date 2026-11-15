@@ -75,12 +75,12 @@ pub const ABBREVIATIONS: &[&str] = &[
     "gpu", "haha", "hahaha", "hbu", "hdd", "hdmi", "hehe", "heic", "hr", "html", "http", "https",
     "ide", "idk", "ig", "ikr", "imho", "imo", "ios", "iot", "irl", "jpeg", "jpg", "js", "json",
     "khao", "khob", "khun", "khz", "kpi", "krab", "krap", "krub", "kwh", "lan", "lcd", "lgtm",
-    "llm", "lmao", "lol", "mah", "mba", "mhz", "mkv", "mp3", "mp4", "mrt", "msi", "nas", "nft",
-    "ngl", "npm", "nvm", "okr", "oled", "otp", "pdf", "pfp", "phd", "php", "pls", "plz", "png",
-    "ppt", "pptx", "ps5", "qr", "ram", "rgb", "roi", "rom", "sdk", "seo", "smh", "sms", "sql",
-    "ssd", "ssh", "svg", "tba", "tbh", "thx", "tmr", "tmrw", "todo", "tsv", "tv", "txt", "ty",
-    "uae", "uri", "url", "usa", "usb", "ux", "vpn", "vs", "wan", "webp", "wifi", "wip", "wtf",
-    "www", "wyd", "xls", "xlsx", "xml", "yaml", "yeet", "yt", "zip", "zsh",
+    "llm", "lmao", "lol", "mah", "mba", "mcp", "mhz", "mkv", "mp3", "mp4", "mrt", "msi", "nas",
+    "nft", "ngl", "npm", "nvm", "okr", "oled", "otp", "pdf", "pfp", "phd", "php", "pls", "plz",
+    "png", "ppt", "pptx", "ps5", "qr", "ram", "rgb", "roi", "rom", "sdk", "seo", "smh", "sms",
+    "sql", "ssd", "ssh", "svg", "tba", "tbh", "thx", "tmr", "tmrw", "todo", "tsv", "tv", "txt",
+    "ty", "uae", "uri", "url", "usa", "usb", "ux", "vpn", "vs", "wan", "webp", "wifi", "wip",
+    "wtf", "www", "wyd", "xls", "xlsx", "xml", "yaml", "yeet", "yt", "zip", "zsh",
 ];
 
 /// Whether `word` is one of the [`ABBREVIATIONS`] or its plural, in

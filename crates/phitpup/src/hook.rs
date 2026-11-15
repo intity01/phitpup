@@ -58,6 +58,8 @@ static SHIFT_TAPS: std::sync::Mutex<DoubleTap> = std::sync::Mutex::new(DoubleTap
 /// meanwhile, as the app will read them.
 static SWITCHING: std::sync::Mutex<Option<(isize, std::time::Instant)>> =
     std::sync::Mutex::new(None);
+/// The word Esc was pressed on: auto mode leaves it as typed when it ends.
+static ESCAPED: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 /// How long [`SWITCHING`] is believed over what the app says.
 const SWITCH_GRACE: std::time::Duration = std::time::Duration::from_millis(600);
 
@@ -110,6 +112,7 @@ pub fn reset(why: &str) {
         fixer.reset();
         drop(fixer);
         DISMISSED.store(false, Ordering::Relaxed);
+        *ESCAPED.lock().unwrap() = None;
         set_suggestion(app, None);
         learn(app);
     }
@@ -305,6 +308,7 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
             post(app, WM_BUBBLE);
             if escape {
                 DISMISSED.store(true, Ordering::Relaxed);
+                *ESCAPED.lock().unwrap() = Some(s.word.to_lowercase());
                 if shift {
                     debug!("Shift+Esc: the word will not be suggested again");
                     if app.config.lock().unwrap().ignore(&s.word) {
@@ -356,8 +360,12 @@ fn key_down(k: &KBDLLHOOKSTRUCT) -> bool {
             let config = app.config.lock().unwrap().clone();
             let mut learned = config.learned_words.clone();
             learned.extend(config.auto_words.iter().cloned());
+            // Esc on this word: keep it as typed.
+            let escaped = ESCAPED.lock().unwrap().take();
             let skip = |w: &str| {
-                config.leaves_alone(w) || (!auto && !config.auto_words.contains(&w.to_lowercase()))
+                escaped.as_deref() == Some(w.to_lowercase().as_str())
+                    || config.leaves_alone(w)
+                    || (!auto && !config.auto_words.contains(&w.to_lowercase()))
             };
             let mut fixer = app.fixer.lock().unwrap();
             (fixer.spelling, fixer.typos, fixer.slips) =
@@ -446,9 +454,13 @@ fn midword(app: &App, text: &str) -> bool {
     }
     // A word the user keeps as typed, or one that starts like it (only
     // its start has been typed so far).
+    let escaped = ESCAPED.lock().unwrap().clone();
     let skip = |w: &str| {
         let w = w.to_lowercase();
-        config.leaves_alone(&w)
+        escaped
+            .as_deref()
+            .is_some_and(|e| e.starts_with(&w) || w.starts_with(e))
+            || config.leaves_alone(&w)
             || config
                 .ignore_words
                 .iter()
